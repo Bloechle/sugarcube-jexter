@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 320" font-family="Poppins, DejaVu Sans, sans-serif">
+  <defs>
+    <marker id="ord" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto"><path d="M0,0 L6.5,3 L0,6 Z" fill="#3b5b7a"/></marker>
+    <marker id="bad" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto"><path d="M0,0 L6.5,3 L0,6 Z" fill="#c1452f"/></marker>
+  </defs>
+
+  <!-- LEFT: plain XY-cut fails -->
+  <g transform="translate(28,20)">
+    <text x="160" y="0" text-anchor="middle" font-size="13.5" font-weight="600" fill="#c1452f">Plain XY-cut — L-shape failure</text>
+    <rect x="0" y="14" width="320" height="250" rx="6" fill="#ffffff" stroke="#dfe1db" stroke-width="1.5"/>
+    <!-- banner spanning full width -->
+    <rect x="18" y="32" width="284" height="38" rx="5" fill="#e7edf4" stroke="#cdd9e6"/>
+    <text x="160" y="56" text-anchor="middle" font-size="12" fill="#27425c">full-width banner erases the gutter</text>
+    <!-- two columns -->
+    <rect x="18" y="86" width="130" height="160" rx="5" fill="#f6f7f4" stroke="#e6e7e2"/>
+    <rect x="172" y="86" width="130" height="160" rx="5" fill="#f6f7f4" stroke="#e6e7e2"/>
+    <g stroke="#d7dad4" stroke-width="4" stroke-linecap="round">
+      <line x1="32" y1="104" x2="134" y2="104"/><line x1="32" y1="118" x2="134" y2="118"/><line x1="32" y1="132" x2="120" y2="132"/>
+      <line x1="186" y1="104" x2="288" y2="104"/><line x1="186" y1="118" x2="288" y2="118"/><line x1="186" y1="132" x2="276" y2="132"/>
+    </g>
+    <!-- wrong serpentine order crossing the gutter -->
+    <path d="M83 150 H 237" fill="none" stroke="#c1452f" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#bad)"/>
+    <path d="M237 175 H 83" fill="none" stroke="#c1452f" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#bad)"/>
+    <text x="160" y="225" text-anchor="middle" font-size="11.5" fill="#c1452f">rows read across columns — wrong</text>
+  </g>
+
+  <!-- RIGHT: XY-Cut++ -->
+  <g transform="translate(432,20)">
+    <text x="160" y="0" text-anchor="middle" font-size="13.5" font-weight="600" fill="#2f5e12">XY-Cut++ — cross-layout masking</text>
+    <rect x="0" y="14" width="320" height="250" rx="6" fill="#ffffff" stroke="#dfe1db" stroke-width="1.5"/>
+    <!-- banner masked out -->
+    <rect x="18" y="32" width="284" height="38" rx="5" fill="#eef6df" stroke="#8ec63f" stroke-dasharray="5 4"/>
+    <text x="160" y="50" text-anchor="middle" font-size="11" fill="#4e8f1f">banner pulled out (width &gt; β·median)</text>
+    <text x="160" y="64" text-anchor="middle" font-size="11" fill="#4e8f1f">re-inserted by vertical position</text>
+    <!-- columns now cut cleanly -->
+    <rect x="18" y="86" width="130" height="160" rx="5" fill="#f6f7f4" stroke="#e6e7e2"/>
+    <rect x="172" y="86" width="130" height="160" rx="5" fill="#f6f7f4" stroke="#e6e7e2"/>
+    <line x1="160" y1="86" x2="160" y2="246" stroke="#8ec63f" stroke-width="2" stroke-dasharray="3 3"/>
+    <text x="160" y="262" text-anchor="middle" font-size="10.5" fill="#6a8a4a">valley by relative depth</text>
+    <g stroke="#d7dad4" stroke-width="4" stroke-linecap="round">
+      <line x1="32" y1="104" x2="134" y2="104"/><line x1="32" y1="118" x2="134" y2="118"/><line x1="32" y1="132" x2="120" y2="132"/>
+      <line x1="186" y1="104" x2="288" y2="104"/><line x1="186" y1="118" x2="288" y2="118"/><line x1="186" y1="132" x2="276" y2="132"/>
+    </g>
+    <!-- correct order: banner -> left down -> right down -->
+    <circle cx="284" cy="51" r="9" fill="#3b5b7a"/><text x="284" y="55" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">1</text>
+    <path d="M83 150 V 200" fill="none" stroke="#3b5b7a" stroke-width="2" marker-end="url(#ord)"/>
+    <circle cx="83" cy="148" r="9" fill="#3b5b7a"/><text x="83" y="152" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">2</text>
+    <path d="M237 150 V 200" fill="none" stroke="#3b5b7a" stroke-width="2" marker-end="url(#ord)"/>
+    <circle cx="237" cy="148" r="9" fill="#3b5b7a"/><text x="237" y="152" text-anchor="middle" font-size="11" font-weight="600" fill="#fff">3</text>
+  </g>
+</svg>

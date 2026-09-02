@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 320" font-family="Poppins, DejaVu Sans, sans-serif">
+  <defs>
+    <marker id="im" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto"><path d="M0,0 L6.5,3 L0,6 Z" fill="#9aa09a"/></marker>
+  </defs>
+  <text x="28" y="22" font-size="13.5" font-weight="600" fill="#1c1e1b">Reading the page into <tspan fill="#2f5e12">primitive nodes</tspan> — faithful, but still flat</text>
+
+  <!-- content stream -->
+  <g transform="translate(28,44)">
+    <rect width="250" height="232" rx="8" fill="#1c1e1b"/>
+    <text x="16" y="26" font-size="11" font-family="DejaVu Sans Mono" fill="#7d8a74">% PDF content stream</text>
+    <g font-size="11" font-family="DejaVu Sans Mono">
+      <text x="16" y="50" fill="#cfe6b0">BT /F1 11 Tf</text>
+      <text x="16" y="68" fill="#cfe6b0">(Office) Tj ET</text>
+      <text x="16" y="92" fill="#a9c0d8">10 20 80 40 re f</text>
+      <text x="16" y="110" fill="#a9c0d8">2 w 0 0 m 90 60 l S</text>
+      <text x="16" y="134" fill="#e6c98a">/Im0 Do</text>
+      <text x="16" y="158" fill="#c9a0d8">W n</text>
+    </g>
+    <text x="16" y="194" font-size="10.5" font-family="DejaVu Sans Mono" fill="#7d8a74">% operators in paint order,</text>
+    <text x="16" y="210" font-size="10.5" font-family="DejaVu Sans Mono" fill="#7d8a74">% with no notion of meaning</text>
+  </g>
+
+  <g transform="translate(296,150)">
+    <line x1="0" y1="0" x2="34" y2="0" stroke="#9aa09a" stroke-width="2" marker-end="url(#im)"/>
+  </g>
+
+  <!-- primitive nodes -->
+  <g transform="translate(346,44)" font-size="11.5">
+    <text x="0" y="2" font-size="11" fill="#6a6f69">primitive OCD nodes</text>
+    <!-- text -->
+    <g transform="translate(0,12)"><rect width="406" height="46" rx="9" fill="#ffffff" stroke="#dfe1db"/>
+      <rect x="0" y="0" width="6" height="46" rx="3" fill="#4e8f1f"/>
+      <text x="18" y="20" font-weight="600" fill="#1c1e1b">OCDText</text>
+      <text x="18" y="37" font-size="10" fill="#6a6f69">glyph run · face · size · colour · kerning · z</text>
+      <text x="396" y="29" text-anchor="end" font-size="14" fill="#1c1e1b">Office</text></g>
+    <!-- path -->
+    <g transform="translate(0,68)"><rect width="406" height="46" rx="9" fill="#ffffff" stroke="#dfe1db"/>
+      <rect x="0" y="0" width="6" height="46" rx="3" fill="#3b5b7a"/>
+      <text x="18" y="20" font-weight="600" fill="#1c1e1b">OCDPath</text>
+      <text x="18" y="37" font-size="10" fill="#6a6f69">fills · strokes · béziers · dashes · blend</text>
+      <g transform="translate(350,11)" stroke="#3b5b7a" fill="none" stroke-width="1.8" stroke-linecap="round">
+        <path d="M4 21 C 13 4, 31 4, 40 19"/>
+        <line x1="4" y1="21" x2="13" y2="4"/>
+        <line x1="40" y1="19" x2="31" y2="4"/>
+        <circle cx="13" cy="4" r="2.2" fill="#ffffff"/>
+        <circle cx="31" cy="4" r="2.2" fill="#ffffff"/>
+        <rect x="1.5" y="18.5" width="5" height="5" rx="0.6" fill="#3b5b7a" stroke="none"/>
+        <rect x="37.5" y="16.5" width="5" height="5" rx="0.6" fill="#3b5b7a" stroke="none"/>
+      </g></g>
+    <!-- image -->
+    <g transform="translate(0,124)"><rect width="406" height="46" rx="9" fill="#ffffff" stroke="#dfe1db"/>
+      <rect x="0" y="0" width="6" height="46" rx="3" fill="#b8801f"/>
+      <text x="18" y="20" font-weight="600" fill="#1c1e1b">OCDImage</text>
+      <text x="18" y="37" font-size="10" fill="#6a6f69">inline &amp; XObject · JBIG2 · alpha</text>
+      <g transform="translate(358,13)"><rect width="34" height="22" rx="2" fill="#f6ecd7" stroke="#e6d3a8"/>
+        <circle cx="9" cy="7" r="2.5" fill="#d8b86a"/>
+        <path d="M3 19 l7 -8 5 5 6 -7 7 10 z" fill="#d8b86a"/></g></g>
+    <!-- clip -->
+    <g transform="translate(0,180)"><rect width="406" height="46" rx="9" fill="#ffffff" stroke="#dfe1db"/>
+      <rect x="0" y="0" width="6" height="46" rx="3" fill="#9aa09a"/>
+      <text x="18" y="20" font-weight="600" fill="#1c1e1b">Clip region</text>
+      <text x="18" y="37" font-size="10" fill="#6a6f69">deferred, attached to the nodes it bounds</text>
+      <rect x="360" y="14" width="30" height="20" rx="2" fill="none" stroke="#9aa09a" stroke-dasharray="3 2"/></g>
+  </g>
+
+  <text x="28" y="296" font-size="10.5" fill="#6a6f69">Every mark is placed and paints correctly — but there are no paragraphs, headings, columns or reading order yet.</text>
+</svg>

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en" class="sl-theme-dark" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prism — the jexter document workbench</title>
+  <link rel="icon" type="image/svg+xml" href="/shared/jexter-mark.svg">
+
+  <!-- qry stack: Shoelace themes -> qry-ui -> Lucide -> qry.js -> module -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/light.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css">
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Bloechle/qry-js@1.3.0/qry-ui.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/poppins@5/600.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/poppins@5/700.css">
+  <script src="https://cdn.jsdelivr.net/npm/lucide@1.17.0/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/Bloechle/qry-js@1.3.0/qry.js"></script>
+
+  <link rel="stylesheet" href="./prism.css">
+  <script type="module" src="./prism.js"></script>
+  <script type="module" src="./edit.js"></script>
+  <script type="module" src="./jexter.js"></script>
+  <script type="module" src="./reveal.js"></script>
+</head>
+
+<body class="qry-app">
+
+  <header class="px-head">
+    <sl-dropdown class="px-menu" placement="bottom-start" distance="6" hoist>
+      <button slot="trigger" class="px-brandbtn" aria-label="Menu" title="Menu">
+        <img class="px-logo" src="/shared/jexter-mark.svg" alt="" aria-hidden="true"/>
+        <span class="px-word">PRISM</span>
+      </button>
+
+      <sl-menu>
+        <sl-menu-item id="m-open"><span slot="prefix"><i data-lucide="folder-open"></i></span> Open… <span slot="suffix" class="px-kbd">Ctrl O</span></sl-menu-item>
+        <sl-menu-item id="m-close"><span slot="prefix"><i data-lucide="x"></i></span> Close book</sl-menu-item>
+        <sl-divider></sl-divider>
+        <sl-menu-item id="m-undo"><span slot="prefix"><i data-lucide="undo-2"></i></span> Undo <span slot="suffix" class="px-kbd">Ctrl Z</span></sl-menu-item>
+        <sl-menu-item id="m-export"><span slot="prefix"><i data-lucide="download"></i></span> Export… <span slot="suffix" class="px-kbd">Ctrl E</span></sl-menu-item>
+        <sl-menu-item id="m-fonts"><span slot="prefix"><i data-lucide="type"></i></span> Fonts</sl-menu-item>
+        <sl-divider></sl-divider>
+        <sl-menu-item id="m-console"><span slot="prefix"><i data-lucide="terminal"></i></span> Console <span slot="suffix" class="px-kbd">F2</span></sl-menu-item>
+        <sl-menu-item id="m-about"><span slot="prefix"><i data-lucide="info"></i></span> About</sl-menu-item>
+      </sl-menu>
+    </sl-dropdown>
+    <button id="toggle-rail" class="px-icon" aria-label="Toggle sidebar" title="Toggle sidebar"><i data-lucide="panel-left"></i></button>
+    <span class="px-sp"></span>
+    <span class="px-seg px-modes"><!-- generated from the mode registry (P.registerMode) --></span>
+    <span class="px-sp"></span>
+    <button id="b-config" class="px-icon" aria-label="Settings" title="Settings"><i data-lucide="sliders-horizontal"></i></button>
+    <button id="b-help" class="px-icon" aria-label="Shortcuts" title="Keyboard shortcuts"><i data-lucide="keyboard"></i></button>
+    <button id="b-theme" class="px-icon" aria-label="Toggle theme" title="Dark / light"><i data-lucide="moon"></i></button>
+    <input type="file" id="file-input" accept=".pdf,.epub,application/pdf,application/epub+zip" hidden>
+    <input type="file" id="media-input" accept="video/*,audio/*,image/*" hidden>
+  </header>
+
+  <div class="px-body">
+    <aside id="rail" class="px-rail">
+      <div class="px-tabs">
+        <button class="tab-btn active" data-tab="tab-pages"><i data-lucide="layers"></i><span>Pages</span></button>
+        <button class="tab-btn" data-tab="tab-toc"><i data-lucide="list-tree"></i><span>Contents</span></button>
+        <button class="tab-btn" data-tab="tab-search"><i data-lucide="search"></i><span>Search</span></button>
+      </div>
+      <div id="tab-pages" class="tab-panel"><ul id="page-list" class="nav-list"></ul></div>
+      <div id="tab-toc" class="tab-panel hidden">
+        <div id="structure-body" class="nav-list" hidden></div>
+        <ul id="toc-list" class="nav-list nav-tree"></ul>
+      </div>
+      <div id="tab-search" class="tab-panel hidden">
+        <div class="search-box">
+          <input type="search" id="search-input" placeholder="Search the book…">
+          <button id="search-btn" aria-label="Search"><i data-lucide="search"></i></button>
+        </div>
+        <div id="search-info" class="search-info"></div>
+        <ul id="search-results" class="nav-list"></ul>
+      </div>
+    </aside>
+    <div id="split-left" class="px-split" title="Drag to resize"></div>
+
+    <main id="epub-scroll" class="px-stage">
+      <div id="empty" class="px-empty">
+        <div class="px-empty-card">
+          <img class="px-empty-mark" src="/shared/jexter-mark.svg" alt=""/>
+          <p>Drop a document to open it</p>
+          <div class="px-empty-fmts"><span>PDF</span><span>EPUB</span><span>OCD-EPUB</span></div>
+          <small>or press <kbd>Ctrl O</kbd></small>
+        </div>
+      </div>
+      <div id="epub-stage"></div>
+    </main>
+
+    <div id="split-right" class="px-split px-split-r" title="Drag to resize"></div>
+    <aside id="edit-drawer" class="px-drawer">
+      <div class="px-drawer-head"><i data-lucide="sparkles"></i> Edits</div>
+      <div id="edits-info" class="search-info"></div>
+      <ul id="edit-list" class="nav-list"></ul>
+    </aside>
+
+    <aside id="analysis-drawer" class="px-drawer">
+      <div class="px-drawer-head"><i data-lucide="crosshair"></i> Inspect</div>
+      <div class="an-toggles">
+        <sl-switch id="an-bounds" size="small">Display bounds</sl-switch>
+        <sl-switch id="an-flow" size="small">Display flow</sl-switch>
+      </div>
+      <div class="an-stages" id="an-stages">
+        <span class="an-stages-lbl">Pipeline</span>
+        <button data-stage="" class="active">Off</button>
+        <button data-stage="runs">Runs</button>
+        <button data-stage="lines">Lines</button>
+        <button data-stage="leaves">Leaves</button>
+        <button data-stage="blocks">Blocks</button>
+        <button data-stage="labeled">Labeled</button>
+      </div>
+      <div class="an-reanalyze">
+        <sl-button id="an-heuristic" size="small" variant="default">
+          <i slot="prefix" data-lucide="refresh-cw"></i> Re-analyze — 100% heuristic
+        </sl-button>
+      </div>
+      <div id="page-tree" class="ntree"><div class="search-info">Open a page to browse its nodes.</div></div>
+      <div id="inspect-body" class="inspect-body"><div class="search-info">Click content on a page to inspect it.</div></div>
+    </aside>
+  </div>
+
+  <div class="px-tools">
+    <span class="px-tools-lbl">Add:</span>
+    <button class="px-tool active" data-tool="media"><i data-lucide="film"></i> Media</button>
+    <button class="px-tool" data-tool="reveal-fade"><i data-lucide="eye"></i> Reveal</button>
+    <button class="px-tool" data-tool="reveal-zoom"><i data-lucide="sparkles"></i> Reveal+zoom</button>
+    <button class="px-tool" data-tool="link"><i data-lucide="link"></i> Link</button>
+    <button class="px-tool" data-tool="anim"><i data-lucide="wand-2"></i> Animate</button>
+  </div>
+
+  <footer class="px-foot">
+    <span class="px-foot-l">
+      <span id="status" class="px-status"><i data-lucide="sparkles"></i> Ready</span>
+      <button id="b-tts" class="px-icon" aria-label="Read aloud" title="Read aloud"><i data-lucide="volume-2"></i></button>
+    </span>
+    <span class="px-foot-c">
+      <button id="prev-btn" class="px-icon" aria-label="Previous page"><i data-lucide="chevron-left"></i></button>
+      <span class="px-pager"><input id="page-jump" inputmode="numeric" aria-label="Go to page" disabled/><span id="page-total">/ –</span></span>
+      <button id="next-btn" class="px-icon" aria-label="Next page"><i data-lucide="chevron-right"></i></button>
+    </span>
+    <span class="px-foot-r">
+    <span class="px-seg">
+      <button class="px-segbtn active" data-mode="scroll" title="Scroll" aria-label="Scroll"><i data-lucide="gallery-vertical"></i></button>
+      <button class="px-segbtn" data-mode="page" title="Single page" aria-label="Single page"><i data-lucide="file"></i></button>
+      <button class="px-segbtn" data-mode="spread" title="Two-page spread" aria-label="Two-page spread"><i data-lucide="book-open"></i></button>
+    </span>
+    <span class="px-zoom">
+      <button id="fit-width-btn" class="px-icon sm" aria-label="Fit width" title="Fit width"><i data-lucide="move-horizontal"></i></button>
+      <button id="fit-page-btn" class="px-icon sm" aria-label="Fit page" title="Fit page"><i data-lucide="maximize"></i></button>
+      <button id="zoom-out-btn" class="px-icon sm" aria-label="Zoom out"><i data-lucide="zoom-out"></i></button>
+      <span id="zoom-info">100%</span>
+      <button id="zoom-in-btn" class="px-icon sm" aria-label="Zoom in"><i data-lucide="zoom-in"></i></button>
+    </span>
+    <span class="px-sp"></span>
+  </footer>
+
+  <sl-dialog id="export-dialog" label="Export" class="px-dlg">
+    <div class="export-grid">
+      <button class="export-opt jx-only" hidden data-to="pdf" data-selectable="true"><i data-lucide="file-text"></i><span><span class="n">PDF</span><span class="d">Normalized, selectable text</span></span></button>
+      <button class="export-opt jx-only" hidden data-to="ocd"><i data-lucide="braces"></i><span><span class="n">EPUB PRISM</span><span class="d">OCD model</span></span></button>
+      <button class="export-opt jx-only" hidden data-to="epub"><i data-lucide="layout-template"></i><span><span class="n">EPUB FL</span><span class="d">Page-faithful replica</span></span></button>
+      <button class="export-opt jx-only" hidden data-to="html"><i data-lucide="code"></i><span><span class="n">HTML</span><span class="d">Reflowable</span></span></button>
+      <button class="export-opt jx-only" hidden data-to="md"><i data-lucide="file-text"></i><span><span class="n">Markdown</span><span class="d">Reading-order text</span></span></button>
+      <button class="export-opt jx-only" hidden data-to="doctags"><i data-lucide="tags"></i><span><span class="n">DocTags</span><span class="d">LLM markup (Docling)</span></span></button>
+    </div>
+  </sl-dialog>
+
+  <sl-dialog id="help-dialog" label="Keyboard shortcuts" class="px-dlg">
+    <div class="help-grid">
+      <span class="px-kbd">→ / Space</span><span>Next page / spread</span>
+      <span class="px-kbd">← / ⇧ Space</span><span>Previous page / spread</span>
+      <span class="px-kbd">+ / −</span><span>Zoom in / out</span>
+      <span class="px-kbd">Ctrl + wheel</span><span>Zoom toward the pointer</span>
+      <span class="px-kbd">Ctrl E</span><span>Export…</span>
+      <span class="px-kbd">Ctrl Z</span><span>Undo (edit mode)</span>
+      <span class="px-kbd">F2</span><span>Log console</span>
+    </div>
+  </sl-dialog>
+
+  <sl-drawer id="config-drawer" label="Settings" placement="end" class="px-config">
+    <div class="cfg-row">
+      <label class="cfg-lbl" for="unit"><i data-lucide="ruler"></i> Unit</label>
+      <sl-select id="unit" value="pt" size="small" hoist>
+        <sl-option value="pt">pt</sl-option>
+        <sl-option value="mm">mm</sl-option>
+        <sl-option value="cm">cm</sl-option>
+        <sl-option value="in">in</sl-option>
+        <sl-option value="px">px</sl-option>
+      </sl-select>
+    </div>
+
+    <div class="cfg-sec jx-only" hidden>
+      <div class="cfg-title"><i data-lucide="file-cog"></i> Conversion</div>
+      <sl-switch class="cv-opt" data-opt="structure" size="small">Detect text structure</sl-switch>
+      <sl-switch class="cv-opt" data-opt="detectHeaders" size="small">Detect headers &amp; footers</sl-switch>
+      <sl-switch class="cv-opt" data-opt="ignoreTags" size="small">Ignore PDF tag structure</sl-switch>
+      <sl-switch class="cv-opt" data-opt="graphics" size="small">Group vector graphics</sl-switch>
+      <sl-switch class="cv-opt" data-opt="generateOutline" size="small">Generate heuristic outline</sl-switch>
+      <sl-switch class="cv-opt" data-opt="renderAnnotations" size="small">Render annotations</sl-switch>
+      <div class="cfg-hint">Applied when a PDF is imported through the engine.</div>
+    </div>
+
+    <div class="cfg-sec jx-only" hidden>
+      <div class="cfg-title"><i data-lucide="sparkles"></i> AI</div>
+      <sl-switch id="ai-refine" class="cv-opt" data-opt="refineStructure" size="small" disabled>Refine structure with AI</sl-switch>
+      <div id="ai-status" class="cfg-hint">Checking engine…</div>
+    </div>
+  </sl-drawer>
+
+  <sl-drawer id="fonts-drawer" label="Fonts" placement="end" class="px-fonts">
+    <div id="fonts-body"><div class="search-info">Open a document first.</div></div>
+  </sl-drawer>
+
+  <sl-dialog id="about-dialog" label="About PRISM" class="px-about">
+    <img class="px-about-icon" src="/shared/jexter-mark.svg" alt=""/>
+    <p><b>Prism</b> — the jexter document workbench: a client-side reader for fixed-layout EPUBs and the native surface of the <b>OCD-EPUB</b> working format. Open a PDF and the engine lifts it; open an OCD-EPUB and the original tree is served as-is.</p>
+    <p>The book is unzipped in your browser and served to the pages by a Service Worker; nothing is uploaded. Built on the qry stack.</p>
+    <sl-button slot="footer" variant="primary" id="about-ok">Close</sl-button>
+  </sl-dialog>
+
+  <sl-dialog id="ask-dialog" label="Input" class="px-dlg">
+    <sl-input id="ask-input" autocomplete="off"></sl-input>
+    <sl-button slot="footer" id="ask-cancel">Cancel</sl-button>
+    <sl-button slot="footer" variant="primary" id="ask-ok">OK</sl-button>
+  </sl-dialog>
+
+  <sl-dialog id="anim-dialog" label="Animate selection" class="px-dlg">
+    <sl-radio-group id="anim-effect" label="Effect" value="rise">
+      <sl-radio-button value="fade">Fade</sl-radio-button>
+      <sl-radio-button value="rise">Rise</sl-radio-button>
+      <sl-radio-button value="slide">Slide</sl-radio-button>
+      <sl-radio-button value="zoom">Zoom</sl-radio-button>
+    </sl-radio-group>
+    <sl-radio-group id="anim-mode" label="Apply to" value="each">
+      <sl-radio-button value="each">Each element</sl-radio-button>
+      <sl-radio-button value="together">All together</sl-radio-button>
+    </sl-radio-group>
+    <div class="px-dlg-grid">
+      <sl-select id="anim-dur" label="Duration" value="0.7" hoist>
+        <sl-option value="0.3">0.3 s</sl-option>
+        <sl-option value="0.5">0.5 s</sl-option>
+        <sl-option value="0.7">0.7 s</sl-option>
+        <sl-option value="1">1 s</sl-option>
+        <sl-option value="1.5">1.5 s</sl-option>
+        <sl-option value="2">2 s</sl-option>
+      </sl-select>
+      <sl-select id="anim-stagger" label="Per-element delay" value="120" hoist>
+        <sl-option value="60">60 ms</sl-option>
+        <sl-option value="120">120 ms</sl-option>
+        <sl-option value="200">200 ms</sl-option>
+        <sl-option value="300">300 ms</sl-option>
+      </sl-select>
+    </div>
+    <sl-input id="anim-note" label="Note (optional)" autocomplete="off"></sl-input>
+    <sl-button slot="footer" id="anim-cancel">Cancel</sl-button>
+    <sl-button slot="footer" variant="primary" id="anim-ok">OK</sl-button>
+  </sl-dialog>
+
+  <div id="log-console" class="log-console" data-filter="all">
+    <div class="log-head">
+      <span id="log-title" class="log-title" role="button" tabindex="0" title="Close (F2)"><i data-lucide="terminal"></i> Log <span class="log-tag">client</span></span>
+      <span class="log-sp"></span>
+      <div class="log-filters">
+        <button class="log-f active" data-lvl="all">All</button>
+        <button class="log-f" data-lvl="debug">Debug</button>
+        <button class="log-f" data-lvl="info">Info</button>
+        <button class="log-f" data-lvl="warn">Warn</button>
+        <button class="log-f" data-lvl="error">Error</button>
+      </div>
+      <button id="log-copy" class="px-icon sm" title="Copy"><i data-lucide="copy"></i></button>
+      <button id="log-clear" class="px-icon sm" title="Clear"><i data-lucide="trash-2"></i></button>
+      <button id="log-close" class="px-icon sm" title="Close (F2)"><i data-lucide="x"></i></button>
+    </div>
+    <div id="log-body" class="log-body"></div>
+  </div>
+
+</body>
+</html>

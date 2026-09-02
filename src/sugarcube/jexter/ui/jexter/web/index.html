@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Jexter — PDF normalizer</title>
+  <link rel="icon" type="image/svg+xml" href="/shared/jexter-mark.svg">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/light.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css">
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Bloechle/qry-js@1.3.0/qry-ui.css">
+  <script src="https://cdn.jsdelivr.net/npm/lucide@1.17.0/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/Bloechle/qry-js@1.3.0/qry.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/poppins@5/600.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/poppins@5/700.css">
+
+  <style>
+    /* ── Jexter — one fixed normalization. Clean light-first chrome on qry-ui tokens,
+       canonical jexter green (#4e8f1f) as the single accent. Token-driven → dark mode
+       follows for free. App-specific styling only. */
+    :root{
+      --jx-brand:#4e8f1f; --jx-brand-bright:#74b73e; --jx-brand-deep:#3f7419;
+      --qry-blue:var(--jx-brand); --qry-cyan:var(--jx-brand-bright);
+      --qry-accent:var(--jx-brand); --qry-accent-rgb:78,143,31;
+      --sl-color-primary-50:#f2f8ea;  --sl-color-primary-100:#e0f0cc; --sl-color-primary-200:#c7e3a3;
+      --sl-color-primary-300:#a9d275; --sl-color-primary-400:#88bd48; --sl-color-primary-500:#69a52b;
+      --sl-color-primary-600:#4e8f1f; --sl-color-primary-700:#3f7419; --sl-color-primary-800:#335c16;
+      --sl-color-primary-900:#2b4a15; --sl-color-primary-950:#16280a;
+    }
+    html,body{ height:100%; }
+    body.qry-app{ display:flex; flex-direction:column; height:100vh; overflow:hidden;
+      background:
+              radial-gradient(1100px 520px at 100% -8%, rgba(var(--qry-accent-rgb),.10), transparent 60%),
+              radial-gradient(900px 520px at -8% 108%, rgba(var(--qry-accent-rgb),.07), transparent 58%),
+              var(--qry-bg); }
+
+    /* header — soft glass, gradient wordmark, bordered subtitle pill */
+    .jx-head{ display:flex; align-items:center; gap:.6rem; flex:0 0 auto; padding:.5rem .9rem;
+      background:linear-gradient(180deg, transparent 30%, color-mix(in srgb, var(--qry-blue) 7%, transparent)), var(--qry-glass-strong, var(--qry-glass));
+      -webkit-backdrop-filter:var(--qry-blur); backdrop-filter:var(--qry-blur);
+      border-bottom:1px solid color-mix(in srgb, var(--qry-text) 10%, transparent);
+      box-shadow:0 6px 20px -16px rgba(0,0,0,.35); }
+    .jx-head .sp{ flex:1; }
+    .jx-brand{ display:inline-flex; align-items:center; gap:.5rem; padding:.2rem .3rem; }
+    .jx-brand .mark{ width:1.9rem; height:1.9rem; border-radius:9px; display:grid; place-items:center;
+      background:rgba(var(--qry-accent-rgb),.13); color:var(--jx-brand); flex:none; }
+    .jx-brand .mark i,.jx-brand .mark svg{ width:1.12rem; height:1.12rem; }
+    .brandword{ font-family:"Poppins",system-ui,sans-serif; font-weight:700; font-size:1.12rem; letter-spacing:-.01em;
+      background:linear-gradient(118deg, var(--qry-blue), var(--qry-cyan));
+      -webkit-background-clip:text; background-clip:text; color:transparent; -webkit-text-fill-color:transparent; }
+    .brandsub{ font-size:.66rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--qry-text-muted);
+      border:1px solid var(--qry-glass-border); border-radius:999px; padding:.08rem .45rem; }
+    .jx-icon-btn{ appearance:none; border:1px solid var(--qry-glass-border); background:var(--qry-glass); color:var(--qry-text);
+      width:2rem; height:2rem; border-radius:var(--qry-radius-xs,8px); cursor:pointer; display:grid; place-items:center; transition:background .15s,border-color .15s,color .15s; }
+    .jx-icon-btn:hover{ background:var(--qry-tint-soft); border-color:color-mix(in srgb,var(--jx-brand) 35%,var(--qry-glass-border)); color:var(--jx-brand); }
+    .jx-icon-btn i,.jx-icon-btn svg{ width:1.05rem; height:1.05rem; }
+
+    /* single centred column — one operation, no options */
+    .jx-main{ flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; align-items:center; padding:1.2rem 1.2rem 1.6rem; }
+    .jx-stage{ width:100%; max-width:760px; flex:1; min-height:0; display:flex; flex-direction:column; }
+
+    /* toolbar */
+    .jx-actions{ display:flex; gap:.5rem; flex:0 0 auto; margin-bottom:1rem; }
+    .jx-actions sl-button{ flex:1 1 0; min-width:0; }
+    .jx-actions sl-button::part(base){ width:100%; }
+    .jx-controls{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; flex:0 0 auto; margin-bottom:1rem; }
+    .jx-controls .sp{ flex:1; }
+    .jx-count{ font-size:.8rem; color:var(--qry-text-muted); }
+
+    /* hot folder — live watch bar */
+    .jx-hot{ display:flex; align-items:center; gap:.6rem; flex:0 0 auto; margin:-.2rem 0 1rem; padding:.5rem .8rem;
+      border:1px solid color-mix(in srgb,var(--jx-brand) 32%,var(--qry-glass-border)); border-radius:var(--qry-radius-md,11px);
+      background:rgba(var(--qry-accent-rgb),.07); font-size:.82rem; color:var(--qry-text); }
+    .jx-hot .sp{ flex:1; }
+    .jx-hot .lbl b{ color:var(--jx-brand-deep); }
+    .jx-hot .pulse{ width:.6rem; height:.6rem; border-radius:999px; background:var(--jx-brand); position:relative; flex:none; }
+    .jx-hot .pulse::after{ content:''; position:absolute; inset:0; border-radius:999px; background:var(--jx-brand); animation:jx-pulse 1.6s ease-out infinite; }
+    @keyframes jx-pulse{ 0%{ transform:scale(1); opacity:.55; } 100%{ transform:scale(3); opacity:0; } }
+
+    /* work area */
+    .jx-area{ flex:1; min-height:0; }
+
+    /* hero — inviting drop target with a tinted orb */
+    .jx-hero{ min-height:min(38vh, 300px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.55rem; text-align:center;
+      border:1.5px dashed var(--qry-glass-border); border-radius:var(--qry-radius-md,16px); color:var(--qry-text-muted); cursor:pointer;
+      background:var(--qry-glass); transition:border-color .15s, background .15s; }
+    .jx-hero:hover{ border-color:var(--jx-brand-bright); background:rgba(var(--qry-accent-rgb),.06); }
+    .jx-hero .orb{ width:4.8rem; height:4.8rem; border-radius:999px; display:grid; place-items:center; margin-bottom:.25rem;
+      background:rgba(var(--qry-accent-rgb),.12); color:var(--jx-brand); box-shadow:0 10px 26px -16px rgba(var(--qry-accent-rgb),.7); }
+    .jx-hero .orb i,.jx-hero .orb svg{ width:2.3rem; height:2.3rem; }
+    .jx-hero h2{ margin:0; color:var(--qry-text); font-size:1.25rem; }
+    .jx-hero p{ margin:0; font-size:.85rem; max-width:30rem; }
+
+    /* file rows */
+    .jx-list{ display:flex; flex-direction:column; gap:.5rem; }
+    /* what normalization guarantees — the product's claim, stated once, on the empty state only */
+    .jx-promise{ list-style:none; margin:.9rem 0 0; padding:0; display:grid; gap:.5rem;
+      grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); }
+    .jx-promise li{ display:grid; grid-template-columns:auto 1fr; gap:.15rem .55rem; align-items:start;
+      padding:.6rem .7rem; border:1px solid var(--qry-glass-border); border-radius:var(--qry-radius-md,12px);
+      background:var(--qry-glass); }
+    .jx-promise i,.jx-promise svg{ width:1rem; height:1rem; color:var(--jx-brand); grid-row:span 2; margin-top:.15rem; }
+    .jx-promise b{ font-size:.82rem; font-weight:650; color:var(--qry-text); }
+    .jx-promise span{ font-size:.74rem; line-height:1.35; color:var(--qry-text-muted); }
+
+    .jx-row{ display:flex; align-items:center; gap:.75rem; padding:.65rem .85rem; border:1px solid var(--qry-glass-border); border-radius:var(--qry-radius-md,12px); background:var(--qry-glass); transition:border-color .15s; }
+    .jx-row.done{ border-color:rgba(63,174,106,.45); } .jx-row.error{ border-color:rgba(214,83,58,.45); }
+    .jx-row .ic{ width:1.2rem; height:1.2rem; color:var(--qry-text-muted); flex:none; }
+    .jx-row.done .ic{ color:var(--jx-brand-bright); } .jx-row.error .ic{ color:#d6533a; }
+    .jx-row .meta{ flex:1; min-width:0; }
+    .jx-row .nm{ font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .jx-row .sub{ font-size:.74rem; color:var(--qry-text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .jx-row.done .sub{ color:#3fae6a; } .jx-row.error .sub{ color:#d6533a; }
+    .jx-badge{ font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:.16rem .5rem; border-radius:999px;
+      border:1px solid var(--qry-glass-border); color:var(--qry-text-muted); white-space:nowrap; }
+    .jx-row.done .jx-badge{ color:#3fae6a; border-color:rgba(63,174,106,.4); }
+    .jx-row.error .jx-badge{ color:#d6533a; border-color:rgba(214,83,58,.4); }
+    .jx-x{ appearance:none; border:0; background:transparent; color:var(--qry-text-muted); cursor:pointer; display:grid; place-items:center; width:1.9rem; height:1.9rem; border-radius:8px; }
+    .jx-x:hover{ color:#d6533a; background:color-mix(in srgb,#d6533a 14%,transparent); }
+    .jx-x i,.jx-x svg{ width:1rem; height:1rem; }
+
+    /* labelled API button (header) */
+    .jx-api-btn{ appearance:none; cursor:pointer; display:inline-flex; align-items:center; gap:.4rem; height:2rem; padding:0 .7rem;
+      border:1px solid var(--qry-glass-border); background:var(--qry-glass); color:var(--qry-text);
+      border-radius:var(--qry-radius-xs,8px); font-size:.8rem; font-weight:600; transition:background .15s,border-color .15s,color .15s; }
+    .jx-api-btn:hover{ background:rgba(var(--qry-accent-rgb),.09); border-color:color-mix(in srgb,var(--jx-brand) 40%,var(--qry-glass-border)); color:var(--jx-brand); }
+    .jx-api-btn i,.jx-api-btn svg{ width:1rem; height:1rem; color:var(--jx-brand); }
+
+    /* per-file Open button */
+    .jx-open{ appearance:none; border:0; background:transparent; color:var(--jx-brand); cursor:pointer; display:grid; place-items:center; width:1.9rem; height:1.9rem; border-radius:8px; }
+    .jx-open:hover{ background:rgba(var(--qry-accent-rgb),.12); }
+    .jx-open i,.jx-open svg{ width:1rem; height:1rem; }
+
+    /* ── settings drawer — Prism "Conversion options" look ── */
+    .opt-drawer::part(panel){ width: min(480px, 94vw); }
+    .opt-drawer::part(body){ padding-top:.2rem; }
+    .opt-drawer::part(footer){ padding-top:.5rem; }
+    .opt-bar{ display:flex; align-items:center; gap:.4rem; padding:.1rem .15rem .85rem; }
+    .opt-bar #opt-status{ font-size:.78rem; color:var(--qry-text-muted); }
+    .opt-section{ display:flex; flex-direction:column; gap:.5rem; }
+    .opt-sec-head{ display:flex; align-items:center; gap:.55rem; padding:0 .15rem; }
+    .opt-sec-head i,.opt-sec-head svg{ width:.85rem; height:.85rem; color:var(--qry-blue); flex:0 0 auto; }
+    .opt-sec-head span{ font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--qry-text-muted); }
+    .opt-card{ border:1px solid var(--qry-glass-border); border-radius:var(--qry-radius-md,12px); background:color-mix(in srgb, var(--qry-text) 2.5%, transparent); overflow:hidden; }
+    .opt-row{ display:flex; align-items:center; gap:1rem; min-height:2.7rem; padding:.35rem .85rem; transition:background .12s; }
+    .opt-row + .opt-row{ border-top:1px solid color-mix(in srgb, var(--qry-text) 7%, transparent); }
+    .opt-row:hover{ background:color-mix(in srgb, var(--qry-blue) 5%, transparent); }
+    .opt-main{ flex:1 1 auto; min-width:0; }
+    .opt-name{ font-size:.82rem; color:var(--qry-text); cursor:help; text-decoration:underline dotted color-mix(in srgb, var(--qry-text) 26%, transparent); text-underline-offset:3px; }
+    .opt-ctl{ flex:0 0 auto; display:flex; align-items:center; gap:.45rem; }
+    .opt-ctl sl-select{ width:13.5rem; }
+    .opt-ctl .opt-suffix{ width:9rem; }
+    .opt-ctl .opt-num{ width:4.6rem; }
+    .opt-ctl .opt-num::part(input){ text-align:right; }
+    .opt-unit{ font-size:.72rem; color:var(--qry-text-muted); white-space:nowrap; max-width:8rem; overflow:hidden; text-overflow:ellipsis; }
+    .opt-example{ margin:.7rem 0 .1rem; padding-left:.15rem; font-size:.78rem; color:var(--jx-brand-deep); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+
+    /* drawer header — Poppins title + restrained green hairline (Prism signature; both drawers) */
+    sl-drawer::part(title){ font-family:"Poppins", system-ui, sans-serif; font-weight:600; font-size:1.05rem; }
+    sl-drawer::part(header){ border-bottom:2px solid color-mix(in srgb, var(--jx-brand) 35%, transparent); }
+
+    /* ── Java API dialog ── */
+    #api-dialog{ --size: min(94vw, 720px); }            /* right drawer, wide enough for code */
+    #api-dialog::part(body){ padding-top:.3rem; }
+    .jx-doc{ font-size:.86rem; line-height:1.6; color:var(--qry-text); }
+    .jx-doc p{ margin:.2rem 0 .9rem; color:var(--qry-text-muted); }
+    .jx-doc h3{ display:flex; align-items:center; gap:.45rem; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+      color:var(--qry-text-muted); margin:1.2rem 0 .5rem; }
+    .jx-doc h3::after{ content:''; flex:1; height:1px; background:var(--qry-line); }
+    .jx-doc h3 i,.jx-doc h3 svg{ width:.9rem; height:.9rem; color:var(--jx-brand); }
+    .jx-codewrap{ position:relative; }
+    .jx-doc pre{ margin:.1rem 0; background:var(--qry-glass); border:1px solid var(--qry-glass-border); border-radius:10px;
+      padding:.75rem .85rem; overflow:auto; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.78rem; line-height:1.6; color:var(--qry-text); }
+    .jx-copy{ position:absolute; top:.45rem; right:.45rem; appearance:none; cursor:pointer; display:inline-flex; align-items:center; gap:.3rem;
+      border:1px solid var(--qry-glass-border); background:var(--qry-bg); color:var(--qry-text-muted); border-radius:7px; padding:.2rem .45rem; font-size:.7rem; }
+    .jx-copy:hover{ color:var(--jx-brand); border-color:color-mix(in srgb,var(--jx-brand) 40%,var(--qry-glass-border)); }
+    .jx-copy i,.jx-copy svg{ width:.85rem; height:.85rem; }
+    .jx-doc .tip{ margin-top:1rem; font-size:.78rem; color:var(--qry-text-muted); display:flex; gap:.5rem; align-items:flex-start; }
+    .jx-doc .tip i,.jx-doc .tip svg{ width:.95rem; height:.95rem; color:var(--jx-brand); flex:none; margin-top:.12rem; }
+    .jx-doc code{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.82rem; color:var(--jx-brand-deep); background:rgba(var(--qry-accent-rgb),.08); padding:.05rem .3rem; border-radius:5px; }
+  </style>
+</head>
+
+<body class="qry-app">
+
+<header class="jx-head">
+  <span class="jx-brand">
+    <span class="mark"><img src="/shared/jexter-mark.svg" alt="" style="width:1.15rem;height:1.15rem"/></span>
+    <span class="brandword">Jexter</span><span class="brandsub">PDF normalizer</span>
+  </span>
+  <span class="sp"></span>
+  <button id="btn-api" class="jx-api-btn"><i data-lucide="code-2"></i> Java API</button>
+  <button id="btn-cfg" class="jx-icon-btn" aria-label="Settings" title="Settings"><i data-lucide="settings"></i></button>
+  <button id="btn-theme" class="jx-icon-btn" aria-label="Toggle theme"><i data-lucide="moon"></i></button>
+</header>
+
+<main class="jx-main">
+  <div class="jx-stage">
+    <div class="jx-actions">
+      <sl-button id="add-files" variant="primary"><i data-lucide="file" slot="prefix"></i> Choose files…</sl-button>
+      <sl-button id="add-folder"><i data-lucide="folder" slot="prefix"></i> Choose a folder…</sl-button>
+      <sl-button id="hot"><i data-lucide="flame" slot="prefix"></i> Hot folder…</sl-button>
+    </div>
+    <div class="jx-controls" style="display:none">
+      <span class="jx-count" id="count"></span>
+      <span class="sp"></span>
+      <sl-button id="clear" size="small">Clear</sl-button>
+      <sl-button id="saveall" size="small" style="display:none"><i data-lucide="download" slot="prefix"></i> Save all…</sl-button>
+      <sl-button id="run" variant="primary"><i data-lucide="wand-sparkles" slot="prefix"></i> Normalize all</sl-button>
+    </div>
+
+    <div class="jx-hot" id="hotbar" style="display:none">
+      <span class="pulse"></span>
+      <span class="lbl">Watching <b id="hot-name"></b></span>
+      <span class="jx-count" id="hot-stat"></span>
+      <span class="sp"></span>
+      <sl-button size="small" id="hot-stop"><i data-lucide="square" slot="prefix"></i> Stop</sl-button>
+    </div>
+
+    <div class="jx-area" id="area"></div>
+  </div>
+</main>
+
+
+<!-- ── Java API guide ── -->
+<sl-drawer id="api-dialog" label="Jexter — Java API" placement="end">
+  <div class="jx-doc">
+    <p>Jexter is a thin front over the <b>jexter</b> Java library. The same
+       normalization you see here is one static call — embed it in your own JVM code, no server,
+       no HTTP. Needs the jexter jar on the classpath (JDK&nbsp;21+).</p>
+
+    <h3><i data-lucide="zap"></i> The one call</h3>
+    <div class="jx-codewrap">
+      <button class="jx-copy" data-copy="java"><i data-lucide="copy"></i> Copy</button>
+      <pre id="ex-java"></pre>
+    </div>
+    <p style="margin-top:.6rem">It returns the <code>OCDDocument</code> (page count, etc.) and writes the
+       normalized PDF to <code>out</code> — always with a real selectable text layer.</p>
+
+    <h3><i data-lucide="terminal"></i> From the command line</h3>
+    <div class="jx-codewrap">
+      <button class="jx-copy" data-copy="cli"><i data-lucide="copy"></i> Copy</button>
+      <pre id="ex-cli"></pre>
+    </div>
+
+    <h3><i data-lucide="flame"></i> Hot folder (daemon)</h3>
+    <p>Watch a folder and normalize every PDF that lands — headless, no window. Outputs are written
+       atomically (temp&nbsp;+&nbsp;rename); <code>--recursive</code> mirrors the sub-tree, <code>--threads</code> runs in parallel:</p>
+    <div class="jx-codewrap">
+      <button class="jx-copy" data-copy="hot"><i data-lucide="copy"></i> Copy</button>
+      <pre id="ex-hot"></pre>
+    </div>
+
+
+    <div class="tip"><i data-lucide="info"></i><span>The normalization is fixed and baked into
+      <code>Jexter.normalize</code> — text segmentation on, headers/footers off, navigation recovered
+      only when absent, annotations kept, always a selectable text layer. Nothing to pass, nothing to configure.</span></div>
+  </div>
+  <sl-button slot="footer" variant="primary" id="api-close">Got it</sl-button>
+</sl-drawer>
+
+<!-- ── Output options — Prism "Conversion options" look ── -->
+<sl-drawer id="cfg-drawer" label="Settings" placement="end" class="opt-drawer">
+  <div class="opt-bar"><span id="opt-status">Output naming &amp; save location, and how the hot folder watches.</span></div>
+  <div class="opt-section">
+    <div class="opt-sec-head"><i data-lucide="folder-output"></i><span>Output</span></div>
+    <div class="opt-card">
+      <div class="opt-row">
+        <div class="opt-main"><span class="opt-name" title="Where each normalized PDF is written">Save location</span></div>
+        <div class="opt-ctl">
+          <sl-select id="cfg-mode" size="small" value="source" hoist>
+            <sl-option value="source">Same folder + suffix</sl-option>
+            <sl-option value="folder">A folder I choose</sl-option>
+            <sl-option value="manual">Ask me (Save / Save all)</sl-option>
+          </sl-select>
+        </div>
+      </div>
+      <div class="opt-row" id="cfg-folder-row">
+        <div class="opt-main"><span class="opt-name" title="Every normalized PDF is written into this folder">Output folder</span></div>
+        <div class="opt-ctl">
+          <sl-button size="small" id="cfg-pick"><i data-lucide="folder" slot="prefix"></i> Choose…</sl-button>
+          <span class="opt-unit" id="cfg-outdir">none</span>
+        </div>
+      </div>
+      <div class="opt-row">
+        <div class="opt-main"><span class="opt-name" title="Appended to the base name before .pdf">Filename suffix</span></div>
+        <div class="opt-ctl"><sl-input id="cfg-suffix" class="opt-suffix" size="small" value="-normalized" placeholder="-normalized" maxlength="40"></sl-input></div>
+      </div>
+    </div>
+    <p class="opt-example" id="cfg-example"></p>
+  </div>
+
+  <div class="opt-section">
+    <div class="opt-sec-head"><i data-lucide="flame"></i><span>Hot folder</span></div>
+    <div class="opt-card">
+      <div class="opt-row">
+        <div class="opt-main"><span class="opt-name" title="How often the watched folder is re-scanned for new PDFs">Watch interval</span></div>
+        <div class="opt-ctl"><sl-input id="cfg-interval" class="opt-num" type="number" min="1" max="60" size="small" value="3"></sl-input><span class="opt-unit">sec</span></div>
+      </div>
+      <div class="opt-row">
+        <div class="opt-main"><span class="opt-name" title="Also watch and normalize PDFs in sub-folders (written in place)">Include sub-folders</span></div>
+        <div class="opt-ctl"><sl-switch id="cfg-recursive"></sl-switch></div>
+      </div>
+    </div>
+  </div>
+  <sl-button slot="footer" variant="primary" id="cfg-close">Done</sl-button>
+</sl-drawer>
+
+<input type="file" id="file" accept="application/pdf,.pdf" multiple hidden>
+<input type="file" id="dir" webkitdirectory hidden>
+
+<script type="module">
+  import { boot, theme, icons, toast, bindAll, makeDropZone, format, copy }
+    from 'https://cdn.jsdelivr.net/gh/Bloechle/qry-js@1.3.0/qry-kit.js';
+
+  const FSA = ('showOpenFilePicker' in window);   // File System Access API (Chromium → the window WebApp opens)
+
+  // ── the fixed normalization policy — one pass, no user options ──
+  // Engine defaults already give: structure on, generateOutline off (nav only if the PDF has
+  // none), renderAnnotations on. The single deviation is turning header/footer detection off.
+
+  // ── output policy (the settings drawer) ──
+  // Documents converted AT ONCE — the house ceiling. Declared BEFORE the first use: loadCfg()
+  // runs at module init and calls defaultLanes(), so a `const` further down is in the temporal
+  // dead zone and throws before the app ever paints.
+  const MAX_LANES = 3;
+  const cfg = loadCfg();          // { mode:'source'|'folder'|'manual', suffix }
+  let outDir = null;              // chosen output-folder handle for 'folder' mode (session-only)
+  // lanes: how many documents convert AT ONCE. Half the cores, capped at MAX_LANES — the engine
+  // holds a whole document model per in-flight conversion (~1.1 KB per node, ~157 MB for a
+  // 600-page book), so the ceiling is the server's heap, not the core count. Three is the house
+  // recommendation and it is enforced here, not just used as a default: the browser can queue a
+  // hundred files in one drop, and nothing else bounds what it fires at the engine.
+  function defaultLanes(){ return Math.max(1, Math.min(MAX_LANES, Math.floor((navigator.hardwareConcurrency || 4) / 2))); }
+  function loadCfg(){ const d = { mode:'source', suffix:'-normalized', interval:3, recursive:false, lanes:defaultLanes() }; try { return Object.assign(d, JSON.parse(localStorage.getItem('jexter.cfg')||'{}')); } catch { return d; } }
+  function saveCfg(){ try { localStorage.setItem('jexter.cfg', JSON.stringify({ mode:cfg.mode, suffix:cfg.suffix, interval:cfg.interval, recursive:cfg.recursive, lanes:cfg.lanes })); } catch {} }
+  function sanitizeSuffix(v){ return String(v||'').replace(/[\/\\:*?"<>|]/g,'').slice(0,40); }
+
+  // ── file model ── each: { id, file, status, blob, msg, dir, saved }
+  let files = [], seq = 0, busy = false;
+
+  // ── hot folder ── watch a chosen directory; auto-normalize PDFs as they land
+  const hot = { dir:null, timer:null, busy:false, seen:new Set(), sizes:new Map(), count:0 };
+  const outName = n => n.replace(/\.[^.]+$/, '') + (cfg.suffix || '') + '.pdf';
+  const isOutputName = n => n.toLowerCase().endsWith(((cfg.suffix || '') + '.pdf').toLowerCase());
+  function addOne(file, dir){
+    if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') return;
+    if (isOutputName(file.name)) return;
+    files.push({ id:++seq, file, status:'queued', blob:null, msg:'', dir:dir||null, saved:false });
+  }
+  function addFiles(list, dir){ for (const f of list) addOne(f, dir); render(); }
+
+  function vis(sel, on){ $(sel).css('display', on ? '' : 'none'); }
+  function render(){
+    const any = files.length > 0;
+    $('#count').text(any ? `${files.length} file${files.length>1?'s':''}` : '');
+    vis('.jx-controls', any);
+    vis('#run', any); vis('#clear', any);
+    const savable = files.filter(f => f.status==='done' && !f.saved && f.blob).length;
+    vis('#saveall', savable >= 2);
+
+    if (!any){
+      $('#area').html(`<div class="jx-hero" id="hero"><div class="orb"><i data-lucide="wand-sparkles"></i></div><h2>Drop PDFs here</h2>
+      <p>or use the buttons above — individual files or a whole folder. Drag a batch right in.</p></div>
+      <ul class="jx-promise">
+        <li><i data-lucide="type"></i><b>Real selectable text</b><span>Glyphs are re-encoded with a proper text layer — search, copy and screen readers work.</span></li>
+        <li><i data-lucide="scan-eye"></i><b>Same pixels</b><span>Every page is rebuilt through the OCD model and repainted to match the source.</span></li>
+        <li><i data-lucide="shield-check"></i><b>Nothing leaves the machine</b><span>The engine runs locally; files are never uploaded anywhere.</span></li>
+      </ul>`);
+      $('#hero').on('click', chooseFiles); icons(); return;
+    }
+    const rows = files.map(f => {
+      const badge = f.status==='working'
+              ? '<sl-spinner style="font-size:1.1rem;--track-width:2px;"></sl-spinner>'
+              : `<span class="jx-badge">${f.status==='done' ? (f.saved?'saved':'ready') : f.status==='error' ? 'failed' : 'queued'}</span>`;
+      const open = (f.status==='done' && f.blob) ? `<button class="jx-open" data-open="${f.id}" title="Open &amp; read"><i data-lucide="external-link"></i></button>` : '';
+      const action = (f.status==='done' && !f.saved) ? `<sl-button size="small" variant="primary" data-save="${f.id}">Save</sl-button>`
+              : (f.status==='error' ? `<sl-button size="small" data-retry="${f.id}">Retry</sl-button>` : '');
+      const sub = f.msg ? f.msg : (f.dir ? `from folder “${f.dir.name}”` : format.bytes(f.file.size));
+      return `<div class="jx-row ${f.status}"><i class="ic" data-lucide="file-text"></i>
+      <span class="meta"><div class="nm">${escapeHtml(f.file.name)}</div><div class="sub">${escapeHtml(sub)}</div></span>
+      ${badge}${open}${action}<button class="jx-x" data-del="${f.id}" title="Remove"><i data-lucide="x"></i></button></div>`;
+    }).join('');
+    $('#area').html(`<div class="jx-list">${rows}</div>`);
+    icons();
+  }
+  function escapeHtml(s){ return String(s==null?'':s).split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;'); }
+
+  // ── pick files / folder (FS Access API, graceful fallback) ──
+  async function chooseFiles(){
+    if (FSA){
+      try {
+        const hs = await window.showOpenFilePicker({ multiple:true, types:[{ description:'PDF files', accept:{ 'application/pdf':['.pdf'] } }] });
+        for (const h of hs){ addOne(await h.getFile(), null); }
+        render();
+      } catch {}
+    } else $('#file').click();
+  }
+  async function chooseFolder(){
+    if (FSA && window.showDirectoryPicker){
+      try {
+        const dir = await window.showDirectoryPicker({ mode:'readwrite' });
+        for await (const ent of dir.values()){
+          if (ent.kind==='file' && /\.pdf$/i.test(ent.name) && !/-normalized\.pdf$/i.test(ent.name)) addOne(await ent.getFile(), dir);
+        }
+        render();
+      } catch {}
+    } else $('#dir').click();
+  }
+
+  // ── hot folder: pick a directory and watch it ──
+  async function startHot(){
+    if (!(FSA && window.showDirectoryPicker)) return;
+    let dir;
+    try { dir = await window.showDirectoryPicker({ mode:'readwrite' }); }
+    catch { return; }                                   // cancelled
+    if (dir.requestPermission){ try { await dir.requestPermission({ mode:'readwrite' }); } catch {} }
+    stopHot();                                          // replace any previous watch
+    hot.dir = dir; hot.seen = new Set(); hot.sizes = new Map(); hot.count = 0;
+    showHotBar(true);
+    await pollHot();                                    // first pass now
+    hot.timer = setInterval(pollHot, Math.max(1, cfg.interval) * 1000);   // then every cfg.interval s
+    toast(`Watching “${escapeHtml(dir.name)}”`, 'success', 1600);
+  }
+  function stopHot(){
+    if (hot.timer){ clearInterval(hot.timer); hot.timer = null; }
+    hot.dir = null; hot.busy = false;
+    showHotBar(false);
+  }
+  function showHotBar(on){
+    vis('#hotbar', on);
+    $('#hot').attr('disabled', on ? '' : null);         // can't re-pick while watching; Stop first
+    if (on){ $('#hot-name').text(hot.dir ? hot.dir.name : ''); updateHotStat(); }
+  }
+  function updateHotStat(){ $('#hot-stat').text(hot.count ? `${hot.count} normalized` : 'waiting for PDFs…'); }
+
+  // one scan: detect stable new PDFs (not yet normalized) and normalize them in place
+  // recursive walk: yield each candidate PDF with its own (sub)folder handle and whether its output already exists
+  async function* walkHot(dir, recurse, rel){
+    const names = new Set(), subdirs = [], pdfs = [];
+    for await (const ent of dir.values()){
+      names.add(ent.name);
+      if (ent.kind === 'file'){ if (/\.pdf$/i.test(ent.name) && !isOutputName(ent.name)) pdfs.push(ent); }
+      else if (ent.kind === 'directory' && recurse) subdirs.push(ent);
+    }
+    for (const ent of pdfs)
+      yield { ent, parent:dir, key:(rel ? rel + '/' : '') + ent.name, hasOut:names.has(outName(ent.name)) };
+    for (const sub of subdirs) yield* walkHot(sub, recurse, (rel ? rel + '/' : '') + sub.name);
+  }
+
+  async function pollHot(){
+    if (!hot.dir || hot.busy) return;
+    hot.busy = true;
+    try {
+      const ready = [];
+      for await (const c of walkHot(hot.dir, cfg.recursive, '')){     // key by relative path: names repeat across sub-folders
+        if (hot.seen.has(c.key)) continue;
+        if (c.hasOut){ hot.seen.add(c.key); hot.sizes.delete(c.key); continue; }   // already normalized earlier
+        const file = await c.ent.getFile();
+        if (hot.sizes.get(c.key) === file.size && file.size > 0){ hot.sizes.delete(c.key); ready.push({ c, file }); }  // stable → safe to read
+        else hot.sizes.set(c.key, file.size);                                                                          // still arriving → wait a tick
+      }
+      for (const { c, file } of ready){
+        if (!hot.dir) break;                            // stopped mid-scan
+        hot.seen.add(c.key);
+        addOne(file, c.parent);                         // writeback target = the file's own (sub)folder
+        const f = files[files.length - 1];
+        if (f){ render(); await convert(f);
+          if (f.status === 'done'){ if (!f.saved && f.dir) await writeInto(f, f.dir, false); hot.count++; updateHotStat(); render(); } }
+      }
+    } catch { /* folder gone / permission lost — the next tick retries */ }
+    hot.busy = false;
+  }
+
+  // ── convert one (upload bytes → normalized bytes) ──
+  async function convert(f){
+    f.status='working'; f.msg=''; render();
+    try {
+      const r = await fetch(`/api/convert?name=${encodeURIComponent(f.file.name)}`,
+              { method:'POST', headers:{ 'Content-Type':'application/pdf' }, body:f.file });
+      if (!r.ok){ let m; try { m = (await r.json()).error; } catch { m = await r.text(); } throw new Error(m || ('HTTP '+r.status)); }
+      // what actually happened, straight from the engine — see /api/convert
+      f.pages = parseInt(r.headers.get('X-Jexter-Pages')) || 0;
+      f.inBytes = parseInt(r.headers.get('X-Jexter-In')) || f.file.size;
+      f.blob = await r.blob();   // output name derived client-side from the original (unicode-safe)
+      f.outBytes = f.blob.size;
+      f.status = 'done';
+      await place(f);
+    } catch (e){ f.status='error'; f.msg=(e&&e.message)||'failed'; }
+    render();
+  }
+  /** The result line. «normalized ✓» is a claim; pages and the size delta are evidence, and they
+   *  are what tells a user the file is really a clean, selectable PDF and not just a copy. */
+  function outcome(f){
+    const bits = [];
+    if (f.pages) bits.push(f.pages + (f.pages === 1 ? ' page' : ' pages'));
+    if (f.inBytes && f.outBytes){
+      const pct = Math.round((f.outBytes - f.inBytes) / f.inBytes * 100);
+      bits.push(format.bytes(f.inBytes) + ' → ' + format.bytes(f.outBytes)
+              + (Math.abs(pct) >= 1 ? '  (' + (pct > 0 ? '+' : '') + pct + '%)' : ''));
+    }
+    bits.push('selectable text');
+    return bits.join('  ·  ');
+  }
+
+  // route a finished file to disk per the output policy
+  async function place(f){
+    f.saved = false;
+    if (cfg.mode === 'manual'){ f.msg = outcome(f); return; }
+    if (cfg.mode === 'folder'){
+      const dir = await ensureOutDir();
+      if (!dir){ f.msg = outcome(f) + '  ·  pick an output folder, or Save'; return; }
+      await writeInto(f, dir, true); return;
+    }
+    if (f.dir) await writeInto(f, f.dir, false);                  // 'source' — back into the file's own folder
+    else f.msg = outcome(f);          // a loose file has no source folder
+  }
+  async function writeInto(f, dir, external){
+    const name = outName(f.file.name);
+    try {
+      if (dir.requestPermission){ const p = await dir.requestPermission({ mode:'readwrite' }); if (p!=='granted'){ f.msg = outcome(f) + '  ·  permission denied, use Save'; if (external) outDir=null; return; } }
+      const oh = await dir.getFileHandle(name, { create:true }), w = await oh.createWritable();
+      await w.write(f.blob); await w.close();
+      f.saved = true; f.msg = `saved as ${name} in “${dir.name}” ✓`;
+    } catch (e){ f.msg = outcome(f) + '  ·  could not write, use Save'; if (external) outDir = null; else f.dir = null; }
+  }
+  async function ensureOutDir(){
+    if (outDir) return outDir;
+    if (!(FSA && window.showDirectoryPicker)) return null;
+    try {
+      outDir = await window.showDirectoryPicker({ mode:'readwrite' });
+      if (outDir.requestPermission) await outDir.requestPermission({ mode:'readwrite' });
+      $('#cfg-outdir').text(outDir.name);
+      return outDir;
+    } catch { return null; }
+  }
+
+  async function runAll(){
+    if (busy) return; busy = true; $('#run').attr('disabled',''); $('#add-files').attr('disabled',''); $('#add-folder').attr('disabled','');
+    const queue = files.filter(f => f.status==='queued' || f.status==='error');
+    // Convert several documents AT ONCE. The engine is single-threaded inside one document by
+    // design — the parallel axis is the document, and the server already runs a cached thread
+    // pool, so a sequential client was the only thing holding a batch to one core. Never more
+    // than MAX_LANES at a time: firing a whole dropped folder at the engine would trade a
+    // wall-clock win for an OutOfMemoryError.
+    const lanes = Math.max(1, Math.min(cfg.lanes || defaultLanes(), MAX_LANES, queue.length));
+    let next = 0;
+    await Promise.all(Array.from({ length: lanes }, async () => {
+      while (true) {
+        const f = queue[next++];
+        if (!f) return;
+        await convert(f);          // convert() owns its own error handling and re-renders
+      }
+    }));
+    busy = false; $('#run').attr('disabled',null); $('#add-files').attr('disabled',null); $('#add-folder').attr('disabled',null);
+    const ok = files.filter(f => f.status==='done').length;
+    toast(`${ok} file${ok>1?'s':''} normalized`, 'success', 1800);
+  }
+
+  // ── saving loose files ──
+  // Per-file Save → native "Save as…" chooser (pick name + location); plain download as fallback.
+  async function saveOne(f){
+    if (!f.blob) return;
+    if (FSA && window.showSaveFilePicker){
+      try {
+        const h = await window.showSaveFilePicker({ suggestedName:outName(f.file.name), types:[{ description:'PDF', accept:{ 'application/pdf':['.pdf'] } }] });
+        const w = await h.createWritable(); await w.write(f.blob); await w.close();
+        f.saved = true; f.msg = `saved as ${h.name} ✓`; render(); toast('Saved', 'success', 1500);
+      } catch (e){ if (e && e.name === 'AbortError') return; downloadOne(f); }   // cancelled → nothing; real error → fall back
+    } else downloadOne(f);
+  }
+  function downloadOne(f){
+    if (!f.blob) return;
+    const u = URL.createObjectURL(f.blob), a = document.createElement('a');
+    a.href = u; a.download = outName(f.file.name); document.body.appendChild(a); a.click(); a.remove();
+    f.saved = true; setTimeout(() => URL.revokeObjectURL(u), 4000); render();
+  }
+  // open the normalized PDF in a new tab to read it
+  function openOne(f){
+    if (!f.blob) return;
+    const u = URL.createObjectURL(f.blob);
+    window.open(u, '_blank');
+    setTimeout(() => URL.revokeObjectURL(u), 60000);
+  }
+  async function saveAll(){
+    const d = files.filter(f => f.status==='done' && !f.saved && f.blob);
+    if (!d.length) return;
+    if (FSA && window.showDirectoryPicker){
+      try {
+        const dir = await window.showDirectoryPicker({ mode:'readwrite' });
+        for (const f of d){ const oh = await dir.getFileHandle(outName(f.file.name), { create:true }), w = await oh.createWritable(); await w.write(f.blob); await w.close(); f.saved = true; f.msg = `saved in “${dir.name}” ✓`; }
+        toast(`Saved ${d.length} file${d.length>1?'s':''} to “${escapeHtml(dir.name)}”`, 'success', 2200); render();
+      } catch {}
+    } else d.forEach((f,i) => setTimeout(() => downloadOne(f), i*350));
+  }
+
+  // ── Java API guide (static snippets) ──
+  const EX = {
+    java:
+`import sugarcube.jexter.ui.jexter.Jexter;
+import java.io.File;
+
+// Rebuild the text layer; recover navigation only if the PDF has none; keep
+// annotations; always a selectable text layer. The whole API in one call.
+Jexter.normalize(new File("in.pdf"), new File("in-normalized.pdf"));`,
+    cli:
+`# one file
+java -cp jexter.jar sugarcube.jexter.ui.jexter.Jexter in.pdf
+
+# a folder — recursive, mirrored into ./out, 4 workers (*-normalized.pdf are skipped)
+java -cp jexter.jar sugarcube.jexter.ui.jexter.Jexter ./pdfs ./out --recursive --threads=4`,
+    hot:
+`# watch ./inbox — each PDF that lands is normalized in place to <name>-normalized.pdf
+java -cp jexter.jar sugarcube.jexter.ui.jexter.Jexter --hotfolder ./inbox
+
+# recursive: mirror the sub-tree into ./out, 4 parallel workers; Ctrl-C to stop
+java -cp jexter.jar sugarcube.jexter.ui.jexter.Jexter --hotfolder ./inbox ./out --recursive --threads=4`,
+  };
+  function fillApiDoc(){ $('#ex-java').text(EX.java); $('#ex-cli').text(EX.cli); $('#ex-hot').text(EX.hot); }
+
+  // ── boot + wiring ──
+  boot({ title:'Jexter', ready(){
+      syncThemeIcon();
+      render(); fillApiDoc(); initCfgUI();
+      if (!(FSA && window.showDirectoryPicker)) $('#hot').css('display','none');
+
+      bindAll({
+        '#btn-theme': () => { theme.toggle(); syncThemeIcon(); },
+        '#btn-cfg':  () => { $('#cfg-drawer').open = true; },
+        '#cfg-close':() => { $('#cfg-drawer').open = false; },
+        '#cfg-pick':  ensureOutDir,
+        '#btn-api':  () => { $('#api-dialog').open = true; },
+        '#api-close':() => { $('#api-dialog').open = false; },
+        '#add-files': chooseFiles,
+        '#add-folder': chooseFolder,
+        '#hot': startHot,
+        '#hot-stop': stopHot,
+        '#run': runAll,
+        '#saveall': saveAll,
+        '#clear': () => { files = []; render(); },
+      });
+      $('#file').on('change', e => { addFiles(e.target.files, null); e.target.value=''; });
+      $('#dir').on('change',  e => { addFiles(e.target.files, null); e.target.value=''; });   // fallback: read-only folder → download
+
+      // copy buttons in the API dialog
+      $('#api-dialog').on('click', e => {
+        const b = e.target.closest('[data-copy]'); if (!b) return;
+        copy(EX[b.dataset.copy] || ''); toast('Copied', 'success', 1200);
+      });
+
+      // row actions (delegated; works for <sl-button> clicks too)
+      $('#area').on('click', e => {
+        const b = e.target.closest('[data-save],[data-del],[data-retry],[data-open]'); if (!b) return;
+        const id = +(b.dataset.save || b.dataset.del || b.dataset.retry || b.dataset.open), f = files.find(x => x.id===id); if (!f) return;
+        if (b.dataset.open) openOne(f);
+        else if (b.dataset.save) saveOne(f);
+        else if (b.dataset.del){ files = files.filter(x => x.id!==id); render(); }
+        else if (b.dataset.retry) convert(f);
+      });
+
+      // real drag & drop (File objects) via the qry-ui overlay
+      makeDropZone(document.body, { label:'Drop PDFs to normalize', onFiles: list => addFiles(list, null) });
+
+      // keep the app alive — the WebApp watchdog exits a few seconds after the
+      // window (this SSE connection) drops. It's local, so there's no status to show.
+      try { new EventSource('/api/alive'); } catch {}
+    }});
+
+  function syncThemeIcon(){ $('#btn-theme').html(`<i data-lucide="${theme.isDark() ? 'sun':'moon'}"></i>`); icons(); }
+
+  // ── settings drawer wiring ──
+  function initCfgUI(){
+    $('#cfg-mode').attr('value', cfg.mode);
+    $('#cfg-suffix').attr('value', cfg.suffix);
+    $('#cfg-interval').attr('value', cfg.interval);
+    $('#cfg-recursive').attr('checked', cfg.recursive ? '' : null);
+    applyCfgUI(); cfgExample();
+    $('#cfg-mode').on('sl-change', e => { cfg.mode = e.target.value; applyCfgUI(); saveCfg(); render(); });
+    $('#cfg-suffix').on('sl-input', e => { cfg.suffix = sanitizeSuffix(e.target.value); cfgExample(); saveCfg(); render(); });
+    $('#cfg-interval').on('sl-input', e => { cfg.interval = Math.max(1, Math.min(60, parseInt(e.target.value) || 3)); saveCfg();
+      if (hot.timer){ clearInterval(hot.timer); hot.timer = setInterval(pollHot, cfg.interval * 1000); } });
+    $('#cfg-recursive').on('sl-change', e => { cfg.recursive = !!e.target.checked; saveCfg(); });
+  }
+  function applyCfgUI(){
+    vis('#cfg-folder-row', cfg.mode === 'folder');
+    $('#cfg-outdir').text(outDir ? outDir.name : 'none');
+  }
+  function cfgExample(){ $('#cfg-example').text(`example.pdf → example${cfg.suffix || ''}.pdf`); }
+</script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+Sugarcube jexter
+Copyright (C) 2026 Sugarcube Information Technology Sàrl
+
+This product is licensed under the GNU Affero General Public License v3.0
+(see the LICENSE file), with a commercial license available on request.
+
+It bundles and depends on the following third-party software:
+
+- Apache PDFBox — Copyright The Apache Software Foundation.
+  Licensed under the Apache License, Version 2.0.
+- Apache FontBox (part of the Apache PDFBox project).
+  Licensed under the Apache License, Version 2.0.
+- Apache PDFBox JBIG2 ImageIO plugin (jbig2-imageio).
+  Licensed under the Apache License, Version 2.0.
+- Bouncy Castle (optional, runtime — for encrypted PDFs).
+  Licensed under the Bouncy Castle license (MIT-style).
+
+The Apache License 2.0 and the original NOTICE files of the above components are
+retained inside the corresponding jars under lib/ and must be preserved on
+redistribution. A copy of the Apache License 2.0 is available at
+https://www.apache.org/licenses/LICENSE-2.0
+
+The web front-end loads the qry stack, Shoelace, and Lucide from their CDNs;
+these are not redistributed as part of this repository.

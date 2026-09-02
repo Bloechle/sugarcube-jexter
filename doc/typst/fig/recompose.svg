@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 280" font-family="Poppins, DejaVu Sans, sans-serif">
+  <defs>
+    <marker id="re" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto"><path d="M0,0 L6.5,3 L0,6 Z" fill="#3b5b7a"/></marker>
+  </defs>
+  <text x="28" y="22" font-size="13.5" font-weight="600" fill="#1c1e1b">Grouping scattered runs into <tspan fill="#27425c">lines &amp; paragraphs</tspan></text>
+
+  <!-- LEFT: flat runs -->
+  <g transform="translate(40,46)">
+    <text x="150" y="-6" text-anchor="middle" font-size="11" fill="#6a6f69">flat text runs (as painted)</text>
+    <rect width="300" height="196" rx="6" fill="#ffffff" stroke="#dfe1db" stroke-width="1.5"/>
+    <!-- runs as separate ticks with gaps, showing independence -->
+    <g fill="#cfd2cc">
+      <rect x="22" y="24" width="70" height="9" rx="3"/><rect x="100" y="24" width="40" height="9" rx="3"/><rect x="148" y="24" width="90" height="9" rx="3"/>
+      <rect x="22" y="44" width="54" height="9" rx="3"/><rect x="84" y="44" width="120" height="9" rx="3"/>
+      <!-- a heading-ish run -->
+      <rect x="22" y="78" width="110" height="11" rx="3" fill="#bcd49a"/>
+      <rect x="22" y="106" width="80" height="9" rx="3"/><rect x="110" y="106" width="60" height="9" rx="3"/><rect x="178" y="106" width="58" height="9" rx="3"/>
+      <rect x="22" y="126" width="120" height="9" rx="3"/><rect x="150" y="126" width="80" height="9" rx="3"/>
+      <rect x="22" y="158" width="40" height="9" rx="3"/>
+    </g>
+    <text x="150" y="186" text-anchor="middle" font-size="9" fill="#a7aaa3">independent show-text ops on baselines</text>
+  </g>
+
+  <!-- arrow -->
+  <g transform="translate(352,144)">
+    <line x1="0" y1="0" x2="40" y2="0" stroke="#3b5b7a" stroke-width="2" marker-end="url(#re)"/>
+    <text x="20" y="-10" text-anchor="middle" font-size="9.5" fill="#27425c">segment</text>
+    <text x="20" y="20" text-anchor="middle" font-size="8.5" fill="#4a627d">TextBlocks</text>
+  </g>
+
+  <!-- RIGHT: blocks -->
+  <g transform="translate(408,46)">
+    <text x="150" y="-6" text-anchor="middle" font-size="11" fill="#6a6f69">blocks: paragraphs + breaks</text>
+    <rect width="300" height="196" rx="6" fill="#ffffff" stroke="#dfe1db" stroke-width="1.5"/>
+
+    <!-- isolated heading block (over-segmentation) -->
+    <rect x="14" y="16" width="272" height="26" rx="6" fill="#eef6df" stroke="#8ec63f"/>
+    <rect x="24" y="26" width="120" height="9" rx="3" fill="#7aa83a"/>
+    <text x="278" y="32" text-anchor="end" font-size="8.5" fill="#6a8a4a">own block</text>
+
+    <!-- paragraph block with line breaks -->
+    <rect x="14" y="52" width="272" height="92" rx="6" fill="#f4f7fb" stroke="#cdd9e6"/>
+    <g fill="#cfd2cc">
+      <rect x="24" y="66" width="240" height="9" rx="3"/>
+      <rect x="24" y="88" width="252" height="9" rx="3"/>
+      <rect x="24" y="110" width="180" height="9" rx="3"/>
+    </g>
+    <!-- break tokens -->
+    <g font-family="DejaVu Sans Mono" font-size="9" fill="#3b5b7a">
+      <text x="270" y="83">&#8617;</text><text x="270" y="105">&#8617;</text>
+    </g>
+    <text x="20" y="135" font-size="8.5" fill="#7e93a8">OCDParagraph · &#8617; = OCDBreak</text>
+
+    <!-- another paragraph -->
+    <rect x="14" y="152" width="272" height="34" rx="6" fill="#f4f7fb" stroke="#cdd9e6"/>
+    <rect x="24" y="166" width="200" height="9" rx="3" fill="#cfd2cc"/>
+  </g>
+
+  <text x="40" y="266" font-size="10.5" fill="#6a6f69">The segmenter deliberately over-segments: a heading or marker line always opens its own block, so it is never glued to its body.</text>
+</svg>

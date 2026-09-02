@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 28 780 540" font-family="Poppins, DejaVu Sans, sans-serif">
+  <!-- spine -->
+  <line x1="60" y1="58" x2="60" y2="492" stroke="#cdd3c8" stroke-width="2.5"/>
+
+  <!-- ===== stage chips ===== -->
+  <!-- helper layout: dot at x60; chip x 86..420 (w 334, h 46); step 58 -->
+  <!-- 1 clean -->
+  <circle cx="60" cy="69" r="6" fill="#4e8f1f"/>
+  <g transform="translate(86,46)"><rect width="334" height="46" rx="10" fill="#ffffff" stroke="#dfe1db" stroke-width="1.4"/>
+    <text x="14" y="20" font-size="12.5" font-weight="600" fill="#1c1e1b">Clean to the ink base</text>
+    <text x="14" y="37" font-size="10.3" fill="#6a6f69">dissolve paragraphs, drop blanks &amp; hidden ink</text>
+    <text x="322" y="16" text-anchor="end" font-size="8" font-family="DejaVu Sans Mono" fill="#bcc1b7">Cleaner</text></g>
+  <!-- 2 lines & spaces -->
+  <circle cx="60" cy="127" r="6" fill="#3b5b7a"/>
+  <g transform="translate(86,104)"><rect width="334" height="46" rx="10" fill="#e7edf4" stroke="#cdd9e6" stroke-width="1.4"/>
+    <text x="14" y="20" font-size="12.5" font-weight="600" fill="#27425c">Reconstruct &amp; freeze the lines</text>
+    <text x="14" y="37" font-size="10.3" fill="#4a627d">band runs by overlap · freeze word-spaces once</text>
+    <text x="322" y="16" text-anchor="end" font-size="8" font-family="DejaVu Sans Mono" fill="#9fb2c5">Liner · Spacer</text></g>
+  <!-- 3 segment paragraphs -->
+  <circle cx="60" cy="185" r="6" fill="#3b5b7a"/>
+  <g transform="translate(86,162)"><rect width="334" height="46" rx="10" fill="#e7edf4" stroke="#cdd9e6" stroke-width="1.4"/>
+    <text x="14" y="20" font-size="12.5" font-weight="600" fill="#27425c">Segment the paragraphs</text>
+    <text x="14" y="37" font-size="10.3" fill="#4a627d">frozen lines &#8594; blocks by size, weight, leading</text>
+    <text x="322" y="16" text-anchor="end" font-size="8" font-family="DejaVu Sans Mono" fill="#9fb2c5">Segmenter · Paragrapher</text></g>
+  <!-- 4 heads/feet -->
+  <circle cx="60" cy="243" r="6" fill="#3b5b7a"/>
+  <g transform="translate(86,220)"><rect width="334" height="46" rx="10" fill="#e7edf4" stroke="#cdd9e6" stroke-width="1.4"/>
+    <text x="14" y="20" font-size="12.5" font-weight="600" fill="#27425c">Find running heads &amp; feet</text>
+    <text x="14" y="37" font-size="10.3" fill="#4a627d">by recto/verso stack stability at the page edge</text>
+    <text x="322" y="16" text-anchor="end" font-size="8" font-family="DejaVu Sans Mono" fill="#9fb2c5">Furniture</text></g>
+  <!-- 5 cluster drawings -->
+  <circle cx="60" cy="301" r="6" fill="#4e8f1f"/>
+  <g transform="translate(86,278)"><rect width="334" height="46" rx="10" fill="#ffffff" stroke="#dfe1db" stroke-width="1.4"/>
+    <text x="14" y="20" font-size="12.5" font-weight="600" fill="#1c1e1b">Cluster the drawings</text>
+    <text x="14" y="37" font-size="10.3" fill="#6a6f69">group vector paths into one graphic</text>
+    <text x="322" y="16" text-anchor="end" font-size="8" font-family="DejaVu Sans Mono" fill="#bcc1b7">GraphicClusterer</text></g>
+  <!-- 6 ids (plumbing) -->
+  <circle cx="60" cy="359" r="6" fill="#b7bcb6"/>
+  <g transform="translate(86,336)"><rect width="334" height="46" rx="10" fill="#f6f7f4" stroke="#e6e7e2" stroke-width="1.4"/>
+    <text x="14" y="20" font-size="12.5" font-weight="600" fill="#7c817a">Stamp identities</text>
+    <text x="14" y="37" font-size="10.3" fill="#9aa09a">deterministic ids — the single authority for refs</text>
+    <text x="322" y="16" text-anchor="end" font-size="8" font-family="DejaVu Sans Mono" fill="#cdd1c8">IdStamper</text></g>
+  <!-- 7 headings & structure -->
+  <circle cx="60" cy="417" r="6" fill="#3b5b7a"/>
+  <g transform="translate(86,394)"><rect width="334" height="46" rx="10" fill="#e7edf4" stroke="#cdd9e6" stroke-width="1.4"/>
+    <text x="14" y="20" font-size="12.5" font-weight="600" fill="#27425c">Build headings &amp; structure</text>
+    <text x="14" y="37" font-size="10.3" fill="#4a627d">by document-wide typographic recurrence</text>
+    <text x="322" y="16" text-anchor="end" font-size="8" font-family="DejaVu Sans Mono" fill="#9fb2c5">StructureBuilder</text></g>
+  <!-- 8 LLM optional -->
+  <circle cx="60" cy="481" r="6" fill="#ffffff" stroke="#b8801f" stroke-width="2"/>
+  <g transform="translate(86,462)"><rect width="334" height="38" rx="10" fill="#f6ecd7" stroke="#e6d3a8" stroke-width="1.4" stroke-dasharray="4 3"/>
+    <text x="14" y="17" font-size="12" font-weight="600" fill="#8a5e12">Refine with an LLM</text>
+    <text x="14" y="31" font-size="10" fill="#9a7321">figures · tables · captions · lists — off by default</text>
+    <text x="322" y="15" text-anchor="end" font-size="8" font-family="DejaVu Sans Mono" fill="#d8c594">Refiner</text></g>
+
+  <!-- ===== right rail ===== -->
+  <g transform="translate(452,46)">
+    <rect width="296" height="512" rx="14" fill="#fbfcf8" stroke="#e6e7e2" stroke-width="1.5"/>
+    <text x="20" y="34" font-size="14" font-weight="600" fill="#2f5e12">Nothing here moves a pixel</text>
+    <text x="20" y="62" font-size="11.5" fill="#52564f">Each step only sets roles, a reading-</text>
+    <text x="20" y="80" font-size="11.5" fill="#52564f">order index, and a structure tree</text>
+    <text x="20" y="98" font-size="11.5" fill="#52564f"><tspan font-weight="600" fill="#1c1e1b">by reference</tspan> — never geometry, colour,</text>
+    <text x="20" y="116" font-size="11.5" fill="#52564f">glyphs or paint order.</text>
+
+    <line x1="20" y1="138" x2="276" y2="138" stroke="#e6e7e2"/>
+    <text x="20" y="166" font-size="13" font-weight="600" fill="#27425c">Reading the colours</text>
+    <circle cx="30" cy="190" r="6" fill="#4e8f1f"/><text x="46" y="194" font-size="11.5" fill="#52564f">cleans / enriches the content</text>
+    <circle cx="30" cy="216" r="6" fill="#3b5b7a"/><text x="46" y="220" font-size="11.5" fill="#52564f">builds the physical &amp; logical layer</text>
+    <circle cx="30" cy="242" r="6" fill="#b7bcb6"/><text x="46" y="246" font-size="11.5" fill="#52564f">internal bookkeeping</text>
+    <circle cx="30" cy="268" r="6" fill="#ffffff" stroke="#b8801f" stroke-width="2"/><text x="46" y="272" font-size="11.5" fill="#52564f">optional, off by default</text>
+
+    <line x1="20" y1="292" x2="276" y2="292" stroke="#e6e7e2"/>
+    <text x="20" y="320" font-size="13" font-weight="600" fill="#1c1e1b">One ordering engine</text>
+    <text x="20" y="346" font-size="11.5" fill="#52564f">The same XY-Cut++ engine both</text>
+    <text x="20" y="364" font-size="11.5" fill="#52564f">segments the blocks and orders the</text>
+    <text x="20" y="382" font-size="11.5" fill="#52564f">reading sequence — tuned in one place.</text>
+
+    <line x1="20" y1="404" x2="276" y2="404" stroke="#e6e7e2"/>
+    <text x="20" y="432" font-size="13" font-weight="600" fill="#1c1e1b">When the PDF is tagged</text>
+    <text x="20" y="458" font-size="11.5" fill="#52564f">A tagged (PDF/UA) document brings</text>
+    <text x="20" y="476" font-size="11.5" fill="#52564f">its own structure — it rides alongside</text>
+    <text x="20" y="494" font-size="11.5" fill="#52564f">the heuristic tree, and a consumer picks.</text>
+  </g>
+</svg>

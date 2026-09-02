@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 310" font-family="Poppins, DejaVu Sans, sans-serif">
+  <defs>
+    <marker id="ll" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto"><path d="M0,0 L6.5,3 L0,6 Z" fill="#b8801f"/></marker>
+  </defs>
+  <text x="28" y="22" font-size="13.5" font-weight="600" fill="#1c1e1b">Optional <tspan fill="#8a5e12">LLM refinement</tspan> — windowed, grounded, off by default</text>
+
+  <!-- page strip with sliding window -->
+  <g transform="translate(40,44)">
+    <text x="0" y="-2" font-size="10.5" fill="#6a6f69">pages, processed in a sliding window</text>
+    <g>
+      <rect x="0"   y="6" width="34" height="46" rx="4" fill="#f6f7f4" stroke="#e6e7e2"/>
+      <rect x="44"  y="6" width="34" height="46" rx="4" fill="#f1ede2" stroke="#e6d3a8"/>
+      <rect x="88"  y="6" width="34" height="46" rx="4" fill="#f6ecd7" stroke="#b8801f" stroke-width="2"/>
+      <rect x="132" y="6" width="34" height="46" rx="4" fill="#f1ede2" stroke="#e6d3a8"/>
+      <rect x="176" y="6" width="34" height="46" rx="4" fill="#f6f7f4" stroke="#e6e7e2"/>
+      <rect x="220" y="6" width="34" height="46" rx="4" fill="#f6f7f4" stroke="#e6e7e2"/>
+    </g>
+    <g font-size="9" fill="#9aa09a" text-anchor="middle">
+      <text x="17" y="64">p3</text><text x="61" y="64">p4</text><text x="105" y="64">p5</text><text x="149" y="64">p6</text><text x="193" y="64">p7</text><text x="237" y="64">p8</text>
+    </g>
+  </g>
+
+  <!-- prompt assembly -->
+  <g transform="translate(320,44)">
+    <text x="0" y="-2" font-size="10.5" fill="#6a6f69">what the model is shown, in order</text>
+    <g transform="translate(0,8)">
+      <rect width="436" height="26" rx="6" fill="#e7edf4" stroke="#cdd9e6"/>
+      <text x="12" y="17" font-size="10.5" font-weight="600" fill="#27425c">documentProfile</text>
+      <text x="426" y="17" text-anchor="end" font-size="9" fill="#4a627d">static · whole-doc summary</text>
+    </g>
+    <g transform="translate(0,40)">
+      <rect width="436" height="22" rx="6" fill="#f6f7f4" stroke="#e6e7e2"/>
+      <text x="12" y="15" font-size="10" fill="#7c817a">previous page — condensed</text>
+    </g>
+    <g transform="translate(0,68)">
+      <rect width="436" height="34" rx="6" fill="#f6ecd7" stroke="#b8801f" stroke-width="1.6"/>
+      <text x="12" y="15" font-size="11" font-weight="600" fill="#8a5e12">CURRENT page — full detail</text>
+      <text x="12" y="29" font-size="9" fill="#9a7321">placed last, where attention is highest</text>
+    </g>
+    <g transform="translate(0,108)">
+      <rect width="436" height="22" rx="6" fill="#f6f7f4" stroke="#e6e7e2"/>
+      <text x="12" y="15" font-size="10" fill="#7c817a">next page — condensed</text>
+    </g>
+  </g>
+
+  <!-- precomputed signals note -->
+  <g transform="translate(40,150)">
+    <rect width="240" height="120" rx="10" fill="#fbfcf8" stroke="#e6e7e2" stroke-width="1.5"/>
+    <text x="16" y="26" font-size="11.5" font-weight="600" fill="#1c1e1b">No page images</text>
+    <text x="16" y="48" font-size="10" fill="#52564f">The model sees pre-computed</text>
+    <text x="16" y="63" font-size="10" fill="#52564f">perceptual signals, not pixels:</text>
+    <text x="16" y="84" font-size="10" fill="#3b5b7a">· spacing · indentation</text>
+    <text x="16" y="99" font-size="10" fill="#3b5b7a">· emphasis · colour · background</text>
+    <text x="16" y="114" font-size="9" font-style="italic" fill="#9aa09a">grounded in the Dolores taxonomy</text>
+  </g>
+
+  <!-- assembled prompt feeds the model (placed below the stack) -->
+  <line x1="432" y1="178" x2="432" y2="196" stroke="#b8801f" stroke-width="2" marker-end="url(#ll)"/>
+  <g transform="translate(372,200)">
+    <rect width="120" height="48" rx="10" fill="#1c1e1b"/>
+    <text x="60" y="22" text-anchor="middle" font-size="12" font-weight="600" fill="#e6c98a">LLM</text>
+    <text x="60" y="38" text-anchor="middle" font-size="8.5" fill="#a9a18a">any wired provider</text>
+  </g>
+  <g transform="translate(500,224)">
+    <line x1="0" y1="0" x2="40" y2="0" stroke="#b8801f" stroke-width="2" marker-end="url(#ll)"/>
+  </g>
+  <g transform="translate(548,200)">
+    <rect width="208" height="48" rx="10" fill="#eef6df" stroke="#8ec63f"/>
+    <text x="14" y="21" font-size="11" font-weight="600" fill="#2f5e12">refined structure</text>
+    <text x="14" y="38" font-size="9" fill="#6a8a4a">grounded — a failure is a no-op</text>
+  </g>
+
+  <text x="40" y="292" font-size="10.5" fill="#6a6f69">Windowing keeps each call short, so the current page never gets &#8220;lost in the middle&#8221; of a long context.</text>
+</svg>

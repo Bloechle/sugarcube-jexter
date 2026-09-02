@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 196" font-family="Poppins, DejaVu Sans, sans-serif">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto"><path d="M0,0 L6.5,3 L0,6 Z" fill="#9aa09a"/></marker>
+    <marker id="ag" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto"><path d="M0,0 L6.5,3 L0,6 Z" fill="#4e8f1f"/></marker>
+  </defs>
+  <text x="8" y="20" font-size="13" font-weight="600" fill="#1c1e1b">Convert over HTTP — <tspan fill="#2f5e12">one key, every target</tspan></text>
+
+  <!-- client -->
+  <g transform="translate(20,72)">
+    <rect width="150" height="54" rx="10" fill="#ffffff" stroke="#cfd2cc" stroke-width="1.4"/>
+    <text x="75" y="24" text-anchor="middle" font-size="11" font-weight="600" fill="#1c1e1b">Your service</text>
+    <text x="75" y="40" text-anchor="middle" font-size="8.5" fill="#6a6f69">server-to-server</text>
+  </g>
+
+  <!-- request -->
+  <g transform="translate(176,99)">
+    <rect x="2" y="-27" width="116" height="16" rx="8" fill="#eef6df" stroke="#8ec63f"/>
+    <text x="60" y="-15" text-anchor="middle" font-size="8" font-family="DejaVu Sans Mono" fill="#2f5e12">Bearer &lt;key&gt;</text>
+    <line x1="0" y1="0" x2="116" y2="0" stroke="#9aa09a" stroke-width="1.8" marker-end="url(#ar)"/>
+    <text x="60" y="18" text-anchor="middle" font-size="8" fill="#6a6f69">POST · PDF or .ocd.epub</text>
+  </g>
+
+  <!-- cloud / engine -->
+  <g transform="translate(300,72)">
+    <rect width="208" height="54" rx="10" fill="#eef6df" stroke="#4e8f1f" stroke-width="1.6"/>
+    <text x="104" y="23" text-anchor="middle" font-size="10" font-weight="600" font-family="DejaVu Sans Mono" fill="#1c1e1b">sugarcloud.ch/api/convert</text>
+    <text x="104" y="40" text-anchor="middle" font-size="8.5" fill="#3c6f1a">jexter engine — same as desktop</text>
+  </g>
+
+  <!-- response -->
+  <g transform="translate(514,99)">
+    <text x="48" y="-9" text-anchor="middle" font-size="8" fill="#6a6f69">media type + filename</text>
+    <line x1="0" y1="0" x2="92" y2="0" stroke="#9aa09a" stroke-width="1.8" marker-end="url(#ar)"/>
+  </g>
+
+  <!-- artifact -->
+  <g transform="translate(616,74)">
+    <rect width="52" height="50" rx="4" fill="#ffffff" stroke="#8ec63f" stroke-width="1.3"/>
+    <rect x="8" y="9" width="36" height="11" rx="2" fill="#e3e5e1"/>
+    <rect x="8" y="25" width="36" height="5" rx="2" fill="#d7dad4"/>
+    <rect x="8" y="34" width="28" height="5" rx="2" fill="#d7dad4"/>
+    <text x="26" y="62" text-anchor="middle" font-size="8.5" font-family="DejaVu Sans Mono" fill="#6a6f69">page-0.svg</text>
+  </g>
+
+  <!-- bottom strips -->
+  <text x="390" y="166" text-anchor="middle" font-size="9.5" fill="#6a6f69"><tspan font-weight="600" fill="#2f5e12">to = </tspan><tspan font-family="DejaVu Sans Mono" fill="#34403a">ocd · svg · pdf · epub · epub-reflow · html · md · doctags</tspan></text>
+  <text x="390" y="184" text-anchor="middle" font-size="8.5" fill="#9aa09a"><tspan font-family="DejaVu Sans Mono">GET /api/health</tspan> → ok · public, no key</text>
+</svg>

@@ -1,0 +1,68 @@
+# The delivery gate, on every push: the tree must compile at 0 errors and
+# 0 warnings, and nothing may reference a file that is not there.
+# No Maven, no network — the two dependencies are vendored in lib/, which is
+# exactly why they are kept there.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21 — the floor: what compiles and doclints here runs on 21 and every JDK after
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # -Werror encodes the project rule: a warning is a defect, not a note.
+      - name: javac — 0 errors, 0 warnings
+        run: |
+          find src -name '*.java' > sources.txt
+          javac --release 21 -Xlint:all -Werror -cp "lib/*" -d target/ci-classes @sources.txt
+          echo "compiled $(wc -l < sources.txt) files"
+
+      # javac sees a DANGLING doc comment; it cannot see a MISATTACHED one. A comment whose
+      # declaration was removed silently re-attaches to whatever follows and then lies —
+      # a rect→box helper's doc ended up on a percentage formatter, green on every gate.
+      # doclint also resolves every {@link}/{@value}, so a renamed method breaks the build
+      # instead of rotting. -missing only: undocumented members are a choice, not a defect.
+      - name: javadoc — every reference resolves
+        run: javadoc -quiet -Xdoclint:all,-missing -d target/ci-doc -cp "lib/*" @sources.txt
+
+      # The client is half the product: ocd.js is the grammar authority and book.js the document
+      # authority, yet only the build orchestrator was syntax-checked. A parse error in any of
+      # them ships silently — the browser just stops.
+      - name: Build orchestrator and client scripts parse
+        run: |
+          node --check nimbus.cjs
+          find src -name '*.js' -print -exec node --check {} \;
+
+      # A renamed asset or a moved document is invisible until a user hits a 404.
+      - name: Links resolve
+        run: |
+          python3 - <<'PY'
+          import re, os, sys
+          bad = []
+          for root, _, files in os.walk('src'):
+              for n in files:
+                  if not n.endswith('.html'): continue
+                  p = os.path.join(root, n)
+                  html = open(p, encoding='utf-8', errors='replace').read()
+                  for ref in re.findall(r'(?:src|href)="([^"]+)"', html):
+                      if ref.startswith(('http', '//', 'data:', '#', 'mailto:', '/')): continue
+                      if not os.path.exists(os.path.normpath(os.path.join(root, ref))):
+                          bad.append(f"{p} -> {ref}")
+          readme = open('README.md', encoding='utf-8').read()
+          for ref in sorted(set(re.findall(r'\]\((?!http|mailto)([^)#]+)\)', readme))):
+              if not os.path.exists(ref.rstrip('/')):
+                  bad.append(f"README.md -> {ref}")
+          for b in bad: print("broken:", b)
+          sys.exit(1 if bad else 0)
+          PY

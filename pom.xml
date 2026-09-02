@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- ===================================================================
+         Sugarcube jexter — PDFBox 3.0.7 + jbig2-imageio are consumed as JARs
+         vendored from lib/ (system scope: they live in the repo, not in a Maven
+         repository). pdfbox-app is a shaded build (PDFBox + FontBox +
+         commons-logging); jbig2-imageio decodes JBIG2 images (scanned PDFs).
+         The project is 100% JavaFX-FREE — the UIs are web apps on the JDK's own
+         com.sun.net.httpserver.
+
+         This pom compiles the tree and produces the "classes only" jar
+         (target/classes + target/*.jar) for the IDE and the apps:
+           java -cp "lib/*:target/classes" sugarcube.jexter.ui.prism.Prism
+           java -cp "lib/*:target/classes" sugarcube.jexter.ui.jexter.Jexter
+           java -cp "lib/*:target/classes" sugarcube.jexter.ui.pdf.PDFInspector
+
+         The SELF-CONTAINED EXECUTABLE JAR (fat jar) is NOT built by Maven:
+         maven-shade/-assembly do not embed system-scoped dependencies. It is
+         produced offline, straight from lib/, by the Node build orchestrator:
+           node nimbus.cjs    →   _prod/sugarcube-jexter.jar (+ jpackage image)
+
+         Maven Central alternative (should lib/ ever be dropped):
+         org.apache.pdfbox:pdfbox:3.0.7 + :jbig2-imageio:3.0.5, compile scope,
+         then maven-shade-plugin for the fat jar.
+         =================================================================== -->
+
+    <groupId>sugarcube</groupId>
+    <artifactId>sugarcube-jexter</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <!-- PDFBox standalone (shaded: PDFBox + FontBox + commons-logging) -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox-app</artifactId>
+            <version>3.0.7</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/pdfbox-app-3.0.7.jar</systemPath>
+        </dependency>
+
+        <!-- JBIG2 : plugin ImageIO chargé en SPI par PDFBox pour les images JBIG2 -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>jbig2-imageio</artifactId>
+            <version>3.0.5</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/jbig2-imageio-3.0.5.jar</systemPath>
+        </dependency>
+
+        <!-- BouncyCastle : requis seulement à l'exécution pour ouvrir des PDF
+             chiffrés (pas une dépendance de compilation). À décommenter si tu
+             traites des PDF protégés — et déposer les jars dans lib/ pour que
+             _$build-jar.cjs les embarque :
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>1.78.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/bcprov-jdk18on-1.78.1.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk18on</artifactId>
+            <version>1.78.1</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/bcpkix-jdk18on-1.78.1.jar</systemPath>
+        </dependency>
+        -->
+    </dependencies>
+
+    <build>
+        <!-- Sources live directly under src/ (not src/main/java) -->
+        <sourceDirectory>src</sourceDirectory>
+
+        <!-- The UI web assets (ui/prism/web, ui/jexter/web, ui/pdf/web,
+             ui/shared/web) sit next to the .java under src/ and must land on the
+             classpath. Everything else that lives under src/ must not: the same
+             skip list as nimbus.cjs RESOURCE_SKIP_EXT (.java, .zip, .md). -->
+        <resources>
+            <resource>
+                <directory>src</directory>
+                <excludes>
+                    <exclude>**/*.java</exclude>
+                    <exclude>**/*.zip</exclude>
+                    <exclude>**/*.md</exclude>
+                </excludes>
+            </resource>
+        </resources>
+
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.14.0</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>
