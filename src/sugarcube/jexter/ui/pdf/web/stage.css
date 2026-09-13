@@ -1,0 +1,39 @@
+/* stage.css — PDF Inspector render stage (page raster + zoom). Loaded only inside the iframe.
+   Ported from the old in-page #stage rules; theme tokens come from qry-ui.css (data-theme on <html>). */
+html, body { height: 100%; margin: 0; }
+body { background: var(--qry-bg, #18181b); color: var(--qry-text, #e4e4e7);
+       font: 14px/1.5 system-ui, -apple-system, sans-serif; overflow: hidden; }
+
+.stage { height: 100%; overflow: auto; position: relative; display: grid; place-items: center;
+         padding: 1rem; box-sizing: border-box; }
+.canvas { transform-origin: center center; position: relative; }
+.canvas img, .canvas .vec { display: block; width: 100%; height: 100%; background: #fff;
+    box-shadow: 0 6px 30px -10px rgba(0, 0, 0, .5), 0 0 0 1px var(--qry-glass-border, rgba(255, 255, 255, .08)); }
+.canvas img { max-width: none; }
+.canvas img:not([src]) { display: none; }
+.canvas img.is-loading { filter: blur(6px); image-rendering: auto; }
+.canvas .vec:empty { display: none; }
+.canvas .vec svg { display: block; width: 100%; height: 100%; }
+
+/* Compare overlay — the OCD raster laid over the PDFBox base. z-index stays auto and opacity is 1 in
+   diff mode, so #page-b's mix-blend-mode:difference blends against the base (no isolating context). */
+.cmp { position: absolute; inset: 0; display: none; }
+.canvas.compare .cmp { display: block; }
+.cmp img { display: block; width: 100%; height: 100%; box-shadow: none; }
+.cmp.diff img { mix-blend-mode: difference; }
+.canvas.compare.diff, .cmp.diff { background: #000; }
+
+/* renderPageSVG emits the page layers with inline fills (paths, text, images render correctly), but
+   draws link/field annotations as bare <rect> with NO fill — which the SVG default would paint solid
+   black over the page. They are an inspector overlay, not page content, so hide them for a faithful
+   render. (Jexter Lab instead tints them faintly via its own stage.css.) */
+.vec svg .layer-annots { display: none; }
+.vec svg .sel-box { fill: none; }
+
+.stage-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: .6rem; color: var(--qry-text-muted, #a1a1aa); pointer-events: none; }
+.stage:not(.empty) .stage-empty { display: none; }
+
+.stage::-webkit-scrollbar { width: 10px; height: 10px; }
+.stage::-webkit-scrollbar-thumb { background: var(--qry-glass-border, rgba(255, 255, 255, .14)); border-radius: 6px; }
+.stage::-webkit-scrollbar-thumb:hover { background: var(--qry-text-muted, rgba(255, 255, 255, .28)); }

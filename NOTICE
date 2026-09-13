@@ -1,0 +1,37 @@
+Sugarcube jexter
+Copyright (C) 2026 Sugarcube Information Technology Sàrl
+
+This product is licensed under the GNU Affero General Public License v3.0
+(see the LICENSE file), with a commercial license available on request.
+
+It bundles and depends on the following third-party software:
+
+- Apache PDFBox — Copyright The Apache Software Foundation.
+  Licensed under the Apache License, Version 2.0.
+- Apache FontBox (part of the Apache PDFBox project).
+  Licensed under the Apache License, Version 2.0.
+- Apache PDFBox JBIG2 ImageIO plugin (jbig2-imageio).
+  Licensed under the Apache License, Version 2.0.
+- Bouncy Castle (optional, runtime — for encrypted PDFs).
+  Licensed under the Bouncy Castle license (MIT-style).
+- JJ2000 — the JPEG 2000 codec vendored as source under src/jj2000/.
+  Copyright (c) 1999/2000 JJ2000 Partners: Raphaël Grosbois and Diego Santa Cruz
+  (Swiss Federal Institute of Technology — EPFL); Joël Askelöf (Ericsson Radio
+  Systems AB); Bertrand Berthelot, David Bouchard, Félix Henry, Gérard Mozelle
+  and Patrice Onno (Canon Research Centre France S.A.), developed in the course
+  of the JPEG 2000 standard (ISO/IEC 15444). See LICENSE-JJ2000 for the full
+  text. Two obligations travel with it, under EITHER of this project's licenses:
+  the notice must be reproduced in every copy and derivative work, and the grant
+  covers products conforming to the JPEG 2000 standard. Only the decoder side is
+  vendored — the encoder, the writers and the file-format writer are not part of
+  this tree; the entropy decoder carries one fix taken from the
+  jai-imageio-jpeg2000 fork (sign-bit overflow of the bit-plane mask at bp >= 30).
+
+The Apache License 2.0 and the original NOTICE files of the above components are
+retained inside the corresponding jars under lib/ and must be preserved on
+redistribution; the JJ2000 license sits at the repository root as LICENSE-JJ2000
+and applies to src/jj2000/ whichever license this project is taken under. A copy of the Apache License 2.0 is available at
+https://www.apache.org/licenses/LICENSE-2.0
+
+The web front-end loads the qry stack, Shoelace, and Lucide from their CDNs;
+these are not redistributed as part of this repository.

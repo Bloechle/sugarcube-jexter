@@ -1,0 +1,145 @@
+# The delivery gate, on every push: the tree must compile at 0 errors and
+# 0 warnings, and nothing may reference a file that is not there.
+# No Maven, no network — the two dependencies are vendored in lib/, which is
+# exactly why they are kept there.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21 — the floor: what compiles and doclints here runs on 21 and every JDK after
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # -Werror encodes the project rule: a warning is a defect, not a note.
+      - name: javac — 0 errors, 0 warnings
+        run: |
+          find src -name '*.java' > sources.txt
+          javac --release 21 -Xlint:all -Werror -cp "lib/*" -d target/ci-classes @sources.txt
+          echo "compiled $(wc -l < sources.txt) files"
+
+      # javac sees a DANGLING doc comment; it cannot see a MISATTACHED one. A comment whose
+      # declaration was removed silently re-attaches to whatever follows and then lies —
+      # a rect→box helper's doc ended up on a percentage formatter, green on every gate.
+      # doclint also resolves every {@link}/{@value}, so a renamed method breaks the build
+      # instead of rotting. -missing only: undocumented members are a choice, not a defect.
+      # src/jj2000 is VENDORED upstream code (the JJ2000 JPEG 2000 codec). It compiles at the same
+      # 0/0 as everything else — its classes carry one @SuppressWarnings saying what they are — but
+      # its javadoc is from 2001: <tt> tags HTML5 dropped, @see references to packages that were
+      # renamed before it was vendored. Doclint exists to keep OUR references from rotting, and
+      # rewriting an upstream codec's comments to satisfy it would be maintaining a fork of its
+      # prose. -sourcepath keeps every jj2000 type resolvable from the files that ARE linted.
+      - name: javadoc — every reference resolves
+        run: |
+          grep -v '^src/jj2000/' sources.txt > ours.txt
+          javadoc -quiet -Xdoclint:all,-missing -d target/ci-doc -cp "lib/*" -sourcepath src @ours.txt
+
+      # The client is half the product: ocd.js is the grammar authority and book.js the document
+      # authority, yet only the build orchestrator was syntax-checked. A parse error in any of
+      # them ships silently — the browser just stops.
+      # The client files are ES MODULES — the browser loads them with <script type="module">.
+      # `node --check foo.js` parses as a CommonJS SCRIPT, and the two do not have the same rules:
+      # a duplicate top-level `const` is a SyntaxError in a module and passes as a script. That exact
+      # miss shipped an engine-seam module the browser refused to load, so the whole tool seam went dark
+      # while CI stayed green. Check them as what they are.
+      - name: Build orchestrator and client scripts parse
+        run: |
+          node --check nimbus-jexter.cjs
+          fail=0
+          for f in $(find src -name '*.js'); do
+            cp "$f" /tmp/check.mjs
+            node --check /tmp/check.mjs || { echo "::error file=$f::module parse failed"; fail=1; }
+          done
+          exit $fail
+
+      # A module parses fine and still dies on load: `Cannot access 'x' before initialization`. That is a
+      # TEMPORAL DEAD ZONE — a top-level call reaching a const declared further down — and no parser sees
+      # it. It cost a dark tool seam on 2026-09-05, twice in one day.
+      - name: Client modules have no temporal dead zone
+        run: |
+          python3 - <<'PY'
+          import re, glob, sys
+          bad = []
+          for f in glob.glob('src/**/*.js', recursive=True):
+              src = open(f, encoding='utf-8').read().split('\n')
+              depth, decls, calls, bodies = 0, {}, [], {}
+              cur, start = None, 0
+              for i, line in enumerate(src, 1):
+                  code = line.split('//')[0]
+                  if depth == 0:
+                      m = re.match(r'(?:const|let) ([A-Za-z_$][\w$]*)\s*=', code)
+                      if m: decls[m.group(1)] = i
+                      c = re.match(r'([A-Za-z_$][\w$]*)\(', code.strip())
+                      if c and c.group(1) not in ('if','for','while','switch','return','function','catch'):
+                          calls.append((c.group(1), i))
+                      fn = re.match(r'(?:async )?function ([A-Za-z_$][\w$]*)', code)
+                      if fn: cur, start = fn.group(1), i
+                  depth += code.count('{') - code.count('}')
+                  if cur and depth == 0 and i > start:
+                      bodies[cur] = "\n".join(src[start-1:i]); cur = None
+              for name, at in calls:
+                  body = bodies.get(name)
+                  if not body: continue
+                  for d, dline in decls.items():
+                      if dline > at and re.search(r'\b' + re.escape(d) + r'\b', body):
+                          bad.append(f"{f}: {name}() at line {at} reads '{d}' declared at line {dline}")
+          for b in bad: print("::error::" + b)
+          sys.exit(1 if bad else 0)
+          PY
+
+      # Every data-* that names an element must find it. Ids are referenced DYNAMICALLY here — the rail
+      # does $('#' + btn.attr('data-tab')) — so a grep for '#tab-toc' finds nothing and an "orphan id"
+      # cleanup deletes a live target. That shipped on 2026-09-05: three ids removed, three panels dead.
+      - name: Every data-tab / data-panel resolves
+        run: |
+          python3 - <<'PY'
+          # Two conventions are in use and both are legitimate: Prism names its panel with an
+          # id, PDFInspector pairs a button and a <section> that carry the SAME data-tab. A tab
+          # resolves if EITHER matches; what this gate catches is a tab pointing at nothing.
+          import re, glob, sys
+          bad = []
+          for f in glob.glob('src/**/*.html', recursive=True):
+              html = open(f, encoding='utf-8').read()
+              ids = set(re.findall(r'\bid="([^"]+)"', html))
+              for attr in ('data-tab', 'data-panel'):
+                  values = re.findall(attr + r'="([^"]+)"', html)
+                  for t in set(values):
+                      if t in ids: continue
+                      if values.count(t) > 1: continue        # button + panel, paired by the attribute
+                      bad.append(f"{f}: {attr}=\"{t}\" resolves to nothing")
+          for b in bad: print("::error::" + b)
+          sys.exit(1 if bad else 0)
+          PY
+
+      # A renamed asset or a moved document is invisible until a user hits a 404.
+      - name: Links resolve
+        run: |
+          python3 - <<'PY'
+          import re, os, sys
+          bad = []
+          for root, _, files in os.walk('src'):
+              for n in files:
+                  if not n.endswith('.html'): continue
+                  p = os.path.join(root, n)
+                  html = open(p, encoding='utf-8', errors='replace').read()
+                  for ref in re.findall(r'(?:src|href)="([^"]+)"', html):
+                      if ref.startswith(('http', '//', 'data:', '#', 'mailto:', '/')): continue
+                      if not os.path.exists(os.path.normpath(os.path.join(root, ref))):
+                          bad.append(f"{p} -> {ref}")
+          readme = open('README.md', encoding='utf-8').read()
+          for ref in sorted(set(re.findall(r'\]\((?!http|mailto)([^)#]+)\)', readme))):
+              if not os.path.exists(ref.rstrip('/')):
+                  bad.append(f"README.md -> {ref}")
+          for b in bad: print("broken:", b)
+          sys.exit(1 if bad else 0)
+          PY

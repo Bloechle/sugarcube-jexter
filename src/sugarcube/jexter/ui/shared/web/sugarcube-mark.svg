@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Sugarcube">
+  <title>Sugarcube</title>
+  <!-- THE Sugarcube mark, one asset for every surface (Prism, Inspector, Jexter).
+       The isometric cube of the nimbus decks, same geometry and same three blues,
+       so the build tool and the apps carry one identity. No authoring metadata.
+
+       Drawn EDGE TO EDGE inside the viewBox: the mark is placed on a disc by the
+       surfaces that want one (.px-about-disc, .px-empty-mark), so a keyline here
+       would fight that container and shrink the cube at 16px. The dark outline is
+       part of the mark — it is what keeps the three faces readable once the whole
+       thing is 16 pixels wide and the blues collapse into one another. -->
+  <path d="M50 8 L88 28 L50 48 L12 28 Z" fill="#BFD9F2"/>
+  <path d="M12 28 L50 48 L50 92 L12 72 Z" fill="#5E9BD6"/>
+  <path d="M88 28 L50 48 L50 92 L88 72 Z" fill="#33699F"/>
+  <path d="M50 8 L88 28 L50 48 L12 28 Z M12 28 L50 48 L50 92 L12 72 Z M88 28 L50 48 L50 92 L88 72 Z"
+        fill="none" stroke="#0F1318" stroke-width="3" stroke-linejoin="round"/>
+</svg>

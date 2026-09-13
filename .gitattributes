@@ -1,0 +1,15 @@
+# The repository stores LF; the working copy keeps the platform's own endings.
+* text=auto
+
+# ── Explicit binaries (never diffed, never normalized) ───────────────────────
+*.jar    binary
+*.zip    binary
+*.pdf    binary
+*.png    binary
+*.ttf    binary
+*.otf    binary
+*.epub   binary
+
+# ── GitHub linguist: report the engine, not the assets ───────────────────────
+lib/**   linguist-vendored
+doc/**   linguist-documentation
