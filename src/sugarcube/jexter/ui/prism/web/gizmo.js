@@ -95,7 +95,7 @@ export function clampTo(box, f, min = 2) {
 export const normBox = (a, b) => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) });
 
 /** A pointer event in the coordinates of `el`'s own viewport. `ref` is the element whose CTM maps the
- *  screen — the page root, or a carrier group on a page written before the rotation moved to data-rot. */
+ *  screen — the page root, or a carrier group on a page written before the rotation moved to data-rotate. */
 export function svgPointOf(svg, e, ref = svg) {
   const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
   return pt.matrixTransform(ref.getScreenCTM().inverse());

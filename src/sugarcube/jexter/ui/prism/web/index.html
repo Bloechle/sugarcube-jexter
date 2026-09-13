@@ -27,6 +27,7 @@
   <script type="module" src="./tts.js"></script>
   <script type="module" src="./editor.js"></script>
   <script type="module" src="./redact.js"></script>
+  <script type="module" src="./forms.js"></script>
   <script type="module" src="./pages.js"></script>
 </head>
 
@@ -119,6 +120,14 @@
 
     <aside id="edit-drawer" class="px-drawer">
       <div id="ed-info" class="search-info">Click content on a page to select it.</div>
+    </aside>
+
+    <aside id="forms-drawer" class="px-drawer">
+      <!-- Commands live in this tool's ribbon (forms.js). The drawer keeps what is READ: how much of
+           the form is filled, every field in document order, and what the selected one IS. -->
+      <div id="fm-info" class="search-info">Open a document first.</div>
+      <div id="fm-detail" class="search-info">Click a field to select it.</div>
+      <ul id="fm-list" class="nav-list"></ul>
     </aside>
 
     <aside id="pages-drawer" class="px-drawer">

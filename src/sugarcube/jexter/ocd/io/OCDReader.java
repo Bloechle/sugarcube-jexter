@@ -918,6 +918,12 @@ public final class OCDReader {
             for (Object op : arr(fe, "options")) ff.addOption(op.toString());
             if (has(fe, "value"))   ff.value(s(fe, "value"));
             if (has(fe, "default")) ff.defaultValue(s(fe, "default"));
+            ff.rotation(ii(fe, "rotate", 0)).align(ii(fe, "align", 0))
+              .fontSize(d(fe, "size", 0)).borderWidth(d(fe, "borderWidth", 1))
+              .maxLen(ii(fe, "maxlen", 0)).hidden(b(fe, "hidden"));
+            if (has(fe, "color"))  ff.textColor(argb(s(fe, "color"), null));
+            if (has(fe, "border")) ff.borderColor(argb(s(fe, "border"), null));
+            if (has(fe, "back"))   ff.backColor(argb(s(fe, "back"), null));
             page.addField(ff);
         }
     }

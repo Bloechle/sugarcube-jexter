@@ -629,19 +629,12 @@ body.tool-redact .px-stage { outline:2px solid rgba(229,72,77,.35); outline-offs
   cursor:pointer; }
 .px-tooltabs .px-tooltab svg { width:.85rem; height:.85rem; }
 
-/* Tabs still in development. Only rendered when dev mode is on (Ctrl/Cmd+Shift+D), and marked
-   when they are: an unfinished tab must never be mistaken for a shipped one, and dev mode must
-   never be something you leave on without noticing. */
-.px-tooltabs.px-dev { position:relative; }
-.px-tooltabs.px-dev::after { content:"DEV"; position:absolute; top:-.42rem; right:-.5rem;
-  font-size:.5rem; font-weight:800; letter-spacing:.06em; line-height:1;
-  padding:.12rem .26rem; border-radius:999px; pointer-events:none;
-  color:#b4690e; background:color-mix(in srgb, #f0a338 24%, transparent);
-  border:1px solid color-mix(in srgb, #b4690e 42%, transparent); }
-.px-tooltabs .px-tooltab.px-wip { opacity:.72; }
+/* Tabs still in development. Only rendered when dev mode is on (Ctrl/Cmd+Shift+D), and they mark
+   THEMSELVES — an amber name and a dot. The badge that used to hang off the corner of the bar said
+   the same thing a second time, in a place that belonged to no tab; the tabs say it where it is
+   true. If any name is amber, dev mode is on — and every amber tab is one flag away from shipping. */
 .px-tooltabs .px-tooltab.px-wip::before { content:""; width:.34rem; height:.34rem; border-radius:50%;
-  background:#f0a338; flex:none; margin-right:.05rem; }
-.px-tooltabs .px-tooltab.px-wip.active { opacity:1; }
+  background:currentColor; opacity:.85; flex:none; margin-right:.05rem; }
 .px-tooltabs .px-tooltab.active {
   background:var(--sl-color-neutral-0); color:var(--sl-color-primary-700);
   outline:1px solid color-mix(in srgb, var(--qry-blue) 30%, transparent); outline-offset:-1px;
@@ -953,3 +946,13 @@ body.tool-pages.tool-pages-page #pages-table { display:none; }
   border:1px solid var(--qry-glass-border); border-radius:4px;
 }
 .px-fields input:disabled { opacity:.45; }
+
+/* The amber of an unfinished tab, stated last so it wins over the `.active` colours above — an
+   unfinished tab stays unfinished-looking while it is the one you are on. */
+.px-tooltabs .px-tooltab.px-wip,
+.px-tooltabs .px-tooltab.px-wip.active,
+html:not([data-theme="dark"]) .px-tooltabs .px-tooltab.px-wip.active { color:#c07a12; }
+:root[data-theme="dark"] .px-tooltabs .px-tooltab.px-wip,
+:root[data-theme="dark"] .px-tooltabs .px-tooltab.px-wip.active { color:#e8b268; }
+.px-tooltabs .px-tooltab.px-wip:hover { color:#9c6210; }
+:root[data-theme="dark"] .px-tooltabs .px-tooltab.px-wip:hover { color:#f2c688; }

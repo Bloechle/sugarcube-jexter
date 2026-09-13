@@ -126,11 +126,30 @@ are native `<a>` in the pages (§B5).
     "annots": [ { "type": "highlight|note|redact|…", "rect": [x,y,w,h],
                   "color": "#rrggbb", "author": "…", "modified": "…",
                   "contents": "…", "quads": [ … ] } ],
-    "fields": [ { "name": "…", "type": "text|checkbox|…", "rect": [x,y,w,h],
-                  "value": "…", … } ] } } }
+    "fields": [ { "type": "text|checkbox|radio|choice|button|signature|other",
+                  "rect": [x,y,w,h], "name": "…", "value": "…", "default": "…",
+                  "on": "…", "options": [ … ],            // WHICH button; a choice's export values
+                  "readonly": true, "required": true, "multiline": true,
+                  "rotate": 90, "align": 0,               // /MK /R — the WIDGET's own turn; /Q quadding
+                  "size": 9, "color": "#000000ff",        // /DA — size 0 IS auto-size, a stated value
+                  "border": "#808080ff", "back": "#ffffffff",   // /MK /BC, /MK /BG
+                  "borderWidth": 1, "maxlen": 0, "hidden": true } ] } } }
 ```
 
-Only pages that carry any appear; the member is omitted entirely when none do.
+Only pages that carry any appear; the member is omitted entirely when none do. Every key but
+`type` and `rect` is written only when it departs from the default, so an ordinary field stays
+short and a document without fields carries no member at all.
+
+A field is **live data, never ink**: the source's appearance streams are not imported, and no
+surface bakes a field into the page. Which makes this member the ONLY home of the form, and the
+reason it states what a widget IS and not just what it says — `rotate` above all. A form laid out
+on a page turned 90° carries `/MK /R 90` on every widget, INDEPENDENTLY of the page's own
+rotation; a projection that drops it writes the values across the boxes instead of in them.
+
+The PDF projection states the form again from exactly these keys (`write.PdfForms`): one field
+per `name`, one widget per entry, `/DA` built from `size` and `color` against a `/DR` the writer
+owns, and an appearance generated for every widget — so a form that arrived without one (common:
+the producer left it to the reader) leaves fillable AND drawn.
 
 ## A6. Reading contract
 

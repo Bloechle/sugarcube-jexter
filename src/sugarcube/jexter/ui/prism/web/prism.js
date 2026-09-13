@@ -150,7 +150,7 @@ function registerTool(t) {
 
 function renderTabs() {
   const host = $.opt('.px-tooltabs'); if (!host) return;
-  host.cls((devMode() ? '+' : '-') + 'px-dev');
+  host.cls((devMode() ? '+' : '-') + 'px-dev');   // the bar states the mode; the amber tabs are what SHOWS it
   host.innerHTML = visibleTools().map(t =>
     `<button class="px-tooltab${t.id === tool ? ' active' : ''}${t.experimental ? ' px-wip' : ''}" data-tool="${t.id}"
              title="${esc(t.title || t.label)}${t.experimental ? ' — in development' : ''}"><i data-lucide="${t.icon}"></i><span>${esc(t.label)}</span></button>`).join('');
@@ -532,7 +532,7 @@ async function prefetch(urls) {
           if (vb.length === 4) { page.w = vb[2] || page.w; page.h = vb[3] || page.h; }
           page.w = +svg.getAttribute('width')  || page.w;
           page.h = +svg.getAttribute('height') || page.h;
-          const rot = ((+svg.getAttribute('data-rot') || 0) % 360 + 360) % 360;
+          const rot = ((+svg.getAttribute('data-rotate') || 0) % 360 + 360) % 360;
           if (rot && !svg.querySelector('[data-ocd="rot"]')) {          // not a self-rotating legacy page
             page.rot = rot;
             page.pw = page.w; page.ph = page.h;                          // the page's own size

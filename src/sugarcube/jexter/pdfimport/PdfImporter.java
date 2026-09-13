@@ -9,6 +9,7 @@ import org.apache.pdfbox.pdmodel.graphics.form.PDTransparencyGroup;
 import org.apache.pdfbox.pdmodel.graphics.state.PDGraphicsState;
 import org.apache.pdfbox.pdmodel.graphics.state.PDSoftMask;
 
+import sugarcube.jexter.core.JxColor;
 import sugarcube.jexter.core.JxLog;
 import sugarcube.jexter.core.JxNum;
 import sugarcube.jexter.core.JxProgress;
@@ -356,6 +357,12 @@ public final class PdfImporter extends PdfStreamEngine {
                             .readOnly(tf.isReadOnly()).required(tf.isRequired()).multiline(multiline);
                     if (opts != null) for (String o : opts) ff.addOption(o);
                     ff.onState(onState(w));      // WHICH button of the group this widget is
+                    look(w, ff);                 // what the WIDGET is: rotation, colours, border, flags
+                    if (tf instanceof org.apache.pdfbox.pdmodel.interactive.form.PDVariableText vt) {
+                        ff.align(vt.getQ());
+                        da(vt.getDefaultAppearance(), ff);
+                    }
+                    if (tf instanceof org.apache.pdfbox.pdmodel.interactive.form.PDTextField t2) ff.maxLen(t2.getMaxLen());
                     // A pushbutton has NO value — its label lives in the widget's /MK /CA caption, and
                     // without it the control renders as an empty chip. For a BUTTON that caption IS what
                     // the control displays, which is what value() means to a renderer.
@@ -367,6 +374,48 @@ public final class PdfImporter extends PdfStreamEngine {
             }
         } catch (Exception ignore) { /* form parsing best-effort */ }
     }
+
+    /** What the WIDGET is, as the source states it: its own rotation ({@code /MK /R} — a form on a turned
+     *  page carries it on every widget), its colours, its border width and its hidden flag. Best-effort:
+     *  a widget that states none of it keeps the model's defaults. */
+    private static void look(org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget w,
+                             sugarcube.jexter.ocd.model.OCDFormField ff) {
+        try {
+            ff.hidden(w.isHidden());
+            var bs = w.getBorderStyle();
+            if (bs != null) ff.borderWidth(bs.getWidth());
+            var mk = w.getAppearanceCharacteristics();
+            if (mk == null) return;
+            ff.rotation(mk.getRotation());
+            ff.borderColor(argbOf(mk.getBorderColour()));
+            ff.backColor(argbOf(mk.getBackground()));
+        } catch (Exception ignore) { /* widget look is best-effort */ }
+    }
+
+    /** A {@link org.apache.pdfbox.pdmodel.graphics.color.PDColor} as the model's argb; 0 when absent —
+     *  the model's word for NOT STATED. */
+    private static int argbOf(org.apache.pdfbox.pdmodel.graphics.color.PDColor c) {
+        if (c == null) return 0;
+        try { return JxColor.ofRgb(c.getColorSpace().toRGB(c.getComponents())).argb(); }
+        catch (Exception e) { return 0; }
+    }
+
+    /** {@code /DA} — {@code /Helv 9 Tf 0 g}. Only the SIZE and the COLOUR are model facts: the font
+     *  resource name belongs to the producer's {@code /DR}, and a writer states its own. */
+    private static void da(String da, sugarcube.jexter.ocd.model.OCDFormField ff) {
+        if (da == null || da.isEmpty()) return;
+        String[] t = da.trim().split("\\s+");
+        for (int i = 0; i < t.length; i++) {
+            switch (t[i]) {
+                case "Tf" -> { if (i >= 1) ff.fontSize(dbl(t[i - 1])); }
+                case "g"  -> { if (i >= 1) { int v = c255(dbl(t[i - 1])); ff.textColor(JxColor.rgb(v, v, v).argb()); } }
+                case "rg" -> { if (i >= 3) ff.textColor(JxColor.rgb(c255(dbl(t[i - 3])), c255(dbl(t[i - 2])), c255(dbl(t[i - 1]))).argb()); }
+                default   -> { }
+            }
+        }
+    }
+    private static double dbl(String v) { try { return Double.parseDouble(v); } catch (Exception e) { return 0; } }
+    private static int c255(double v)   { return (int) Math.round(Math.max(0, Math.min(1, v)) * 255); }
 
     /** A pushbutton's caption: {@code /MK /CA}, the only place its label exists. */
     private static String caption(org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget w) {

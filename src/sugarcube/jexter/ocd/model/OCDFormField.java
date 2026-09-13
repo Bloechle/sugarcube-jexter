@@ -29,6 +29,20 @@ public final class OCDFormField {
     private String  onState      = "";     // THIS widget's export name (/AP /N key other than Off)
     private boolean readOnly, required, multiline;
 
+    // ── what the WIDGET is. A field is live data, so nothing here is ink: these are the facts a renderer
+    // needs to draw the control and the PDF writer needs to state it back as a real AcroForm. A colour of
+    // 0 (fully transparent) means NOT STATED — the source said nothing and a writer must not invent one.
+    // The format states, it never infers.
+    private int     rotation;              // /MK /R — the widget's own quarter turn INSIDE its rect
+    private int     align;                 // /Q — 0 left, 1 centred, 2 right
+    private double  fontSize;              // /DA size, points; 0 = auto-size, exactly as PDF states it
+    private int     textColor;             // /DA colour, argb
+    private int     borderColor;           // /MK /BC, argb
+    private int     backColor;             // /MK /BG, argb
+    private double  borderWidth = 1;       // /BS /W, points — PDF's own default
+    private int     maxLen;                // /MaxLen; 0 = unbounded
+    private boolean hidden;                // /F bit 2 — a widget no surface may paint
+
     public OCDFormField() {}
     public OCDFormField(Field type) { this.type = type; }
 
@@ -67,6 +81,37 @@ public final class OCDFormField {
     public boolean      multiline()         { return multiline; }
     public OCDFormField multiline(boolean b){ this.multiline = b; return this; }
 
+    /** The widget's own rotation ({@code /MK /R}), a quarter turn inside {@link #rect()} — INDEPENDENT of
+     *  the page's. A form laid out on a page turned 90 degrees carries it on every widget, and a writer
+     *  that drops it writes the values across the boxes. */
+    public int          rotation()          { return rotation; }
+    public OCDFormField rotation(int deg)   { this.rotation = ((deg % 360) + 360) % 360; return this; }
+    /** Quadding ({@code /Q}): 0 left, 1 centred, 2 right. */
+    public int          align()             { return align; }
+    public OCDFormField align(int q)        { this.align = q < 0 || q > 2 ? 0 : q; return this; }
+    /** The value's size in points, from {@code /DA}. {@code 0} is PDF's own word for AUTO-SIZE — a stated
+     *  value, not a missing one. */
+    public double       fontSize()          { return fontSize; }
+    public OCDFormField fontSize(double pt) { this.fontSize = pt < 0 ? 0 : pt; return this; }
+    /** The value's colour, argb; {@code 0} = not stated. */
+    public int          textColor()         { return textColor; }
+    public OCDFormField textColor(int argb) { this.textColor = argb; return this; }
+    /** {@code /MK /BC}, argb; {@code 0} = no border colour stated, so none is drawn. */
+    public int          borderColor()       { return borderColor; }
+    public OCDFormField borderColor(int c)  { this.borderColor = c; return this; }
+    /** {@code /MK /BG}, argb; {@code 0} = no background — the page shows through. */
+    public int          backColor()         { return backColor; }
+    public OCDFormField backColor(int c)    { this.backColor = c; return this; }
+    /** {@code /BS /W} in points. */
+    public double       borderWidth()       { return borderWidth; }
+    public OCDFormField borderWidth(double w){ this.borderWidth = w < 0 ? 0 : w; return this; }
+    /** {@code /MaxLen}; 0 = unbounded. */
+    public int          maxLen()            { return maxLen; }
+    public OCDFormField maxLen(int n)       { this.maxLen = n < 0 ? 0 : n; return this; }
+    /** The widget's hidden flag ({@code /F} bit 2): stated by the document, honoured by every surface. */
+    public boolean      hidden()            { return hidden; }
+    public OCDFormField hidden(boolean b)   { this.hidden = b; return this; }
+
     private static String nz(String v) { return v == null ? "" : v; }
 
     @Override public String toString() {
@@ -78,6 +123,9 @@ public final class OCDFormField {
         OCDFormField f = new OCDFormField();
         f.type = type; f.rect = rect; f.name = name; f.value = value; f.defaultValue = defaultValue;
         f.onState = onState; f.readOnly = readOnly; f.required = required; f.multiline = multiline;
+        f.rotation = rotation; f.align = align; f.fontSize = fontSize; f.textColor = textColor;
+        f.borderColor = borderColor; f.backColor = backColor; f.borderWidth = borderWidth;
+        f.maxLen = maxLen; f.hidden = hidden;
         f.options.addAll(options);
         return f;
     }

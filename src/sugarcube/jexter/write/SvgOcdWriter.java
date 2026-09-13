@@ -32,7 +32,7 @@ import java.util.Map;
  * <p>Grammar v2 (all OCD semantics ride on {@code data-*} attributes, stripped by generic export):
  * <ul>
  *   <li>{@code <svg data-ocd="page" data-version="2" data-mediabox="x y w h" [data-bleedbox|data-trimbox|data-artbox]
- *       [data-dpi] [data-rot]>} — viewBox = the CROP WINDOW over the media frame, Y-up→SVG flip exactly
+ *       [data-dpi] [data-rotate]>} — viewBox = the CROP WINDOW over the media frame, Y-up→SVG flip exactly
  *       as {@link SvgWriter} (same audited math);</li>
  *   <li>{@code OCDParagraph} → {@code <g id data-ocd="paragraph">} containing {@code <g data-ocd="line">}
  *       line groups (children in CONTENT order, split on {@link sugarcube.jexter.ocd.model.OCDBreak}
@@ -62,8 +62,8 @@ public final class SvgOcdWriter {
 
     public static String render(OCDDocument doc, OCDPage page, Fonts glyphs) {
         // The stored page is the UNROTATED document, exactly as PDF stores it: geometry in the media
-        // frame, the crop as a window (the viewBox), the rotation as page metadata (data-rot). So
-        // width/height are the window's, not the visual size — a viewer that honours data-rot turns the
+        // frame, the crop as a window (the viewBox), the rotation as page metadata (data-rotate). So
+        // width/height are the window's, not the visual size — a viewer that honours data-rotate turns the
         // page itself. Nothing here depends on either, which is the point: cropping or rotating a page
         // rewrites this element and no other.
         JxRect win = page.svgWindow();
@@ -85,7 +85,7 @@ public final class SvgOcdWriter {
         String lang = pageLang(doc, page);
         if (!lang.isEmpty()) sb.append(" xml:lang=\"").append(esc(lang)).append('"');
         if (page.rotation() != 0) sb.append(" data-rotate=\"").append(page.rotation()).append('"');
-        // The crop IS the viewBox and the rotation IS data-rot: one representation each, both on the
+        // The crop IS the viewBox and the rotation IS data-rotate: one representation each, both on the
         // root, so neither can reach a content element. There is no data-crop.
         box(sb, "data-mediabox", page.mediaBox());
         box(sb, "data-bleedbox", page.bleedBox());

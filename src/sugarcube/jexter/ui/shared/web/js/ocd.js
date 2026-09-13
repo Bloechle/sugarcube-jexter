@@ -257,9 +257,9 @@ export class OcdPage {
 
     /** The page's own frame — the MEDIA box, in SVG space. Everything the page paints is anchored
      *  on it; the viewBox is a WINDOW over it (a crop), so it must never enter a placement. Reads
-     *  data-media; falls back to the viewBox for a page that states none. */
+     *  data-mediabox; falls back to the viewBox for a page that states none. */
     get frame() {
-        const m = (this.svg?.getAttribute('data-media') || '').trim().split(/[\s,]+/).map(Number);
+        const m = (this.svg?.getAttribute('data-mediabox') || '').trim().split(/[\s,]+/).map(Number);
         if (m.length === 4 && m.every(Number.isFinite)) return { x: m[0], y: m[1], w: m[2], h: m[3] };
         const vb = (this.svg?.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
         return vb.length === 4 && vb.every(Number.isFinite)
@@ -284,7 +284,7 @@ export class OcdPage {
         } else {
             const W = F(w), H = F(h);
             this.svg = svgel('svg', { xmlns: SVG_NS, viewBox: `0 0 ${W} ${H}`, width: W, height: H,
-                'data-ocd': 'page', 'data-v': '2', 'data-media': `0 0 ${W} ${H}` });
+                'data-ocd': 'page', 'data-version': '2', 'data-mediabox': `0 0 ${W} ${H}` });
             this.svg.setAttributeNS(XMLNS_NS, 'xmlns:xlink', XLINK_NS);
             this.styleEl = null; this.defsEl = null;
         }

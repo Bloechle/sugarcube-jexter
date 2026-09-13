@@ -30,7 +30,7 @@
  *
  * Chrome is the #redact-drawer declared in index.html (one right drawer per mode); this file only binds
  * it. The page overlay is data-ui chrome that persist() strips. Coordinates: a page SVG is the page's
- * effective box (data-crop, else data-media) Y-flipped — svg (sx, sy) ↔ page (sx + bx, by + bh − sy);
+ * effective box (data-mediabox, else a legacy page's data-crop) Y-flipped — svg (sx, sy) ↔ page (sx + bx, by + bh − sy);
  * items are kept in PAGE space, what the engine reads.
  */
 import { unzipSync } from 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm';
@@ -83,14 +83,14 @@ const item = (page, rect, kind, text = '', box = '', color = '') => ({ page, rec
 
 /* -- page geometry ------------------------------------------------------------------------------ */
 function pageBox(svg) {
-  const [x, y, w, h] = (svg.getAttribute('data-crop') || svg.getAttribute('data-media') || '').split(/\s+/).map(Number);
+  const [x, y, w, h] = (svg.getAttribute('data-mediabox') || svg.getAttribute('data-crop') || '').split(/\s+/).map(Number);
   return Number.isFinite(h) ? { x, y, w, h } : { x: 0, y: 0, w: 0, h: 0 };
 }
 const toSvg  = (b, r) => ({ x: r[0] - b.x, y: b.y + b.h - r[1] - r[3], w: r[2], h: r[3] });
 const toPage = (b, s) => [s.x + b.x, b.y + b.h - s.y - s.h, s.w, s.h];
 const ref = (svg) => svg.querySelector('g[data-ocd="rot"]') || svg;   // the CTM that maps screen → page-SVG space
 // `ref` is the page root, or the rotation carrier a page written before the grammar moved rotation to
-// data-rot still has: the mapping is gizmo.js's, the choice of reference is this format's.
+// data-rotate still has: the mapping is gizmo.js's, the choice of reference is this format's.
 const svgPoint = (svg, e) => svgPointOf(svg, e, ref(svg));
 /** An element's box in page-SVG space (its bbox through its CTM relative to the page frame). */
 function elBox(svg, el) {
@@ -763,6 +763,7 @@ function pick(kind) {
 /* -- tool -------------------------------------------------------------------------------------- */
 P.registerTool({
   id: MODE, label: 'Redact', icon: 'eraser', drawer: 'Redact', title: 'Redact — see what a redaction hides, remove it, prove it',
+  experimental: true,
   onEnter() {
     st.on = true; bindDrawer(); ribbon();
     book.eachFrame((doc, idx) => { styleOn(doc); bind(doc, idx); draw(doc, idx); });

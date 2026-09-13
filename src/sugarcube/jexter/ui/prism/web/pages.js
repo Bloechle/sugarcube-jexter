@@ -1,7 +1,7 @@
 /* pages.js — "Pages": the page itself. Crop it, turn it.
  *
  * Both edits are ROOT-ONLY, and that is the whole design (FORMAT §B2): the crop IS the page's
- * viewBox, the rotation IS its data-rot, and the page's coordinate frame is its media box. So this
+ * viewBox, the rotation IS its data-rotate, and the page's coordinate frame is its data-mediabox. So this
  * tool rewrites ONE element per page — the <svg> — and never a content node, never a matrix. A crop
  * is therefore free, exact and reversible: "Full page" is not an undo that re-derives anything, it
  * is the window put back. Nothing here calls the engine; the engine reads the window on the next
@@ -52,7 +52,7 @@ const count = () => P.state.pages?.length || 0;
 /** The media frame in SVG space. The flip subtracts the media origin, so the frame is ALWAYS at
  *  (0,0) there — its size is what a window must be clamped to. */
 function frame(svg) {
-  const m = (svg.getAttribute('data-media') || '').trim().split(/[\s,]+/).map(Number);
+  const m = (svg.getAttribute('data-mediabox') || '').trim().split(/[\s,]+/).map(Number);
   if (m.length === 4 && m.every(Number.isFinite)) return { w: m[2], h: m[3] };
   return { w: +svg.getAttribute('width') || 0, h: +svg.getAttribute('height') || 0 };
 }
@@ -64,7 +64,7 @@ function window_(svg) {
     ? { x: v[0], y: v[1], w: v[2], h: v[3] } : { x: 0, y: 0, ...frame(svg) };
 }
 
-const rotOf = (svg) => ((+svg.getAttribute('data-rot') || 0) % 360 + 360) % 360;
+const rotOf = (svg) => ((+svg.getAttribute('data-rotate') || 0) % 360 + 360) % 360;
 const cropped = (svg) => { const f = frame(svg), w = window_(svg); return w.x !== 0 || w.y !== 0 || w.w !== f.w || w.h !== f.h; };
 const n4 = (v) => String(Math.round(v * 1e4) / 1e4);
 
@@ -115,7 +115,7 @@ const setWindow = (svg, win) => {
 
 const setRot = (svg, deg) => {
   const r = ((deg % 360) + 360) % 360;
-  if (r) svg.setAttribute('data-rot', String(r)); else svg.removeAttribute('data-rot');
+  if (r) svg.setAttribute('data-rotate', String(r)); else svg.removeAttribute('data-rotate');
 };
 
 /* -- the verbs ---------------------------------------------------------------------------------- */
@@ -359,9 +359,9 @@ function edited() {
     const b = book.get(book.pagePath(i)); if (!b) continue;
     const s = dec(b), head = s.slice(s.indexOf('<svg'), s.indexOf('>', s.indexOf('<svg')) + 1);
     const at = (n) => (new RegExp(n + '="([^"]*)"').exec(head) || [])[1] || '';
-    const m = at('data-media').trim().split(/[\s,]+/).map(Number);
+    const m = at('data-mediabox').trim().split(/[\s,]+/).map(Number);
     const v = at('viewBox').trim().split(/[\s,]+/).map(Number);
-    const rot = ((+at('data-rot') || 0) % 360 + 360) % 360;
+    const rot = ((+at('data-rotate') || 0) % 360 + 360) % 360;
     const crop = m.length === 4 && v.length === 4 && (v[0] !== 0 || v[1] !== 0 || v[2] !== m[2] || v[3] !== m[3]);
     if (crop || rot) out.push({ i, crop, rot, size: v.length === 4 ? `${Math.round(v[2])}×${Math.round(v[3])} pt` : '' });
   }

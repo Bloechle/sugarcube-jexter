@@ -71,6 +71,15 @@ public final class OcdMembers {
                 if (f.readOnly())                js.bool("readonly", true);
                 if (f.required())                js.bool("required", true);
                 if (f.multiline())               js.bool("multiline", true);
+                if (f.rotation() != 0)           js.num("rotate", f.rotation());
+                if (f.align() != 0)              js.num("align", f.align());
+                if (f.fontSize() != 0)           js.num("size", f.fontSize());
+                if (f.textColor() != 0)          js.str("color", new JxColor(f.textColor()).hex());
+                if (f.borderColor() != 0)        js.str("border", new JxColor(f.borderColor()).hex());
+                if (f.backColor() != 0)          js.str("back", new JxColor(f.backColor()).hex());
+                if (f.borderWidth() != 1)        js.num("borderWidth", f.borderWidth());
+                if (f.maxLen() != 0)             js.num("maxlen", f.maxLen());
+                if (f.hidden())                  js.bool("hidden", true);
                 js.end();
             }
             js.end();
