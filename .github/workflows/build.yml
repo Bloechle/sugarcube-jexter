@@ -15,7 +15,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 21 — the floor: what compiles and doclints here runs on 21 and every JDK after
+      # The FLOOR: what compiles and doclints here runs on 21 and on every JDK after it. The reason
+      # this line is a comment and not part of the step's name: a colon followed by a space inside
+      # an unquoted YAML scalar opens a mapping, and the whole workflow stops being a workflow.
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin

@@ -66,7 +66,9 @@
   <div class="px-ribbon" id="ribbon"></div>
 
   <div class="px-body">
-    <aside id="rail" class="px-rail">
+    <!-- The left pane: the same object as the right one, filled by the DOCUMENT instead of by the
+         active tool. Same width variable, same drag, same fold, same gutter. -->
+    <aside id="rail" class="px-pane px-pane-l">
       <div class="px-tabs">
         <button class="tab-btn active" data-tab="tab-pages"><i data-lucide="layers"></i><span>Pages</span></button>
         <button class="tab-btn" data-tab="tab-toc"><i data-lucide="list-tree"></i><span>Contents</span></button>
@@ -105,61 +107,69 @@
     </main>
 
     <div id="split-right" class="px-split px-split-r" title="Drag to resize"></div>
-    <!-- Drawer shells only: the head is rendered from the tool registry (P.drawer). -->
-    <aside id="augment-drawer" class="px-drawer">
-      <div id="edits-info" class="search-info"></div>
-      <ul id="edit-list" class="nav-list"></ul>
-    </aside>
+    <!-- ONE right pane, shaped like the ribbon row above it: the chassis owns the shell — head,
+         width, scrolling, gutter, fold — and each tool fills its own slot through P.drawer(id).
+         Six separate panes used to own all of that six times over, which is why the splitter had to go
+         hunting for the visible one and why three gutters had drifted apart. -->
+    <aside id="pane-right" class="px-pane px-pane-r">
+      <div class="px-pane-head"></div>
+      <div class="px-pane-body">
+        <section id="augment-drawer" class="px-pane-slot">
+        <div id="edits-info" class="search-info"></div>
+        <ul id="edit-list" class="nav-list"></ul>
+      </section>
 
-    <aside id="analysis-drawer" class="px-drawer">
-      <!-- Overlays, pipeline and re-analyze live in this tool's ribbon (jexter.js). What stays here is
-           what is READ: the node tree and the inspector, which used to start below two rows of controls. -->
-      <div id="page-tree" class="ntree"><div class="search-info">Open a page to browse its nodes.</div></div>
-      <div id="inspect-body" class="inspect-body"><div class="search-info">Click content on a page to inspect it.</div></div>
-    </aside>
+      <section id="analysis-drawer" class="px-pane-slot">
+        <!-- Overlays, pipeline and re-analyze live in this tool's ribbon (jexter.js). What stays here is
+             what is READ: the node tree and the inspector, which used to start below two rows of controls. -->
+        <div id="page-tree" class="ntree"><div class="search-info">Open a page to browse its nodes.</div></div>
+        <div id="inspect-body" class="inspect-body"><div class="search-info">Click content on a page to inspect it.</div></div>
+      </section>
 
-    <aside id="edit-drawer" class="px-drawer">
-      <div id="ed-info" class="search-info">Click content on a page to select it.</div>
-    </aside>
+      <section id="edit-drawer" class="px-pane-slot">
+        <div id="ed-info" class="search-info">Click content on a page to select it.</div>
+      </section>
 
-    <aside id="forms-drawer" class="px-drawer">
-      <!-- Commands live in this tool's ribbon (forms.js). The drawer keeps what is READ: how much of
-           the form is filled, every field in document order, and what the selected one IS. -->
-      <div id="fm-info" class="search-info">Open a document first.</div>
-      <div id="fm-detail" class="search-info">Click a field to select it.</div>
-      <ul id="fm-list" class="nav-list"></ul>
-    </aside>
+      <section id="forms-drawer" class="px-pane-slot">
+        <!-- Commands live in this tool's ribbon (forms.js). The drawer keeps what is READ: how much of
+             the form is filled, every field in document order, and what the selected one IS. -->
+        <div id="fm-info" class="search-info">Open a document first.</div>
+        <div id="fm-detail" class="search-info">Click a field to select it.</div>
+        <ul id="fm-list" class="nav-list"></ul>
+      </section>
 
-    <aside id="pages-drawer" class="px-drawer">
-      <!-- Commands live in this tool's ribbon (pages.js). The drawer keeps what is READ: the current
-           page's geometry, and every page that carries a crop or a rotation. -->
-      <div id="pg-info" class="search-info">Open a document first.</div>
-      <!-- The crop, in numbers: the handles put the box roughly right, these say exactly. Both write
-           the same rectangle. -->
-      <div id="pg-crop-info" class="search-info">Drag a rectangle on the page, or press Crop to adjust the current window.</div>
-      <div class="px-fields">
-        <label>X <input id="pg-x" type="number" step="0.5" disabled/></label>
-        <label>Y <input id="pg-y" type="number" step="0.5" disabled/></label>
-        <label>W <input id="pg-w" type="number" step="0.5" disabled/></label>
-        <label>H <input id="pg-h" type="number" step="0.5" disabled/></label>
+      <section id="pages-drawer" class="px-pane-slot">
+        <!-- Commands live in this tool's ribbon (pages.js). The drawer keeps what is READ: the current
+             page's geometry, and every page that carries a crop or a rotation. -->
+        <div id="pg-info" class="search-info">Open a document first.</div>
+        <!-- The crop, in numbers: the handles put the box roughly right, these say exactly. Both write
+             the same rectangle. -->
+        <div id="pg-crop-info" class="search-info">Drag a rectangle on the page, or press Crop to adjust the current window.</div>
+        <div class="px-fields">
+          <label>X <input id="pg-x" type="number" step="0.5" disabled/></label>
+          <label>Y <input id="pg-y" type="number" step="0.5" disabled/></label>
+          <label>W <input id="pg-w" type="number" step="0.5" disabled/></label>
+          <label>H <input id="pg-h" type="number" step="0.5" disabled/></label>
+        </div>
+        <ul id="pg-list" class="nav-list"></ul>
+      </section>
+
+      <section id="redact-drawer" class="px-pane-slot">
+        <!-- Commands live in this tool's ribbon (redact.js). The drawer keeps what is READ: the state of
+             the work and the list of zones. -->
+        <div id="rd-info" class="search-info">Pick zones, find text, or audit — Apply proves and rewrites.</div>
+        <!-- The selected zone, in numbers: the handles put the box roughly where it belongs, these say
+             42.5. Both write the same rectangle, in PAGE space — the units the engine reads. -->
+        <div id="rd-zone-info" class="search-info">Click a zone to select it — the handles move and resize it.</div>
+        <div class="px-fields">
+          <label>X <input id="rd-x" type="number" step="0.5" disabled/></label>
+          <label>Y <input id="rd-y" type="number" step="0.5" disabled/></label>
+          <label>W <input id="rd-w" type="number" step="0.5" disabled/></label>
+          <label>H <input id="rd-h" type="number" step="0.5" disabled/></label>
+        </div>
+        <ul id="rd-list" class="nav-list rd-list"></ul>
+      </section>
       </div>
-      <ul id="pg-list" class="nav-list"></ul>
-    </aside>
-
-    <aside id="redact-drawer" class="px-drawer">
-      <!-- Commands live in this tool's ribbon (redact.js). The drawer keeps what is READ: the state of
-           the work and the list of zones. -->
-      <div id="rd-info" class="search-info">Pick zones, find text, or audit — Apply proves and rewrites.</div>
-      <!-- The selected zone, in numbers: the handles put the box roughly where it belongs, these say
-           42.5. Both write the same rectangle, in PAGE space — the units the engine reads. -->
-      <div id="rd-zone-info" class="search-info">Click a zone to select it — the handles move and resize it.</div>
-      <div class="px-fields">
-        <label>X <input id="rd-x" type="number" step="0.5" disabled/></label>
-        <label>Y <input id="rd-y" type="number" step="0.5" disabled/></label>
-        <label>W <input id="rd-w" type="number" step="0.5" disabled/></label>
-        <label>H <input id="rd-h" type="number" step="0.5" disabled/></label>
-      </div>
-      <ul id="rd-list" class="nav-list rd-list"></ul>
     </aside>
   </div>
 
@@ -317,6 +327,7 @@
   </sl-dialog>
 
   <div id="log-console" class="log-console" data-filter="all">
+    <div id="split-log" class="px-split px-split-h" title="Drag to resize"></div>
     <div class="log-head">
       <span id="log-title" class="log-title" role="button" tabindex="0" title="Close (F2)"><i data-lucide="terminal"></i> Log <span class="log-tag">client</span></span>
       <span class="log-sp"></span>

@@ -262,6 +262,14 @@ function select(i, go = false) {
   paint(); ribbon(); drawer();
 }
 
+function nextEmpty() {
+  const n = st.list.length;
+  for (let k = 1; k <= n; k++) {
+    const i = (Math.max(st.sel, -1) + k) % n;
+    if (!st.list[i].f.value) { select(i, true); return; }
+  }
+}
+
 function setValue(v) {
   const it = cur(); if (!it) return;
   it.f.value = v ?? '';
@@ -280,6 +288,10 @@ function ribbon() {
         on: () => select(st.sel <= 0 ? st.list.length - 1 : st.sel - 1, true) },
       { icon: 'chevron-down', label: 'Next',     title: 'Next field',     disabled: none,
         on: () => select(st.sel >= st.list.length - 1 ? 0 : st.sel + 1, true) },
+      // Filling a form is walking the fields that are still EMPTY, not all of them — on a form of any
+      // size, "next" lands you on one you have already done.
+      { icon: 'skip-forward', label: 'Next empty', title: 'Jump to the next field still empty',
+        disabled: none || !st.list.some(x => !x.f.value), on: nextEmpty },
       { icon: 'tag', label: 'Names', title: 'Show the field names instead of their values',
         active: st.names, disabled: none, on: () => { st.names = !st.names; paint(); ribbon(); } },
     ] },
@@ -301,18 +313,35 @@ function ribbon() {
 
 /* -- the drawer -------------------------------------------------------------------------------- */
 
+/* The pane is a WORKLIST, not a second copy of the page. Echoing each value back was pure repetition
+ * — the box on the page already shows it, larger and in place. What the page cannot show is what is
+ * LEFT: how many fields remain, which of them are required, and where they are when the form runs
+ * past one screen. On a five-field page it stays quiet, which is the right amount to say. */
 function drawer() {
   const info = document.getElementById('fm-info');
   const list = document.getElementById('fm-list');
   const det  = document.getElementById('fm-detail');
   if (!info || !list) return;
+  const left = st.list.filter(x => !x.f.value).length;
+  const req  = st.list.filter(x => x.f.required && !x.f.value).length;
   info.textContent = !book.isOpen?.() ? 'Open a document first.'
                    : !has() ? 'No form fields in this document.'
-                   : `${st.list.length} field${st.list.length > 1 ? 's' : ''} · ${st.list.filter(x => x.f.value).length} filled`;
-  list.innerHTML = st.list.map((it, i) => `
-    <li><a class="nav-link${i === st.sel ? ' active' : ''}" data-fm="${i}">
-      <b>${esc(it.f.name || '(unnamed)')}</b>
-      <span class="hit">p.${it.page + 1} · ${esc(it.f.value || '—')}</span></a></li>`).join('');
+                   : left === 0 ? `${st.list.length} fields · all filled`
+                   : `${st.list.length} fields · ${st.list.length - left} filled · ${left} left`
+                     + (req ? ` · ${req} required` : '');
+  // A page heading only when there is more than one page to tell apart: on a one-page form it would
+  // be a header over the whole list, which says nothing.
+  const multi = new Set(st.list.map(x => x.page)).size > 1;
+  let at = -1;
+  const rows = [];
+  st.list.forEach((it, i) => {
+    if (multi && it.page !== at) { at = it.page; rows.push(`<li class="fm-group">Page ${at + 1}</li>`); }
+    const status = it.f.value ? 'filled' : it.f.required ? 'required' : 'empty';
+    rows.push(`<li><a class="nav-link${i === st.sel ? ' active' : ''}" data-fm="${i}">`
+            + `<b>${esc(it.f.name || '(unnamed)')}</b>`
+            + `<span class="hit px-sub fm-${status}">${status}</span></a></li>`);
+  });
+  list.innerHTML = rows.join('');
   list.querySelectorAll('[data-fm]').forEach(a =>
     a.addEventListener('click', () => select(+a.getAttribute('data-fm'), true)));
   const it = cur();

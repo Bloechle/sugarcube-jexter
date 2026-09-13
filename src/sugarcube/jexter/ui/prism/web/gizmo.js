@@ -107,8 +107,43 @@ const HANDLES = [
   ['sw', 0, 1], ['s', .5, 1], ['se', 1, 1],
 ];
 
-// The handle you drag moves, the OPPOSITE one stays: that is what makes a resize feel physical.
+// The handle you drag moves, the OPPOSITE one stays: that is what makes a resize feel physical. This
+// holds even when the element ends up MIRRORED — a fraction of 0 on a flipped box is still the far
+// side — so a resize that crosses over keeps behaving, and only the arrow had to be fixed below.
 const ANCHOR = { nw: [1, 1], n: [.5, 1], ne: [0, 1], w: [1, .5], e: [0, .5], sw: [1, 0], s: [.5, 0], se: [0, 0] };
+
+// A handle's NAME says which corner of the box it holds; its ARROW must say which way the screen will
+// move. The two part company the moment the element is mirrored — drag a side past the opposite one
+// and the handle called `e` is drawn on the left, still showing an east arrow — and again the moment
+// anything rotates: the element itself, or the page under it, which Prism turns by 90° on any document
+// that states /Rotate. So the arrow is read from WHERE THE HANDLE LANDS, in screen space, and never
+// from its name. Eight sectors of 45°, starting east and turning the way screen y grows: down.
+const CURSORS = ['e', 'se', 's', 'sw', 'w', 'nw', 'n', 'ne'];
+
+/** An SVG's screen matrix stops at its own viewport. When the SVG is inside a frame that a HOST has
+ *  turned — which is exactly what a viewer does with a page that states a rotation — that turn is a CSS
+ *  transform on the frame element, and getScreenCTM never sees it. Without composing it in, a page
+ *  turned 90° shows north arrows on its west side: the geometry is right and the arrow still lies. */
+function hostTurn(doc) {
+  try {
+    const fe = doc?.defaultView?.frameElement;
+    const t = fe && getComputedStyle(fe).transform;
+    return t && t !== 'none' ? new DOMMatrix(t) : null;
+  } catch { return null; }
+}
+
+function arrowOf(p, centre, m, host) {
+  const to = (q) => {
+    let r = q;
+    if (m)    { const t = new DOMPoint(r.x, r.y).matrixTransform(m);    r = { x: t.x, y: t.y }; }
+    if (host) { const t = new DOMPoint(r.x, r.y).matrixTransform(host); r = { x: t.x, y: t.y }; }
+    return r;
+  };
+  const a = to(p), b = to(centre);
+  const dx = a.x - b.x, dy = a.y - b.y;
+  if (Math.hypot(dx, dy) < 1e-6) return 'move';
+  return CURSORS[(Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8] + '-resize';
+}
 
 const num = v => Math.round(v * 100) / 100;
 
@@ -206,6 +241,11 @@ export function createGizmo(svg, opts = {}) {
     g.appendChild(knob);
     }
 
+    // The screen matrix of the space the handles are drawn in — the parent's, which on a turned page
+    // already carries the page's own 90°.
+    const sm = target.parentNode?.getScreenCTM?.();
+    const turn = hostTurn(doc);
+    const mid = c.at(.5, .5);
     for (const [id, fx, fy] of (o.scale ? HANDLES : [])) {
       const p = c.at(fx, fy);
       const h = doc.createElementNS(SVG_NS, 'rect');
@@ -215,7 +255,7 @@ export function createGizmo(svg, opts = {}) {
       h.setAttribute('stroke-width', 1.2 * u);
       h.setAttribute('data-gz', id);
       h.setAttribute('pointer-events', 'all');
-      h.setAttribute('style', `cursor:${id}-resize`);
+      h.setAttribute('style', `cursor:${arrowOf(p, mid, sm, turn)}`);
       g.appendChild(h);
     }
     svg.appendChild(g);                                      // topmost: nothing can cover the handles

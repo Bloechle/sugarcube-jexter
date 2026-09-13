@@ -266,11 +266,21 @@ function clearRect(doc, idx) {
 /* -- the crop verbs ------------------------------------------------------------------------------- */
 
 /** Put a rectangle on the current page, at its current window — the way to ADJUST a crop that is
- *  already applied, rather than drawing a new one blind. */
+ *  already applied, rather than drawing a new one blind.
+ *
+ *  On a page that carries NO crop, there is no window to adjust: the rectangle would be the page
+ *  itself, which asserts a crop that crops nothing and puts all eight handles on the bezel, where the
+ *  pointer cannot reach them — the frame's own edge is one pixel away. Drawing is already armed the
+ *  moment this tool shows a page (the crosshair is on), so the honest answer is to say so rather than
+ *  to leave a decoy on the page that looks like a proposal and behaves like a wall. */
 function proposeCrop() {
     if (st.view !== 'page') setView('page');         // a crop needs a page in front of you
     const idx = idxNow(), doc = book.frameDoc(idx), svg = doc?.querySelector('svg[data-ocd="page"]');
     if (!svg) { P.toast?.('Open a page first.', 'warning'); return; }
+    if (!cropped(svg) && !cropRect(doc)) {
+        P.toast?.('Drag a rectangle on the page to crop it.', 'neutral');
+        readout(idx); ribbon(); return;
+    }
     const r = ensureRect(doc, window_(svg));
     gizmos.get(idx)?.set({ enabled: true });
     gizmos.get(idx)?.select(r);
@@ -328,7 +338,7 @@ function readout(idx) {
     const info = $id('pg-crop-info');
     if (info) info.textContent = box
         ? `Crop ${Math.round(box.w)} × ${Math.round(box.h)} pt at ${Math.round(box.x)}, ${Math.round(box.y)} — Enter applies, Esc drops it`
-        : 'Drag a rectangle on the page, or press Crop to adjust the current window.';
+        : 'Drag a rectangle on the page. Already cropped? Crop hands its window back to adjust.';
 }
 
 /** A number typed in the drawer moves the same rectangle the handles move. */
@@ -386,7 +396,10 @@ function refresh() {
     const li = document.createElement('li');
     const a = document.createElement('a');
     a.className = 'nav-link';
-    a.innerHTML = `<b>${e.i + 1}</b><span>${e.crop ? 'cropped ' + e.size : ''}${e.crop && e.rot ? ' · ' : ''}${e.rot ? 'turned ' + e.rot + '°' : ''}</span>`;
+    // You come to this list to find a PAGE, so the page is what the row says first — "Page 4", not a
+    // bare mono "4" sized like a footnote next to the state in full text.
+    a.innerHTML = `<b>Page ${e.i + 1}</b><span class="hit px-sub">`
+      + `${e.crop ? 'cropped ' + e.size : ''}${e.crop && e.rot ? ' · ' : ''}${e.rot ? 'turned ' + e.rot + '°' : ''}</span>`;
     a.addEventListener('click', () => P.goTo(e.i));
     li.appendChild(a); list.appendChild(li);
   }
@@ -652,7 +665,11 @@ function ribbon() {
       { icon: 'file', label: 'Page', title: 'The reader — crop and turn the page in front of you', active: st.view === 'page', disabled: !has, on: () => setView('page') },
     ]},
     { group: 'Crop', items: [
-      { icon: 'crop', label: 'Crop', title: 'Put a crop rectangle on the page — drag the handles, or type the numbers', disabled: !has, on: proposeCrop },
+      // The title says what the command does HERE: on an uncropped page it arms the drawing, on a
+      // cropped one it hands back the window. A button that promises a rectangle it will not draw is
+      // the same lie as a handle that cannot be grabbed.
+      { icon: 'crop', label: 'Crop', disabled: !has, on: proposeCrop,
+        title: 'Drag a rectangle on the page to crop it — on an already cropped page, this hands back its window to adjust' },
       { icon: 'check', label: 'Apply crop', title: 'The rectangle becomes the page window (Enter)', disabled: !has, on: applyCrop },
       { icon: 'maximize', label: 'Full page', title: 'Put the window back to the whole page', disabled: !has, on: full },
     ]},

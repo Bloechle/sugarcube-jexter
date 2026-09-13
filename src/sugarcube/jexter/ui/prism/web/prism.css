@@ -12,7 +12,7 @@
   --sl-color-primary-300:#8dbae4; --sl-color-primary-400:#5e9bd6; --sl-color-primary-500:#4185c4;
   --sl-color-primary-600:#33699f; --sl-color-primary-700:#2b567f; --sl-color-primary-800:#264867;
   --sl-color-primary-900:#1f3a52; --sl-color-primary-950:#12222f;
-  --px-rail-w:264px; --px-bar-h:46px; --zoom:1;
+  --px-rail-w:264px; --px-bar-h:46px; --zoom:1; --px-gutter:.6rem;
 }
 
 html, body { height:100%; }
@@ -120,39 +120,55 @@ body.tool-edit .px-stage { outline:2px solid rgba(229,72,77,.45); outline-offset
 
 /* ── Body: rail + stage ───────────────────────────────────────────────── */
 .px-body { flex:1; display:flex; min-height:0; }
-.px-rail {
-  width:var(--px-rail-w); flex:0 0 auto; display:flex; flex-direction:column; min-height:0; overflow:hidden;
-  background:var(--qry-glass); -webkit-backdrop-filter:var(--qry-blur); backdrop-filter:var(--qry-blur);
-  border-right:1px solid var(--qry-glass-border); transition:width .2s ease;
-}
-body.rail-collapsed .px-rail { width:0; border-right-color:transparent; }
+/* The rail's shell used to be declared here, word for word what the right pane declared 600 lines
+   below: same column, same glass, same fold. It is the SAME OBJECT, so it is stated once — see
+   "The side panes". What a side keeps of its own is its width variable and the edge it borders on. */
+.px-pane-l { width:var(--px-rail-w); border-right:1px solid var(--qry-glass-border); }
+body.rail-collapsed .px-pane-l { width:0; border-right-color:transparent; }
+.px-pane-l > * { width:var(--px-rail-w); }   /* inner width = pane width: no reflow while sliding */
 
 /* ── Edit drawer — right side, only while editing ─────────────────────── */
-.px-drawer {
-  width:0; flex:0 0 auto; display:flex; flex-direction:column; min-height:0; overflow:hidden;
+/* ── The side panes ───────────────────────────────────────────────────────────
+   ONE mechanic for both sides. The rail on the left and this pane on the right are the same object:
+   a column of a fixed, draggable, remembered width, foldable from the footer corner it sits in, with
+   the same gutter and the same blocks inside. What differs is only WHO fills it — the rail is the
+   document's, this one is the active tool's, exactly as the ribbon row is.
+   The right pane is a HOST, not a stack of panes: tools own slots inside it, so the width, the head,
+   the scrolling and the fold are stated once and a new tool declares a slot and nothing else. */
+.px-pane {
+  flex:0 0 auto; display:flex; flex-direction:column; min-height:0; overflow:hidden;
   background:var(--qry-glass); -webkit-backdrop-filter:var(--qry-blur); backdrop-filter:var(--qry-blur);
-  border-left:1px solid transparent; transition:width .2s ease;
+  transition:width .2s ease;
 }
-/* A drawer belongs to a tool: #<id>-drawer opens with body.tool-<id> and closes with it. One rule for
-   all three, so adding a tool means naming its drawer — not editing this file. */
-body[class*="tool-"] .px-drawer.active { width:var(--px-drawer-w,272px); border-left-color:var(--qry-glass-border); }
+/* The right one is closed by default and opens when the active tool has something to put in it — the
+   same condition that shows the corner toggle, so the two can never disagree. */
+.px-pane-r { width:0; border-left:1px solid transparent; }
+body.has-drawer .px-pane-r { width:var(--px-drawer-w,272px); border-left-color:var(--qry-glass-border); }
 /* Folded from the footer corner. The tool stays active — only its pane is out of the way — so the
    splitter goes with it, and the same rule reads for the rail on the other side. */
-body.drawer-collapsed .px-drawer.active { width:0; border-left-color:transparent; }
-body.drawer-collapsed #split-right { display:none; }
+body.drawer-collapsed .px-pane-r { width:0; border-left-color:transparent; }
+body.drawer-collapsed #split-right, body:not(.has-drawer) #split-right { display:none; }
+.px-pane-body { flex:1 1 auto; min-height:0; overflow:auto; display:flex; flex-direction:column; }
+/* One slot per tool, shown by the chassis — the ribbon's own pattern, one row down. */
+.px-pane-slot { display:none; flex:1 1 auto; min-height:0; flex-direction:column; }
+.px-pane-slot.active { display:flex; }
 /* No pane, no toggle: Home and Reveal have no drawer, so the corner stays empty rather than offering a
    control that would do nothing — the same reason the ribbon row collapses when a tool declares none. */
 #toggle-drawer { display:none; }
 body.has-drawer #toggle-drawer { display:inline-flex; }
-.px-drawer > * { width:var(--px-drawer-w,272px); flex:0 0 auto; }   /* inner width = pane width: no reflow while sliding */
-.px-drawer-head {
+.px-pane-r > * { width:var(--px-drawer-w,272px); flex:0 0 auto; }   /* inner width = pane width: no reflow while sliding */
+.px-pane-r > .px-pane-body { flex:1 1 auto; }
+.px-pane-head {
   display:flex; align-items:center; gap:.45rem; padding:.62rem .8rem; white-space:nowrap;
   font-size:.76rem; font-weight:700; color:var(--qry-blue);
   border-bottom:1px solid color-mix(in srgb, var(--qry-text) 10%, transparent);
 }
-.px-drawer-head i, .px-drawer-head svg { width:.95rem; height:.95rem; }
-.px-drawer .search-info { padding:.5rem .6rem 0; white-space:nowrap; }
-.px-drawer .nav-list { flex:1 1 auto; overflow:auto; padding:.5rem; }
+.px-pane-head i, .px-pane-head svg { width:.95rem; height:.95rem; }
+/* ONE gutter for every block of a pane. They had three (.6 / .5 / .1rem) and the eye reads the
+   difference as damage before it reads the content — the numeric fields sat flush against the edge
+   while the line above them did not. */
+.px-pane .search-info { padding:.5rem var(--px-gutter) 0; white-space:normal; line-height:1.38; }
+.px-pane .nav-list { flex:1 1 auto; overflow:auto; padding:.5rem var(--px-gutter); }
 
 /* ── Tabs — underline, hairline separators ────────────────────────────── */
 /* The rail is resizable, so the three pills must survive a narrow one. They WRAP rather than shrink:
@@ -242,6 +258,17 @@ body.has-drawer #toggle-drawer { display:inline-flex; }
 .nav-link { display:flex !important; gap:.45rem; align-items:baseline; white-space:normal !important; line-height:1.35; }
 .nav-link b { font-family:var(--qry-mono, ui-monospace, monospace); color:var(--qry-blue); font-size:.68rem; font-weight:700; flex:0 0 auto; }
 .nav-link .hit { flex:1; min-width:0; }
+/* The secondary half of a pane row — the page's state, a field's status. Muted and smaller, so the
+   row reads as "Page 4, cropped" and not as "cropped, page 4": you come to these lists to find the
+   THING, not its adjective. */
+.nav-link .px-sub { color:var(--qry-text-muted); font-size:.7rem; }
+/* Forms' worklist: the status is the only thing that earns a colour, because it is the only thing you
+   scan the list FOR. Required-and-empty takes the same amber as an unfinished tab — one language for
+   "not done yet" across the app. */
+.nav-link .fm-filled { color:var(--qry-blue); }
+.nav-link .fm-required { color:#c07a12; font-weight:600; }
+.fm-group { font-size:.6rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+  color:var(--qry-text-muted); padding:.55rem .15rem .1rem; }
 .nav-link mark { background:color-mix(in srgb, var(--qry-blue) 34%, transparent); color:var(--qry-text); border-radius:2px; padding:0 .12em; }
 
 /* ── Search box ───────────────────────────────────────────────────────── */
@@ -522,7 +549,7 @@ html:not([data-theme="dark"]) .px-filebtn { color:var(--jx-brand-deep); }
 
 /* ── Log console (F2) — Prism-style, slides up over the footer ────────── */
 .log-console {
-  position:fixed; left:0; right:0; bottom:0; height:38vh; max-height:540px; z-index:50;
+  position:fixed; left:0; right:0; bottom:0; height:var(--px-log-h, 38vh); max-height:88vh; z-index:50;
   display:flex; flex-direction:column; transform:translateY(101%); transition:transform .18s ease;
   background:#0f1722; color:#dbe4ee; border-top:2px solid var(--qry-blue); box-shadow:0 -14px 44px rgba(8,38,84,.34);
 }
@@ -657,12 +684,20 @@ body.tool-analysis .px-stage { outline:2px solid rgba(59,130,246,.35); outline-o
 
 /* -- Draggable splitters (left rail · right contextual pane) ---------- */
 .px-split { flex:0 0 5px; cursor:col-resize; background:transparent; position:relative; z-index:5; }
+/* The console is dragged by its TOP edge — the only edge it has, being pinned to three sides. Same
+   element, same drag, same persistence as the two vertical ones; only the axis differs. */
+.px-split-h { position:absolute; left:0; right:0; top:-3px; height:7px; flex:none; cursor:row-resize; }
+.px-split-h::after { content:""; position:absolute; left:0; right:0; top:3px; height:2px;
+  background:var(--sl-color-primary-500); opacity:0; transition:opacity .12s; }
+.px-split-h:hover::after, .px-split-h.dragging::after { opacity:1; }
+body.row-resizing { user-select:none; cursor:row-resize; }
 .px-split::after { content:""; position:absolute; inset:0 2px; background:var(--qry-glass-border); opacity:0; transition:opacity .15s; }
 .px-split:hover::after, .px-split.dragging::after { opacity:1; background:var(--sl-color-primary-500); }
 body.rail-collapsed #split-left { display:none; }
-#split-right { display:none; }
-body.tool-augment #split-right, body.tool-analysis #split-right,
-body.tool-redact #split-right, body.tool-edit #split-right { display:block; }
+/* The right handle is shown by the pane's STATE, not by a list of tool names. A second hardcoded list
+   lived here — augment, analysis, redact, edit — written before Pages and Forms existed, so those two
+   never got a handle at all and the pane could not be resized however well the drag was wired. The
+   condition is above, with the pane itself: has-drawer, one place. */
 body.col-resizing { user-select:none; cursor:col-resize; }
 body.col-resizing iframe { pointer-events:none; }   /* frames swallow pointermove otherwise */
 
@@ -719,9 +754,9 @@ body.col-resizing iframe { pointer-events:none; }   /* frames swallow pointermov
 /* ── Quality floor ────────────────────────────────────────────────────── */
 :focus-visible { outline:2px solid color-mix(in srgb, var(--qry-blue) 70%, transparent); outline-offset:2px; border-radius:4px; }
 ::selection { background:color-mix(in srgb, var(--qry-blue) 28%, transparent); }
-.px-rail *, .px-drawer *, .px-stage { scrollbar-width:thin; scrollbar-color:color-mix(in srgb, var(--qry-text) 22%, transparent) transparent; }
-.px-stage::-webkit-scrollbar, .px-rail ::-webkit-scrollbar { width:8px; height:8px; }
-.px-stage::-webkit-scrollbar-thumb, .px-rail ::-webkit-scrollbar-thumb {
+.px-pane *, .px-stage { scrollbar-width:thin; scrollbar-color:color-mix(in srgb, var(--qry-text) 22%, transparent) transparent; }
+.px-stage::-webkit-scrollbar, .px-pane ::-webkit-scrollbar { width:8px; height:8px; }
+.px-stage::-webkit-scrollbar-thumb, .px-pane ::-webkit-scrollbar-thumb {
   background:color-mix(in srgb, var(--qry-text) 20%, transparent); border-radius:999px; border:2px solid transparent; background-clip:content-box;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -759,7 +794,7 @@ html:not([data-theme="dark"]) .px-stage {
 }
 .px-head { border-bottom:1px solid color-mix(in srgb, var(--qry-text) 8%, transparent); }
 .px-foot { border-top:1px solid color-mix(in srgb, var(--qry-text) 8%, transparent); }
-.px-rail { border-right:1px solid color-mix(in srgb, var(--qry-text) 8%, transparent); }
+.px-pane-l { border-right:1px solid color-mix(in srgb, var(--qry-text) 8%, transparent); }
 /* The ribbon is chrome too, so it takes the same hairline — it had var(--qry-line), a heavier token that
    made the one edge nobody should notice the most visible line on screen. Same rule, one grammar. */
 .px-ribbon { border-bottom:1px solid color-mix(in srgb, var(--qry-text) 8%, transparent); }
@@ -889,9 +924,13 @@ body:not(.has-book) .px-foot { justify-content:start; }
    moving one needs room and neighbours in sight — a drawer is a column and a modal hides the book.
    Thumbnails are real page frames, exactly like the rail's, mounted lazily. */
 body.tool-pages #epub-stage { display:none; }                 /* the table IS the tool's view of the stage */
-body.tool-pages:not(.has-book) #epub-stage { display:block; }  /* …except with no book: that is the drop card */
+body.tool-pages:not(.has-book) #epub-stage { display:flex; }   /* …except with no book: that is the drop card */
 body.tool-pages:not(.has-book) #pages-table { display:none; }
-body.tool-pages.tool-pages-page #epub-stage { display:block; } /* …until a command needs the page itself */
+/* …until a command needs the page itself. FLEX, not block: the stage IS a centred column with a gap
+   (see #epub-stage above), and `display:block` un-hides it while silently dropping both — the pages
+   come back flush against the rail, touching each other. A rule that re-shows something must restore
+   what it was, not pick a value that merely makes it visible. */
+body.tool-pages.tool-pages-page #epub-stage { display:flex; }
 body.tool-pages #pages-table { display:grid; }
 body.tool-pages.tool-pages-page #pages-table { display:none; }
 .px-table {
@@ -938,7 +977,7 @@ body.tool-pages.tool-pages-page #pages-table { display:none; }
 
 /* A rectangle in numbers — four small fields, the drawer's own grid. Pages states a crop with it and
    Redact a zone: one geometry, one grid, so the two drawers cannot drift apart. */
-.px-fields { display:grid; grid-template-columns:1fr 1fr; gap:.4rem .6rem; padding:.2rem .1rem .6rem; }
+.px-fields { display:grid; grid-template-columns:1fr 1fr; gap:.4rem .6rem; padding:.3rem var(--px-gutter) .6rem; }
 .px-fields label { display:flex; align-items:center; gap:.35rem; font-size:.72rem; color:var(--qry-text-muted); }
 .px-fields input {
   width:100%; min-width:0; padding:.22rem .4rem; font:inherit; font-size:.74rem;

@@ -169,8 +169,9 @@ function setTool(id) {
   $.all('.px-tooltab').forEach(b => b.cls((b.attr('data-tool') === tool ? '+' : '-') + 'active'));
   // The tool's three surfaces, marked from one place: its ribbon slot and its drawer follow its tab.
   $.all('#ribbon [data-ribbon]').forEach(el => el.cls((el.attr('data-ribbon') === tool ? '+' : '-') + 'active'));
-  $.all('.px-drawer').forEach(el => el.cls((el.id === tool + '-drawer' ? '+' : '-') + 'active'));
-  $('body').cls(($.opt(`#${tool}-drawer`) ? '+' : '-') + 'has-drawer');   // no pane, no toggle in the corner
+  $.all('.px-pane-slot').forEach(el => el.cls((el.id === tool + '-drawer' ? '+' : '-') + 'active'));
+  $('body').cls(($.opt(`#${tool}-drawer`) ? '+' : '-') + 'has-drawer');   // no slot, no pane, no toggle
+  paneHead();
   // A tool activated AFTER pages are loaded has never seen them: the `frame` event fired before it
   // asked. Replay it for what is mounted, so entering a tool is enough to make it work on the page in
   // front of you. Handlers are expected to be idempotent — they mark their own document.
@@ -184,24 +185,28 @@ function setTool(id) {
   emit('tool', tool);
 }
 
-/** A tool's right-hand drawer, symmetric with its ribbon: `P.drawer(id)` returns the pane, creating it
- *  if the markup does not carry one, and its head is rendered FROM THE REGISTRY — the icon and label a
- *  tool already declared. Three hand-written shells used to repeat them, which is two chances to drift.
- *  The chassis opens and closes it with the tool (body.tool-<id> + .active); a module only fills it. */
+/** A tool's SLOT in the right pane, symmetric with its ribbon slot: `P.drawer(id)` returns it, creating
+ *  it if the markup does not carry one. The pane itself — its width, its head, its scrolling, its fold
+ *  — belongs to the chassis and is stated once; a module only fills its slot, and never learns that the
+ *  five other tools share the column with it. */
 function drawer(id) {
-  const body = $.opt('.px-body'); if (!body) return null;
-  let pane = $.opt(`#${id}-drawer`);
-  if (!pane) {
-    pane = $.create('aside', { class: 'px-drawer' }).attr('id', `${id}-drawer`);
-    pane.mount(body);
+  const body = $.opt('#pane-right .px-pane-body'); if (!body) return null;
+  let slot = $.opt(`#${id}-drawer`);
+  if (!slot) {
+    slot = $.create('section', { class: 'px-pane-slot' }).attr('id', `${id}-drawer`);
+    slot.mount(body);
   }
-  const t = toolOf(id);
-  let head = pane.querySelector('.px-drawer-head');
-  if (!head) { head = $.create('div', { class: 'px-drawer-head' }); pane.insertBefore(head, pane.firstChild); }
-  head.innerHTML = `<i data-lucide="${esc(t?.icon || 'panel-right')}"></i> ${esc(t?.drawer || t?.label || id)}`;
+  if (id === tool) { slot.cls('+active'); paneHead(); }
+  return slot;
+}
+
+/** The pane's head, rendered FROM THE REGISTRY — the icon and label the active tool already declared.
+ *  Hand-written shells used to repeat them once per tool, which is one chance to drift per tool. */
+function paneHead() {
+  const head = $.opt('#pane-right .px-pane-head'); if (!head) return;
+  const t = toolOf(tool);
+  head.innerHTML = `<i data-lucide="${esc(t?.icon || 'panel-right')}"></i> ${esc(t?.drawer || t?.label || tool)}`;
   if (window.lucide) lucide.createIcons();
-  if (id === tool) pane.cls('+active');
-  return pane;
 }
 
 /** One item of a ribbon group that is a CONTROL rather than a command — a search box, a colour, a
@@ -1237,32 +1242,49 @@ function exportName(ext) {
 
 /* -- Chrome wiring -------------------------------------------------- */
 
-// Draggable splitters — Prism's pattern: pointer-capture drag sets a CSS var,
-// persisted per side. Left resizes the rail, right the contextual pane.
+// Draggable splitters — Prism's pattern: pointer-capture drag sets a CSS var, persisted per side.
+// ONE drag, three uses: the rail, the contextual pane, the console.
+//
+// `panel()` is asked at pointerdown, never named here. The right one used to resolve to a hardcoded
+// augment-or-analysis pair, written before Pages, Redact and Forms existed: on any other tool it
+// measured a pane 0 wide, the drag started from zero and the pane snapped to its floor. The CSS rule
+// for these panes says it plainly — adding a tool means naming its drawer, not editing a file — and
+// this function had kept the list the CSS had already given up. The pane that is OPEN is the pane
+// that resizes.
 function wireSplitters() {
   const root = document.documentElement;
   const saved = (k) => localStorage.getItem(k);
   if (saved('prism_leftw'))  root.style.setProperty('--px-rail-w',   saved('prism_leftw'));
   if (saved('prism_rightw')) root.style.setProperty('--px-drawer-w', saved('prism_rightw'));
-  const wire = (el, cssVar, lsKey, fromLeft, lo, hi, panel) => {
+  if (saved('prism_logh'))   root.style.setProperty('--px-log-h',    saved('prism_logh'));
+  // `grow` says whether moving the pointer AWAY from the handle's own side makes the pane bigger:
+  // true for the rail (it grows rightwards), false for the right pane and for the console, which
+  // both grow towards the pointer's origin.
+  const wire = (el, cssVar, lsKey, axis, grow, lo, hi, panel) => {
     if (!el) return;
+    const vert = axis === 'y';
     el.addEventListener('pointerdown', e => {
+      const box = panel();
+      if (!box) return;                       // nothing open on this side: no drag rather than a bad one
       e.preventDefault();
-      const startX = e.clientX, startW = panel().getBoundingClientRect().width;
+      const start = vert ? e.clientY : e.clientX;
+      const r = box.getBoundingClientRect();
+      const startW = vert ? r.height : r.width;
       el.setPointerCapture(e.pointerId);
-      el.classList.add('dragging'); document.body.classList.add('col-resizing');
-      const move = ev => { const dx = ev.clientX - startX;
-        const w = clamp(fromLeft ? startW + dx : startW - dx, lo, hi);
-        root.style.setProperty(cssVar, w + 'px'); };
-      const up = () => { el.classList.remove('dragging'); document.body.classList.remove('col-resizing');
+      el.classList.add('dragging'); document.body.classList.add(vert ? 'row-resizing' : 'col-resizing');
+      const move = ev => { const d = (vert ? ev.clientY : ev.clientX) - start;
+        const top = typeof hi === 'function' ? hi() : hi;
+        root.style.setProperty(cssVar, clamp(grow ? startW + d : startW - d, lo, top) + 'px'); };
+      const up = () => { el.classList.remove('dragging'); document.body.classList.remove('col-resizing', 'row-resizing');
         localStorage.setItem(lsKey, getComputedStyle(root).getPropertyValue(cssVar).trim());
         el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); };
       el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
     });
   };
-  wire($.opt('#split-left'),  '--px-rail-w',   'prism_leftw',  true,  170, 480, () => $('#rail'));
-  wire($.opt('#split-right'), '--px-drawer-w', 'prism_rightw', false, 210, 560,
-       () => $.opt('#augment-drawer.px-drawer') && document.body.classList.contains('tool-augment') ? $('#augment-drawer') : $('#analysis-drawer'));
+  wire($.opt('#split-left'),  '--px-rail-w',   'prism_leftw',  'x', true,  170, 480, () => $.opt('#rail'));
+  wire($.opt('#split-right'), '--px-drawer-w', 'prism_rightw', 'x', false, 210, 560, () => $.opt('#pane-right'));
+  wire($.opt('#split-log'),   '--px-log-h',    'prism_logh',   'y', false, 140,
+       () => Math.round(window.innerHeight * 0.88), () => $.opt('#log-console'));
 }
 
 function wireChrome() {

@@ -91,6 +91,7 @@ public final class PdfWriter {
             PdfWriter w = new PdfWriter(pdf, opt.get(ConvertOptions.SELECTABLE));
             for (OCDPage p : doc.pages()) w.page(doc, p);
             PdfForms.write(pdf, doc);                // the model fields → a real, fillable AcroForm
+            PdfAnnots.write(pdf, doc);               // the annotation layer: live links, review markup
             outline(pdf, doc);                       // navigable bookmarks from the heading structure
             stamp(pdf, doc);                         // deterministic CreationDate + trailer /ID
             pdf.save(out);
