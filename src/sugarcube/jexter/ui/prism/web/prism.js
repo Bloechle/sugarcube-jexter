@@ -1,7 +1,7 @@
 // prism.js — the Prism chassis (100% client), verbatim from the PRISM reader core.
 //
-// Prism = this chassis + jexter.js (the engine seam). The chassis stays generic — it
-// reads ANY fixed-layout EPUB off the original tree via the Service Worker; jexter.js
+// Prism = this chassis + engine.js (the engine seam). The chassis stays generic — it
+// reads ANY fixed-layout EPUB off the original tree via the Service Worker; engine.js
 // plugs in through window.prism.hooks when the book is an OCD-EPUB (ocd/ members)
 // or when a local engine (/api/convert) is present: PDF import, member-based search
 // text, id-addressed highlights, TTS over the text layer, structure rail, exports.
@@ -56,7 +56,7 @@ window.prism = { state, hooks: {}, on };        // the tool seam: state · provi
 // EVENTS (multicast, chassis-emitted): 'tool'(id) · 'book'(state) · 'close'() ·
 // 'page'(idx) · 'frame'(iframe, idx). Subscribe with P.on(evt, cb) → off().
 // PROVIDERS (singular, hooks.*): openPdf · highlight · ttsNodes — one implementation
-// answers the chassis (jexter.js owns them today).
+// answers the chassis (engine.js owns them today).
 // THE escaping rule, exported as P.esc. Quotes included: a value that is safe in text is not safe in an
 // attribute, and three modules had each rewritten a stricter copy because this one was not. One rule, the
 // strict one — escaping a quote in text content costs nothing.
@@ -248,7 +248,15 @@ function control(c) {
   const input = $.create('input');
   input.type = c.field;                                   // search · color · number · text
   input.value = c.value == null ? '' : String(c.value);
+  // A WIDE control (a text box) is 1.9rem tall where a small one is 1.15rem — the icon's height — so it
+  // fills the box the caption would otherwise share, and a caption under it makes the control taller
+  // than a command and THE WHOLE ROW grows to fit: measured 84 px against 72 on Forms, which is a
+  // visible jolt of the stage when you switch to that tool. prism.css states the rule ("small controls
+  // are captioned, wide ones speak for themselves"); stating it is not enforcing it. So the chassis
+  // enforces it here, and does not lose the name: a wide control WEARS its label, as its placeholder.
+  const wide = c.field === 'search' || c.field === 'text';
   if (c.placeholder != null) input.placeholder = c.placeholder;
+  else if (wide && c.label)  input.placeholder = c.label;
   for (const k of ['min', 'max', 'step']) if (c[k] != null) input.setAttribute(k, String(c[k]));
   if (c.list?.length) {                                   // suggestions, so a regex field is not a blank wall
     const dl = $.create('datalist');
@@ -266,8 +274,9 @@ function control(c) {
   if (c.unit) { const u = document.createElement('span'); u.className = 'px-rb-unit'; u.textContent = c.unit; ctl.appendChild(u); }
   ctl.mount(box);
   // The caption is the control's own name and goes UNDER it, like every command's label — never inside
-  // the control as well: two names for one thing is one of them going stale.
-  if (c.label) $.create('span', { class: 'px-rb-cap', text: c.label }).mount(box);
+  // the control as well: two names for one thing is one of them going stale. A wide control has already
+  // taken its name inside (above), which is the only place it fits.
+  if (c.label && !wide) $.create('span', { class: 'px-rb-cap', text: c.label }).mount(box);
   box.setAttribute('title', title);
   return box;
 }
@@ -1484,6 +1493,6 @@ async function fetchXml(url) {
   return d;
 }
 
-/* -- The jexter seam: the chassis API jexter.js builds on ----------- */
+/* -- The jexter seam: the chassis API engine.js builds on ----------- */
 Object.assign(window.prism, { openEpub, closeBook, goTo, whenFrameReady, markRect, setPageBox, frameToClient,
   clearAllHl, centreOn, fold, esc, toast, pickSave, saveAs, exportName, logLine, putMember });

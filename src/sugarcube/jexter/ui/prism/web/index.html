@@ -27,6 +27,7 @@
   <script type="module" src="./tts.js"></script>
   <script type="module" src="./editor.js"></script>
   <script type="module" src="./redact.js"></script>
+  <script type="module" src="./compare.js"></script>
   <script type="module" src="./forms.js"></script>
   <script type="module" src="./pages.js"></script>
 </head>
@@ -120,7 +121,7 @@
       </section>
 
       <section id="analysis-drawer" class="px-pane-slot">
-        <!-- Overlays, pipeline and re-analyze live in this tool's ribbon (jexter.js). What stays here is
+        <!-- Overlays, pipeline and re-analyze live in this tool's ribbon (engine.js). What stays here is
              what is READ: the node tree and the inspector, which used to start below two rows of controls. -->
         <div id="page-tree" class="ntree"><div class="search-info">Open a page to browse its nodes.</div></div>
         <div id="inspect-body" class="inspect-body"><div class="search-info">Click content on a page to inspect it.</div></div>
@@ -128,6 +129,14 @@
 
       <section id="edit-drawer" class="px-pane-slot">
         <div id="ed-info" class="search-info">Click content on a page to select it.</div>
+      </section>
+
+      <section id="compare-drawer" class="px-pane-slot">
+        <!-- The file input lives here, not in the ribbon: a ribbon item is a command, and a file
+             picker is a control the browser owns. The command clicks it. -->
+        <input id="cmp-file" type="file" accept=".pdf,.epub,.ocd.epub" hidden="hidden" />
+        <div id="cmp-info" class="search-info">No other document chosen yet.</div>
+        <ul id="cmp-list" class="nav-list"></ul>
       </section>
 
       <section id="forms-drawer" class="px-pane-slot">
@@ -155,9 +164,13 @@
       </section>
 
       <section id="redact-drawer" class="px-pane-slot">
-        <!-- Commands live in this tool's ribbon (redact.js). The drawer keeps what is READ: the state of
-             the work and the list of zones. -->
-        <div id="rd-info" class="search-info">Pick zones, find text, or audit — Apply proves and rewrites.</div>
+        <!-- Commands live in this tool's ribbon (redact.js). The drawer keeps what is READ: the
+             verdict, its method, the state of the work, and one list holding both.
+             The verdict comes FIRST because it is the answer the reader opened the document for, and
+             its method is part of it: an audit whose method is unstated is an opinion. -->
+        <div id="rd-verdict" class="search-info">Not checked yet.</div>
+        <div id="rd-method" class="search-info"></div>
+        <div id="rd-info" class="search-info">Pick zones, find text, or repair the findings — Apply proves and rewrites.</div>
         <!-- The selected zone, in numbers: the handles put the box roughly where it belongs, these say
              42.5. Both write the same rectangle, in PAGE space — the units the engine reads. -->
         <div id="rd-zone-info" class="search-info">Click a zone to select it — the handles move and resize it.</div>

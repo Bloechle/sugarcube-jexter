@@ -1,9 +1,23 @@
-/* redact.js — "Redact": see what a redaction still hides, pick what must go, apply — and only keep a
- * result the engine proved clean.
+/* redact.js — "Redact": is this document actually redacted? — see what it still hides, pick what must
+ * go, apply, and only keep a result the engine proved clean.
  *
- * One list of ITEMS, all in the audit's JSON shape {page, rect, box, color, kind, text}, from four sources:
- *   Audit   — /api/convert?to=audit: what is still under the boxes (kind text_under_box · image_under_box ·
- *             pending_redact), red on the page, the hidden text in the tooltip and the list. The demo.
+ * TWO LISTS, and keeping them apart is the whole architecture of this tool.
+ *
+ *   THE VERDICT (`st.report`) — /api/convert?to=audit: what is still recoverable under the boxes, as the
+ *   engine's purely GEOMETRIC query on the model (no rendering, no OCR, no darkness threshold: an opaque
+ *   box above a node is a leak whatever the pixels now hold). It runs BY ITSELF, on entry and on every
+ *   new document, because a verdict is not a command you go hunting for in a ribbon — you opened the
+ *   document to know, and the answer is what the pane says before you touch anything. It is a REPORT: it
+ *   is never persisted and never sent to Apply.
+ *
+ *   THE WORK (`st.items`) — what Apply will remove, in the audit's own JSON shape {page, rect, box,
+ *   color, kind, text}. It persists as OEBPS/ocd/redact.json, and the engine applies that member on
+ *   EVERY export (engine.js) — which is exactly why the verdict may not flow into it on its own. Looking
+ *   at a document must never rewrite it: **Repair** is the one verb that turns findings into work.
+ *
+ * Sources of the work list:
+ *   Repair  — every finding of the verdict, adopted as a repair zone: the covering box stays, what it
+ *             hid goes. The engine refuses a zone that only PARTLY covers a box (see `refusal`).
  *   Pick    — Zone: drag a rectangle · Block: click a paragraph (Shift-click: one run) · Page: the whole
  *             current page. Pure geometry, computed here, previewed at once. A zone STAYS: click it and
  *             it goes under the handles (see below).
@@ -13,12 +27,17 @@
  *             pages, their images, structures/annots — which are put into the open container and the
  *             touched frames reloaded. Nothing else moves; the cost is what the edit touches.
  *   Reveal  — a VIEW, not an option: the boxes become outlines and everything hidden paints in one
- *             loud colour, so "did the text actually go?" is answered by looking. Writes nothing.
+ *             loud colour, so "did the text actually go?" is answered by looking. Writes nothing. It sees
+ *             more than the verdict does (white ink, a zero alpha, an OCR layer — no box involved) and
+ *             proves less: the engine walks the model, the eye looks at a screen. Neither replaces the
+ *             other, which is why both are in the Audit group.
+ *   Report  — the verdict as text a compliance desk can file, its METHOD line included: an audit whose
+ *             method is unstated is an opinion.
  *
  * Preview is instant and honest: an item WITHOUT a box (something to remove) is painted opaque in the
- * chosen colour — the page looks redacted now; an item WITH a box (an audit finding: already covered) is
- * shown red and translucent — what you see is what is still there. Items persist in the container as
- * OEBPS/ocd/redact.json, so they survive a reload and Export applies them even without Apply.
+ * chosen colour — the page looks redacted now; a finding, adopted or not, is shown red and translucent —
+ * what you see is what is still there. Items persist in the container as OEBPS/ocd/redact.json, so they
+ * survive a reload and Export applies them even without Apply; the verdict does not persist at all.
  *
  * A zone you can only draw is a zone you cannot correct: the second attempt is another drag from
  * scratch, and "a little more off the left" is not expressible. So a zone is an OBJECT — click it and
@@ -66,7 +85,23 @@ svg .rd-hov-box { fill:var(--jx-brand-bright, #5e9bd6); fill-opacity:.10;
 // of state and the chassis rebuilds the row, so a value read back from the DOM is a value that reverts
 // to its default the next time anything happens. `sel` is an INDEX into items — the rects are redrawn
 // constantly and an element reference would point at a node the page no longer holds.
-const st = { items: [], pick: 'zone', on: false, sel: -1, fill: '#000000', meta: false, match: '', reveal: false };
+const st = {
+  items: [], pick: 'zone', on: false, sel: -1, fill: '#000000', meta: false, match: '', reveal: false,
+  // The verdict, kept APART from the work: `persist()` writes st.items into the container and the engine
+  // applies that member on every export, so a finding that walked in here on its own would repair the
+  // document because somebody opened a tab. Adoption is a verb (Repair), never a side effect.
+  report: { ran: false, busy: false, pages: 0, findings: [] },
+};
+
+/** What each kind of finding IS, in the reader's words. The engine names the kind; naming it in English
+ *  is the tool's job, and the same sentence serves the page tooltip, the list and the filed report. */
+const KIND = {
+  text_under_box:  'text still readable under a box',
+  invisible_text:  'text painted the colour of what it sits on',
+  image_under_box: 'an image still there under a box',
+  pending_redact:  'a redaction annotation never applied',
+  match:           'a match of the search pattern',
+};
 
 /** Suggestions on the Find field. A regex box with nothing in it is a blank wall, and the patterns a
  *  redaction actually hunts are always the same handful. They are Java regexes — the engine's. */
@@ -80,6 +115,23 @@ const PATTERNS = [
 
 const isFinding = (it) => !!it.box;                                    // an audit finding covers something already
 const item = (page, rect, kind, text = '', box = '', color = '') => ({ page, rect: rect.map(v => +v.toFixed(2)), box, color, kind, text });
+
+/** A finding's identity, so the verdict and the work list can name the same thing. It is WHAT and WHERE
+ *  — kind and rectangle on a page — not the box id, because a finding with no covering box (invisible
+ *  ink, a pending mark) has none and would collide with every other one. */
+const key = (f) => `${f.page}|${f.kind}|${(f.rect || []).map(v => (+v).toFixed(2)).join(',')}`;
+const adoptedKeys = () => new Set(st.items.map(key));
+
+/** Every finding known about one page: the verdict's, plus the ones already adopted as work — deduped,
+ *  so nothing is drawn, counted or outlined twice. Reveal and the overlay both ask this, and only this:
+ *  what a box hides is the ENGINE's answer, and there is one of it. */
+function hidden(idx) {
+  const out = [], seen = new Set();
+  const take = (f) => { const k = key(f); if (!seen.has(k)) { seen.add(k); out.push(f); } };
+  for (const f of st.report.findings) if (f.page === idx + 1) take(f);
+  for (const it of st.items) if (it.page === idx + 1 && isFinding(it)) take(it);
+  return out;
+}
 
 /* -- page geometry ------------------------------------------------------------------------------ */
 function pageBox(svg) {
@@ -117,7 +169,9 @@ function rect(doc, cls, s, title, fill) {
   return r;
 }
 const label = (it) => it.kind === 'image_under_box' ? `image, ${Math.round(+it.text * 100)}% covered`
-  : it.kind === 'pending_redact' ? `pending /Redact ${it.text}` : it.text || it.kind;
+  : it.kind === 'pending_redact' ? `pending /Redact ${it.text}` : it.text || KIND[it.kind] || it.kind;
+/** The page tooltip: what it is, and what kind of leak that is. */
+const tip = (f) => `${label(f)} — ${KIND[f.kind] || f.kind}`;
 // The preview is honest: an item to be removed is painted OPAQUE in the chosen colour — the page looks
 // redacted now. Seeing whether the text underneath is really gone is Reveal's job, not a translucent
 // box's. Every zone carries its index, which is how a click on the page and a click in the list name
@@ -129,9 +183,19 @@ function draw(doc, idx) {
   st.items.forEach((it, i) => {
     if (it.page !== idx + 1) return;
     const r = isFinding(it)
-      ? rect(doc, 'rd-find', toSvg(b, it.rect), label(it))
+      ? rect(doc, 'rd-find', toSvg(b, it.rect), tip(it))
       : rect(doc, 'rd-zone', toSvg(b, it.rect), label(it), st.fill);
     r.setAttribute('data-i', String(i));
+    g.appendChild(r);
+  });
+  // The verdict's own findings, minus the ones already adopted — those are drawn above, as work. Two
+  // rectangles on one leak would read as two leaks, and the count in the drawer would disagree with the
+  // page. They are marked `data-f`, not `data-i`: a finding is a REPORT, nothing selects or drags it.
+  const seen = adoptedKeys();
+  st.report.findings.forEach((f, i) => {
+    if (f.page !== idx + 1 || !Array.isArray(f.rect) || seen.has(key(f))) return;
+    const r = rect(doc, 'rd-find', toSvg(b, f.rect), tip(f));
+    r.setAttribute('data-f', String(i));
     g.appendChild(r);
   });
 }
@@ -358,13 +422,13 @@ function whyHidden(g, covered, bg, svg) {
   return null;
 }
 
-/** The box ids the audit named on this page, and the nodes they cover. */
+/** The box ids the audit named on this page, and the nodes they cover — from the verdict AND from the
+ *  findings already adopted, because Reveal must outline a box whether or not it is queued for repair. */
 function boxesOf(idx) {
   const boxes = new Set(), covered = new Set();
-  for (const it of st.items) {
-    if (it.page !== idx + 1) continue;
-    if (it.box) boxes.add(it.box);
-    if (it.node) covered.add(it.node);
+  for (const f of hidden(idx)) {
+    if (f.box) boxes.add(f.box);
+    if (f.node) covered.add(f.node);
   }
   return { boxes, covered };
 }
@@ -373,7 +437,7 @@ function boxesOf(idx) {
  *  inside the content, which would change the very bbox other tools hit-test against. The span comes
  *  from what the page states: `data-blanks` records every inkless glyph's x, in em along the run. */
 function markRun(doc, g, layerG) {
-  const b = (g.getAttribute('data-b') || '').trim();
+  const b = (g.getAttribute('data-blanks') || '').trim();
   if (!b) return;
   const xs = b.split(/\s+/).map(e => +e.split(':').pop()).filter(Number.isFinite);
   if (!xs.length) return;
@@ -405,10 +469,9 @@ function revealOn(doc, idx) {
   // fill to change and no run to walk, so counting only runs made the tool announce "nothing hidden"
   // while it was outlining the very box that hid a passport number. The findings are the engine's
   // answer: count them, and name what kind of thing leaked.
-  for (const it of st.items) {
-    if (it.page !== idx + 1 || !isFinding(it)) continue;
-    const k = it.kind === 'image_under_box' ? 'image under a box'
-            : it.kind === 'pending_redact'  ? 'unapplied /Redact mark' : 'text under a box';
+  for (const f of hidden(idx)) {
+    const k = f.kind === 'image_under_box' ? 'image under a box'
+            : f.kind === 'pending_redact'  ? 'unapplied /Redact mark' : 'text under a box';
     found[k] = (found[k] || 0) + 1;
   }
   const esc = (id) => '#' + (window.CSS?.escape ? window.CSS.escape(id) : id);
@@ -445,8 +508,8 @@ function toggleReveal() {
   // What a box hides is the ENGINE's to judge — it is a question about paint order over the model, and
   // RedactionAudit owns it. Re-deriving it here would be a second authority for one answer, so Reveal
   // uses the findings when there are some and says plainly what it cannot see when there are none.
-  const audited = st.items.some(isFinding);
-  const hint = audited ? '' : ' · run Audit to add what a box hides';
+  const audited = st.report.ran || st.items.some(isFinding);
+  const hint = audited ? '' : ' · Re-check asks the engine what a box hides';
   // "item", not "run": an image under a box is a leak and it is not a run — the word has to cover both,
   // or the count reads as a contradiction of the very finding it is reporting.
   P.toast(n
@@ -588,7 +651,7 @@ function wholePage() {
   add(item(idx + 1, [b.x, b.y, b.w, b.h], 'page', `page ${idx + 1}`));
 }
 
-/* -- the engine: audit, find, apply — all on the one route -------------------------------------- */
+/* -- the engine: check, find, apply — all on the one route ------------------------------------- */
 const bytes = () => { const b = P.bookBytes?.(); if (!b) P.toast('Open a document first.', 'warning'); return b; };
 const reason = (e) => { try { return JSON.parse(e.message).error || e.message; } catch { return e.message || String(e); } };
 
@@ -608,33 +671,89 @@ function refusal(msg) {
   const pages = [...new Set([...m[1].matchAll(/page=(\d+)/g)].map(x => x[1]))];
   const what = kinds.every(k => k === 'image_under_box') ? 'an image' : 'text';
   return [`Nothing was written: on page ${pages.join(', ')}, ${what} is still hidden by a box your zone only `
-        + `PARTLY covers — the piece left over goes on hiding it. Cover the whole box, or run Audit, which turns `
-        + `that box into a repair zone of its own.`, 'warning', 9000];
+        + `PARTLY covers — the piece left over goes on hiding it. Cover the whole box, or press Repair, which `
+        + `turns that box into a repair zone of its own.`, 'warning', 9000];
 }
-const report = async (art) => JSON.parse(dec(art.bytes)).findings || [];
+const parseFindings = async (art) => JSON.parse(dec(art.bytes)).findings || [];
 // Every one of these reshuffles the list, and `sel` is an index into it: an index kept across a
 // reshuffle points at whatever moved into that slot, which is how a reader deletes a zone they never
 // selected. The selection is dropped, deliberately, wherever the indices move.
-async function audit() {
-  const b = bytes(); if (!b) return;
+/** THE VERDICT. Runs by itself on entry and on every new document, so `quiet` is the default: a reader
+ *  who has not asked anything gets the answer in the pane, not a toast over the page.
+ *
+ *  It writes NOTHING — not the container, not the item list. What it produces is a report, and a report
+ *  that queued work would make opening a tab an edit. */
+async function check(quiet = true) {
+  if (st.report.busy) return;
+  const b = quiet ? P.bookBytes?.() : bytes();
+  if (!b) return;
+  st.report.busy = true; status();
   try {
-    const found = await report(await backend.convert(b, 'audit'));
-    st.items = st.items.filter(it => !isFinding(it)).concat(found); st.sel = -1; refresh();
-    P.toast(found.length ? `${found.length} recoverable item(s) under the boxes — red on the pages.` : 'Clean: nothing recoverable under any box.', found.length ? 'warning' : 'success');
-  } catch (e) { P.toast(`Audit failed: ${reason(e)}`, 'danger'); }
+    const rep = JSON.parse(dec((await backend.convert(b, 'audit')).bytes));
+    st.report = { ran: true, busy: false, pages: rep.pages || P.state?.pages?.length || 0, findings: rep.findings || [] };
+    if (!quiet) {
+      const n = st.report.findings.length;
+      P.toast(n ? `${n} thing(s) still recoverable under the boxes — red on the pages.` : 'Clean: nothing recoverable under any box.', n ? 'warning' : 'success');
+    }
+  } catch (e) {
+    // A failed check is NOT a clean document — `ran` stays false, so no surface may say "clean".
+    st.report = { ran: false, busy: false, pages: 0, findings: [] };
+    P.toast(`Audit failed: ${reason(e)}`, 'danger');
+  } finally { st.report.busy = false; refresh(); }
+}
+
+/** Adopt the verdict as work: every finding becomes a repair zone — the covering box stays, what it hid
+ *  goes. The one crossing between the two lists, and it is a verb the reader presses. */
+async function repair() {
+  if (!st.report.ran) { await check(false); if (!st.report.ran) return; }
+  const seen = adoptedKeys();
+  const add = st.report.findings.filter(f => !seen.has(key(f)));
+  if (!add.length) {
+    P.toast(st.report.findings.length ? 'Every finding is already in the list.'
+                                      : 'Nothing to repair — the audit found nothing under the boxes.',
+            st.report.findings.length ? 'primary' : 'success');
+    return;
+  }
+  st.items = st.items.concat(add); st.sel = -1; refresh();
+  P.toast(`${add.length} finding(s) queued for repair — Apply removes what they still hide.`, 'warning');
+}
+
+/* -- the filed verdict --------------------------------------------------------------------------
+ *
+ * A verdict a compliance desk can file: what was checked, how, and what was found. The method line is
+ * not decoration — an audit whose method is unstated is an opinion. */
+function reportText() {
+  const when = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const name = P.state?.name || 'document';
+  const n = st.report.findings.length;
+  const head = [
+    `Redaction audit — ${name}`,
+    `${when} · ${st.report.pages} page${st.report.pages > 1 ? 's' : ''} · Sugarcube jexter`,
+    `Method: geometric. Every node that lies under an opaque box is reported, whatever the pixels`,
+    `above it now show. No rendering, no OCR, no darkness threshold.`,
+    '',
+  ];
+  if (!n) return [...head, 'CLEAN — nothing is recoverable under any box.'].join('\n');
+  return [...head, `${n} finding${n > 1 ? 's' : ''}:`,
+    ...st.report.findings.map(f => `p.${f.page}  ${(KIND[f.kind] || f.kind).padEnd(38)}${f.text ? '  “' + f.text + '”' : ''}`)].join('\n');
+}
+
+async function copyReport() {
+  try { await navigator.clipboard.writeText(reportText()); P.toast('Verdict copied, with its method.', 'success'); }
+  catch { P.toast('Could not reach the clipboard.', 'warning'); }
 }
 async function find() {
   const re = st.match.trim();
   if (!re) { P.toast('Type a pattern to find — the field is beside the command.', 'warning'); return; }
   const b = bytes(); if (!b) return;
   try {
-    const found = await report(await backend.convert(b, 'zones', { match: re }));
+    const found = await parseFindings(await backend.convert(b, 'zones', { match: re }));
     st.items = st.items.concat(found); st.sel = -1; refresh();
     P.toast(found.length ? `${found.length} match(es) marked.` : 'No match.', found.length ? 'primary' : 'warning');
   } catch (e) { P.toast(`Find failed: ${reason(e)}`, 'danger'); }
 }
 async function apply() {
-  if (!st.items.length) { P.toast('Nothing to redact: pick, find, or audit first.', 'warning'); return; }
+  if (!st.items.length) { P.toast('Nothing to redact: pick a zone, find a pattern, or press Repair.', 'warning'); return; }
   const b = bytes(); if (!b) return;
   const n = st.items.length, pages = [...new Set(st.items.map(it => it.page))];
   try {
@@ -649,6 +768,10 @@ async function apply() {
     st.items = []; st.sel = -1; refresh();
     pages.forEach(p => book.refreshPage(p - 1));
     P.toast(`Redacted ${n} item(s) on ${pages.length} page(s) — zones proven clean. Export to keep it.`, 'success');
+    // The verdict describes the document as it WAS one call ago. A stale "still hidden" survives the very
+    // repair that answered it, and a stale "clean" is the one wrong answer this tool may never give — so
+    // the check is asked again about what the container now holds.
+    check();
   } catch (e) { P.toast(...refusal(reason(e))); }
 }
 const reset = () => { st.items = []; st.sel = -1; refresh(); };
@@ -678,6 +801,10 @@ function bindDrawer() {
   // there is one notion of "the zone in question", shown twice — the lesson the light table and the
   // rail already learned from marking two different pages.
   $id('rd-list')?.addEventListener('click', e => {
+    // A finding row (`data-f`) is a report: it takes you to the page and nothing else — there is nothing
+    // to select, nothing to delete, and deleting a fact is not an operation. A work row (`data-i`) is.
+    const f = e.target.closest('[data-f]');
+    if (f) { P.goTo(st.report.findings[+f.dataset.f].page - 1); return; }
     const del = e.target.closest('.rd-del'), li = e.target.closest('[data-i]'); if (!li) return;
     const i = +li.dataset.i;
     if (del) { st.items.splice(i, 1); st.sel = -1; refresh(); return; }
@@ -688,10 +815,45 @@ function bindDrawer() {
 function status() {
   if (st.on) ribbon();                       // Clear follows the list
   const info = $id('rd-info'), list = $id('rd-list'); if (!info || !list) return;
+
+  // The verdict, and the method that makes it one. Stated even while nothing has been picked, because it
+  // is the answer the document was opened for.
+  const v = $id('rd-verdict'), how = $id('rd-method');
+  const f = st.report.findings;
+  if (v) v.textContent = !book.isOpen() ? 'Open a document first.'
+                       : st.report.busy ? 'Checking…'
+                       : !st.report.ran  ? 'Not checked yet.'
+                       : !f.length       ? `Clean · ${st.report.pages} page${st.report.pages > 1 ? 's' : ''} checked`
+                       : `${f.length} finding${f.length > 1 ? 's' : ''} · ${new Set(f.map(x => x.page)).size} page(s) affected`;
+  if (how) how.textContent = st.report.ran ? 'Geometric: what lies under an opaque box, whatever the pixels show.' : '';
+
   const n = st.items.length;
-  info.textContent = n ? `${n} item(s) — Apply removes them; the engine proves the result clean.` : 'Pick zones, find text, or audit — Apply proves and rewrites.';
-  list.innerHTML = st.items.map((it, i) =>
-    `<li><a class="nav-link${i === st.sel ? ' sel' : ''}" data-i="${i}"><span class="rd-kind${isFinding(it) ? '' : ' rd-zone-kind'}">p${it.page}</span><span class="rd-text">${P.esc(label(it))}</span><span class="rd-del" title="Remove">×</span></a></li>`).join('');
+  info.textContent = n ? `${n} item(s) — Apply removes them; the engine proves the result clean.`
+                       : 'Pick zones, find text, or repair the findings — Apply proves and rewrites.';
+
+  // ONE list, two sections: what the document still hides, and what is queued to go. They are different
+  // in kind — a finding is a fact about the file, an item is work about to change it — so they are told
+  // apart by a heading rather than by a colour a reader has to learn.
+  const seen = adoptedKeys();
+  const rows = [];
+  const loose = st.report.findings.filter(x => !seen.has(key(x)));
+  if (loose.length) {
+    rows.push('<li class="rd-group">Still hidden</li>');
+    st.report.findings.forEach((x, i) => {
+      if (seen.has(key(x))) return;
+      // The kind only when the row is showing the recovered TEXT — otherwise `label` already IS the
+      // kind, and a row would state it twice.
+      rows.push(`<li><a class="nav-link" data-f="${i}"><span class="rd-kind">p${x.page}</span>`
+              + `<span class="rd-text">${P.esc(label(x))}</span>`
+              + (x.text ? `<span class="px-sub">${P.esc(KIND[x.kind] || x.kind)}</span>` : '') + `</a></li>`);
+    });
+  }
+  if (n) {
+    if (loose.length) rows.push('<li class="rd-group">To remove</li>');
+    st.items.forEach((it, i) => rows.push(
+      `<li><a class="nav-link${i === st.sel ? ' sel' : ''}" data-i="${i}"><span class="rd-kind${isFinding(it) ? '' : ' rd-zone-kind'}">p${it.page}</span><span class="rd-text">${P.esc(label(it))}</span><span class="rd-del" title="Remove">×</span></a></li>`));
+  }
+  list.innerHTML = rows.join('');
 }
 
 /* -- the ribbon: what this tool DOES; the drawer keeps what it SHOWS ---------------------------- */
@@ -727,14 +889,24 @@ function ribbon() {
       { icon: 'x',       label: 'Clear',  title: 'Clear every zone and every finding', disabled: !st.items.length, on: reset },
     ]},
 
-    // Two ways of asking the same question, and they answer it differently: the engine PROVES (it walks
-    // the model in paint order), the eye SEES. Neither replaces the other — an audit finds what a box
-    // covers, Reveal also finds white ink, a zero alpha and an OCR layer, which no box is involved in.
-    { group: 'Check', items: [
-      { icon: 'scan-search', label: 'Audit', title: 'What does this document still hide? — the engine walks the model and proves it', disabled: !has, on: audit },
-      { icon: st.reveal ? 'eye-off' : 'eye', label: 'Reveal', active: st.reveal, disabled: !book.isOpen(),
+    // The verdict and what you can do about it. Two ways of asking the same question, answered
+    // differently: the engine PROVES (it walks the model in paint order), the eye SEES. Neither replaces
+    // the other — the audit finds what a box covers, Reveal also finds white ink, a zero alpha and an OCR
+    // layer, which no box is involved in. Repair is the ONE crossing from the verdict into the work list:
+    // the check runs by itself, but nothing it finds becomes an edit without this press.
+    { group: 'Audit', items: [
+      { icon: 'scan-search', label: st.report.busy ? 'Checking…' : 'Re-check',
+        title: 'Ask the engine again — after an edit, or on a document you just dropped',
+        disabled: !has || st.report.busy, on: () => check(false) },
+      { icon: st.reveal ? 'eye-off' : 'eye', label: 'Reveal', active: st.reveal, disabled: !has,
         title: 'Take the paint away: boxes become outlines and every hidden run — under a box, white, transparent, an OCR layer — shows itself. Changes this view only, never the document',
         on: toggleReveal },
+      { icon: 'wrench', label: 'Repair', disabled: !has || !st.report.findings.length,
+        title: 'Turn every finding into a repair zone: the covering box stays, what it hid goes',
+        on: repair },
+      { icon: 'clipboard-copy', label: 'Report', disabled: !st.report.ran,
+        title: 'Copy the verdict, with its method, as text a compliance desk can file',
+        on: copyReport },
     ]},
     // Everything the removal is: what the mark looks like, what else goes with it, and the verb. The
     // colour used to sit under a "Mark" group with the metadata switch — but a metadata purge is not a
@@ -751,7 +923,18 @@ function ribbon() {
         on: () => { st.meta = !st.meta; ribbon(); } },
       { icon: 'eraser', label: 'Apply', title: 'Remove the zones and prove the result clean', disabled: !st.items.length, on: apply },
     ]},
-  ], 'Drag on the page to add a zone · click one to select it, then drag its handles · Delete removes it · Reveal shows what is still hidden');
+  ], `${verdict()} · Drag on the page to add a zone · click one to select it, then drag its handles · Delete removes it`);
+}
+
+/** The answer, in one line, wherever the reader looks first. A check that FAILED is not a clean document:
+ *  `ran` stays false and this says so rather than reporting an absence of findings. */
+function verdict() {
+  if (!book.isOpen()) return 'Open a document — this tool answers whether anything is still readable under its black boxes';
+  if (st.report.busy) return 'Checking what is still under the boxes…';
+  if (!st.report.ran) return 'Not checked — Re-check asks the engine what is still under the boxes';
+  const n = st.report.findings.length;
+  if (!n) return 'Clean — every box has nothing left under it: the text was removed, not covered';
+  return `${n} thing${n > 1 ? 's are' : ' is'} still under a box — red on the pages; Repair queues them, Apply removes them`;
 }
 
 function pick(kind) {
@@ -762,13 +945,17 @@ function pick(kind) {
 
 /* -- tool -------------------------------------------------------------------------------------- */
 P.registerTool({
-  id: MODE, label: 'Redact', icon: 'eraser', drawer: 'Redact', title: 'Redact — see what a redaction hides, remove it, prove it',
+  id: MODE, label: 'Redact', icon: 'eraser', drawer: 'Redact',
+  title: 'Redact — is this document actually redacted? See what it still hides, remove it, prove it',
   experimental: true,
   onEnter() {
     st.on = true; bindDrawer(); ribbon();
     book.eachFrame((doc, idx) => { styleOn(doc); bind(doc, idx); draw(doc, idx); });
     gizmos.forEach(g => g.set({ enabled: true }));
     attach(); status();
+    // The verdict is not a command you go hunting for: the reader opened the document to know. Asked
+    // once per document — a second entry shows the answer already on the page.
+    if (!st.report.ran && book.isOpen()) check();
   },
   onLeave() {
     st.on = false;
@@ -777,7 +964,13 @@ P.registerTool({
     book.eachFrame(clean);
   },
 });
-P.on?.('book',  () => { load(); st.sel = -1; if (st.on) refresh(); else status(); });
+// A new document is a new verdict — and the OLD one must not survive it for even one frame, because a
+// stale "clean" is the one wrong answer this tool must never give.
+P.on?.('book',  () => {
+  load(); st.sel = -1;
+  st.report = { ran: false, busy: false, pages: 0, findings: [] };
+  if (st.on) { refresh(); check(); } else status();
+});
 // Bound either way — the chassis replays `frame` on the way OUT of a tool too — but a page is only
 // DRESSED while the tool is up, or this overlay comes back the instant onLeave removed it.
 P.on?.('frame', (f, idx) => {
@@ -792,7 +985,11 @@ P.on?.('frame', (f, idx) => {
     if (st.reveal) revealOn(d, idx);
   } catch { }
 });
-P.on?.('close', () => { st.items = []; st.sel = -1; gizmos.forEach(g => g.destroy()); gizmos.clear(); status(); });
+P.on?.('close', () => {
+  st.items = []; st.sel = -1;
+  st.report = { ran: false, busy: false, pages: 0, findings: [] };
+  gizmos.forEach(g => g.destroy()); gizmos.clear(); status();
+});
 window.addEventListener('keyup', e => { if (P.tool?.() === MODE && e.key === 'Shift') reHover(hover?.doc, false); });
 window.addEventListener('keydown', e => {
   if (P.tool?.() !== MODE || e.target.matches?.('input, textarea')) return;

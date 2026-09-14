@@ -267,7 +267,17 @@ body.has-drawer #toggle-drawer { display:inline-flex; }
    "not done yet" across the app. */
 .nav-link .fm-filled { color:var(--qry-blue); }
 .nav-link .fm-required { color:#c07a12; font-weight:600; }
-.fm-group { font-size:.6rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+/* Compare's rows are the diff itself: removed struck through, added in green, readable in one glance
+   without a legend. The context line is muted because it is the address, not the change. */
+.nav-link .cmp-del { color:#b42318; text-decoration:line-through; margin-right:.35rem; }
+.nav-link .cmp-add { color:#067647; }
+.nav-link .cmp-ctx { display:block; color:var(--qry-text-muted); font-size:.66rem; margin-bottom:.1rem; }
+#cmp-list .nav-link { display:block; white-space:normal; line-height:1.35; }
+.cmp-note { padding:.4rem var(--px-gutter); color:var(--qry-text-muted); font-size:.72rem; }
+/* One heading style for every pane that groups its rows — Forms by page, Redact by list (what is
+   still hidden vs what is to remove), Compare by section. A second declaration would be a second
+   thing to keep in step. */
+.rd-group, .cmp-group, .fm-group { font-size:.6rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
   color:var(--qry-text-muted); padding:.55rem .15rem .1rem; }
 .nav-link mark { background:color-mix(in srgb, var(--qry-blue) 34%, transparent); color:var(--qry-text); border-radius:2px; padding:0 .12em; }
 
@@ -726,7 +736,7 @@ body.col-resizing iframe { pointer-events:none; }   /* frames swallow pointermov
 .cfg-sec sl-switch { font-size:.82rem; }
 .cfg-hint { font-size:.72rem; color:var(--sl-color-neutral-500); line-height:1.35; }
 
-/* ── Fonts drawer: per-font glyph tables straight from pages/f.svg ────── */
+/* ── Fonts drawer: per-font glyph tables straight from pages/fonts.svg ────── */
 .px-fonts { --size: min(46rem, 94vw); }                  /* drawer width = the --size custom prop */
 .px-fonts::part(body) { padding: .7rem 1rem 1rem; }
 .fx-metrics { font-family:var(--qry-mono, ui-monospace, monospace); font-size:.68rem; color:var(--sl-color-neutral-500); margin-bottom:.45rem; }

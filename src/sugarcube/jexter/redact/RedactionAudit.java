@@ -55,7 +55,17 @@ public final class RedactionAudit {
 
     /** What was found under, or instead of, a redaction — or, for {@link #MATCH}, text a search asked to redact
      *  ({@link Redactor#match}): the same shape carries findings and zone requests. */
-    public enum Kind { TEXT_UNDER_BOX, IMAGE_UNDER_BOX, PENDING_REDACT, MATCH }
+    public enum Kind {
+        /** Text painted BEFORE an opaque cover that sits over it — the classic: a bar was drawn, nothing removed. */
+        TEXT_UNDER_BOX,
+        /** An image in the same position. */
+        IMAGE_UNDER_BOX,
+        /** Text painted in the colour of the opaque thing DIRECTLY UNDER IT — a word processor's black
+         *  highlighter. Geometrically nothing is hidden: the glyphs are on top. They are simply the same
+         *  colour as their background, so the page shows a smear and the text layer is untouched, which is
+         *  the most common failure of all and the one a purely "what is underneath" rule never sees. */
+        INVISIBLE_TEXT,
+        PENDING_REDACT, MATCH }
 
     /**
      * One leak. {@code page} is 1-based; {@code box} the id of the covering path (empty for a pending
@@ -120,6 +130,7 @@ public final class RedactionAudit {
     // ── thresholds ─────────────────────────────────────────────────────────────
     private static final double OPAQUE   = 0.9;   // fill alpha × node alpha at or above this hides what is under
     private static final double BOXY     = 0.6;   // path area / bounds area: a rectangle 1, a circle 0.785, a glyph or logo far below
+    private static final int    INK      = 12;    // per channel: same ink to the eye, different numbers in the file
     private static final double MIN_SIDE = 2.0;   // page units: rules and underlines are not boxes
 
     // ── the query ───────────────────────────────────────────────────────────────
@@ -132,25 +143,46 @@ public final class RedactionAudit {
         return new Report(no, out);
     }
 
+    /** A thing that hides what is painted before it: an opaque filled path, or an opaque image. A cover is
+     *  not a shape — it is a RECTANGLE OF INK AT A DEPTH — so the rule states exactly that, and a producer
+     *  who reaches for an image instead of a rectangle makes no difference to the verdict. An image's own
+     *  fill colour is unknown without decoding it, which this audit will not do; it reports none. */
+    private record Cover(String id, JxRect rect, float z, String color, int fill, boolean hasFill) {}
+
     private static void auditPage(OCDPage page, int no, List<Finding> out) {
-        List<OCDPath> boxes = page.paths().filter(RedactionAudit::isOpaqueBox).toList();
-        if (!boxes.isEmpty()) {
+        List<Cover> covers = new ArrayList<>();
+        page.paths().filter(RedactionAudit::isOpaqueBox)
+            .forEach(p -> covers.add(new Cover(p.id(), p.bounds(), p.z(), new JxColor(p.fill()).css(), p.fill(), true)));
+        page.images().filter(RedactionAudit::isOpaqueCover)
+            .forEach(i -> covers.add(new Cover(i.id(), i.bounds(), i.z(), "", 0, false)));
+
+        if (!covers.isEmpty()) {
             List<OCDText>  texts  = page.texts().toList();
             List<OCDImage> images = page.images().toList();
-            for (OCDPath box : boxes) {
-                JxRect r = box.bounds();
-                String color = new JxColor(box.fill()).css();
+            for (Cover box : covers) {
+                JxRect r = box.rect();
                 for (OCDText t : texts) {
-                    if (!isUnder(t, box)) continue;
-                    String hidden = covered(t, r);
-                    if (!hidden.isEmpty()) out.add(new Finding(no, Kind.TEXT_UNDER_BOX, box.id(), r, color, t.id(), hidden));
+                    String covered = covered(t, r);
+                    if (covered.isEmpty()) continue;
+                    if (t.z() < box.z()) {
+                        out.add(new Finding(no, Kind.TEXT_UNDER_BOX, box.id(), r, box.color(), t.id(), covered));
+                    } else if (box.hasFill() && sameInk(t.fill(), box.fill())) {
+                        // The glyphs are ABOVE the cover and the same colour as it. Nothing is under
+                        // anything; the text is merely unreadable, and fully selectable.
+                        out.add(new Finding(no, Kind.INVISIBLE_TEXT, box.id(), r, box.color(), t.id(), covered));
+                    }
                 }
                 for (OCDImage im : images) {
-                    if (!isUnder(im, box)) continue;
+                    // An image cover reports the TEXT it hides and nothing else. An image stacked on an
+                    // image is page furniture — a shadow under a gradient, artwork in layers — and a
+                    // document of rounded boxes is built of dozens of them: six false findings on an
+                    // ordinary form, measured. A filled RECTANGLE over an image is a redaction gesture;
+                    // one picture over another is not.
+                    if (!box.hasFill() || im.id().equals(box.id()) || im.z() >= box.z()) continue;
                     JxRect ib = im.bounds(), x = ib.intersection(r);
                     if (x.isEmpty()) continue;
                     String frac = String.format(Locale.US, "%.2f", (x.width() * x.height()) / (ib.width() * ib.height()));
-                    out.add(new Finding(no, Kind.IMAGE_UNDER_BOX, box.id(), r, color, im.id(), frac));
+                    out.add(new Finding(no, Kind.IMAGE_UNDER_BOX, box.id(), r, box.color(), im.id(), frac));
                 }
             }
         }
@@ -160,8 +192,22 @@ public final class RedactionAudit {
                         a.color() == null ? "" : a.color().css(), "", a.contents()));
     }
 
-    /** Painted before the box: the box is over it. */
-    private static boolean isUnder(OCDNode n, OCDPath box) { return n.z() < box.z(); }
+    /** An image with no transparency, big enough to hide something: the same cover a filled rectangle is.
+     *  A producer that blacks out a passage with a pasted rectangle of pixels has made exactly the mistake
+     *  {@link #isOpaqueBox} was written for, and an audit that only knows about paths says the page is clean. */
+    static boolean isOpaqueCover(OCDImage im) {
+        if (im.alpha() < OPAQUE) return false;
+        JxRect b = im.bounds();
+        return b.width() >= MIN_SIDE && b.height() >= MIN_SIDE;
+    }
+
+    /** Two paints the eye cannot tell apart. Not equality: a producer writes the bar in DeviceGray and the
+     *  text in DeviceRGB, and the two round to values a few units apart. Alpha is ignored — both are opaque
+     *  by the time this is asked. */
+    static boolean sameInk(int a, int b) {
+        JxColor x = new JxColor(a), y = new JxColor(b);
+        return Math.abs(x.r() - y.r()) <= INK && Math.abs(x.g() - y.g()) <= INK && Math.abs(x.b() - y.b()) <= INK;
+    }
 
     /** A filled path that hides what is under it: opaque, box-shaped, bigger than a rule. */
     static boolean isOpaqueBox(OCDPath p) {
