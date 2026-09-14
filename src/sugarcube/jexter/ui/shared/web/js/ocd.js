@@ -131,9 +131,14 @@ export function parseFonts(text) {
             weight: attr(head, 'data-weight') || 'normal',
             style: attr(head, 'data-style') || 'normal',
             embedded: head.includes('data-embedded'),
-            ascent: +attr(head, 'data-asc') || 0, descent: +attr(head, 'data-desc') || 0,
-            cap: +attr(head, 'data-cap') || 0, xh: +attr(head, 'data-x') || 0,
-            space: +attr(head, 'data-sp') || 0,
+            // The metric names the FORMAT states (§B6) and SvgOcdWriter writes. They were the v1 short
+            // ones (`data-asc` · `data-desc` · `data-cap` · `data-x` · `data-sp`), so every metric of
+            // every font came back 0: Prism's and PDFInspector's font panels lost their cap-height and
+            // x-height guides outright and fell back to .75/.25 for the baseline, and `f.space` — the
+            // advance an authored run gives a character the face cannot paint — was never the face's.
+            ascent: +attr(head, 'data-ascent') || 0, descent: +attr(head, 'data-descent') || 0,
+            cap: +attr(head, 'data-capheight') || 0, xh: +attr(head, 'data-xheight') || 0,
+            space: +attr(head, 'data-space') || 0,
             cmap: new Map(), glyphs: [], glyphByGid: new Map(),
             raw: src,                                        // re-emitted verbatim at build
         };
@@ -231,6 +236,42 @@ export function fontsDefsOf(t) {
     if (!t) return '';
     const a = t.indexOf('<defs'), b = t.lastIndexOf('</defs>');
     return a < 0 || b < 0 ? '' : t.slice(a, b + 7);
+}
+
+/* -- PAINT order vs READING order — the one place the client states the difference ----------------
+ *
+ * A page is written in PAINT order, and that is not a detail: the rendering comes first and can never
+ * regress, so the DOM IS the paint and a viewer that draws it in order gets the document exactly right.
+ * The logical layer is recovered ON TOP of that and never moves a pixel: `data-order` carries the
+ * reading index of a node, emitted only where it DIFFERS from the paint position (FORMAT §B3).
+ *
+ *   draw in DOM order · read in data-order
+ *
+ * So anything that PAINTS, hit-tests or measures walks the DOM as it stands. Anything that READS the
+ * content — search, read-aloud, a text export, the reading-flow overlay, a label built from runs —
+ * re-sorts through here FIRST. Getting that backwards is silent: the page still looks perfect and only
+ * the words come out in the wrong order, on exactly the documents (two columns, a bottom-up producer,
+ * a knockout label) where it matters.
+ *
+ * The rule is `OCDReader.reorder`'s, which is the authority: the key is `data-order` when stated, and
+ * the node's own position when it is not — a node without the attribute was emitted at its content
+ * position already. */
+export const inReadingOrder = (els) => [...els]
+    .map((el, i) => ({ el, k: +(el.getAttribute?.('data-order') ?? i) }))
+    .sort((a, b) => a.k - b.k)
+    .map(x => x.el);
+
+/** Every run under `root`, in reading order, depth first — the text of a page as it is meant to be
+ *  read. Stops at the run: its `<use>` children are glyphs, not content. */
+export function readingRuns(root) {
+    const out = [];
+    (function walk(node) {
+        for (const el of inReadingOrder(node.children || [])) {
+            if (el.getAttribute?.('data-ocd') === 'run') out.push(el);
+            else walk(el);
+        }
+    })(root);
+    return out;
 }
 
 export function pageViewport(p) {
@@ -491,7 +532,7 @@ export class OcdPage {
         const t = svgel('g', { id: this.#nextRunId(), 'data-ocd': 'run', 'data-font': f.safe, 'data-size': F(size),
             class: this.cls({ fill }),
             'data-text': text, transform: (fr => `matrix(${F(size)} 0 0 ${F(-size)} ${F(x - fr.x)} ${F(fr.y + fr.h - y)})`)(this.frame) });
-        // EVERY character is accounted for: painted as a <use>, or recorded in data-b with its x in em.
+        // EVERY character is accounted for: painted as a <use>, or recorded in data-blanks with its x in em.
         // A glyph with no outline — the space, an unmapped char — that is skipped in silence makes the
         // reader align N-1 glyphs against N characters of data-text and TRUNCATE the run's tail. Measured:
         // "Bonjour, Jean-Luc!" came back "Bonjour, Jean-Luc", the space unrecorded, no error anywhere.
@@ -501,26 +542,44 @@ export class OcdPage {
             if (g && g.d) { this.glyphDef(f, g); t.appendChild(svgel('use', { href: `#${f.alias}-${g.gid}`, x: F(gx + shift) })); }
             else blanks.push(`${i}:${g ? g.gid + ':' : ''}${F(gx + shift)}`);
         });
-        if (blanks.length) t.setAttribute('data-b', blanks.join(' '));
+        // data-blanks, the ONE spelling: SvgOcdWriter writes it, OCDReader reads it, FORMAT §B4 states
+        // it. This path said `data-b` — the v1 name — so every sentinel a client authored was invisible
+        // to the engine, which is exactly the truncation the comment above describes.
+        if (blanks.length) t.setAttribute('data-blanks', blanks.join(' '));
         this.doc.usedFonts.add(f.alias);
-        const l = svgel('g', { 'data-ocd': 'l' });
-        const p = svgel('g', { id: 'a' + this.doc.seq++, 'data-ocd': 'p' });
+        // The GRAMMAR's names, not the v1 short ones. `OCDReader` switches on `data-ocd` and knows
+        // `paragraph` / `line`; anything else falls into its default branch, which is the pure paint
+        // carrier — so a run wrapped in `p`/`l` was spliced out of its paragraph on the first engine read
+        // and came back a loose page-root run. Measured 2026-09-14 on an authored page: `p` and `l`
+        // present before the round trip, gone after, the run reparented to the page.
+        // The paragraph id follows the engine's pN scheme for the same reason the run id follows tN — a
+        // structure reference names a node by id, and a page that mixes two id schemes is a page whose
+        // ids nobody can predict.
+        const l = svgel('g', { 'data-ocd': 'line' });
+        const p = svgel('g', { id: this.#nextId('p', 'paragraph'), 'data-ocd': 'paragraph' });
         l.appendChild(t); p.appendChild(l);
         this.mount(p, into);
         return { el: p, run: t, width: ax * size };
     }
 
-    /** Next page-scoped run id in the engine's scheme (t1, t2, …). */
-    #nextRunId() {
-        if (this.tn == null) {
-            this.tn = 0;
-            for (const g of this.svg.querySelectorAll('g[data-ocd="run"]')) {
-                const m = /^t(\d+)$/.exec(g.id || '');
-                if (m) this.tn = Math.max(this.tn, +m[1]);
+    /** Next page-scoped id in the engine's own scheme — `t1, t2, …` for a run, `p1, p2, …` for a
+     *  paragraph. Page-local by contract (IdStamper), so the only thing to avoid is a collision ON THIS
+     *  page: the highest number already there is read once per kind and counted up from. */
+    #nextId(prefix, kind) {
+        this.ids ??= {};
+        if (this.ids[prefix] == null) {
+            let n = 0;
+            for (const g of this.svg.querySelectorAll(`g[data-ocd="${kind}"]`)) {
+                const m = new RegExp(`^${prefix}(\\d+)$`).exec(g.id || '');
+                if (m) n = Math.max(n, +m[1]);
             }
+            this.ids[prefix] = n;
         }
-        return 't' + (++this.tn);
+        return prefix + (++this.ids[prefix]);
     }
+
+    /** The run id, in the engine's tN scheme — the text-layer tooling addresses runs by exactly it. */
+    #nextRunId() { return this.#nextId('t', 'run'); }
 
     /** Local glyph defs so external fonts.svg# uses render live — data-ui, stripped at build. */
     glyphDef(f, g) {

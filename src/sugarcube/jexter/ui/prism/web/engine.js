@@ -15,7 +15,7 @@
 
 import { zipSync } from 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm';
 import * as backend from './backend.js';
-import { parseFonts as parseFontsSvg, SVG_NS } from '/shared/js/ocd.js';
+import { parseFonts as parseFontsSvg, SVG_NS, inReadingOrder, readingRuns } from '/shared/js/ocd.js';
 import { book } from '/shared/js/book.js';
 
 const P = window.prism;                       // the chassis seam (state, hooks, API)
@@ -146,17 +146,35 @@ P.on('book', (state) => {
     document.body.classList.toggle('jx-book', jx.on);
     if (!jx.on) { renderStructure(); return; }
 
-    // per-page text layer: the v2 pages are self-contained — every run carries its
-    // exact unicode (spaces included) in data-text; document order is reading order
+    // per-page text layer: the v2 pages are self-contained — every run carries its exact unicode
+    // (spaces included) in data-text. This index is what SEARCH matches against and what the analysis
+    // labels quote, so it is READING order, not the DOM's: a regex pass took the runs as they were
+    // painted and a comment here claimed the two were the same. They are the same only until a page
+    // states otherwise, and then a phrase spanning two blocks stops matching and a snippet reads
+    // backwards — on a two-column page, exactly where a reader needs search most.
+    // The regex stays the fast path, and it is EXACT there: `data-order` is emitted only where reading
+    // order differs from paint order, so a page that does not contain the string is a page whose paint
+    // order IS its reading order. Only the pages that say otherwise are parsed and re-sorted.
+    // Measured, 60 pages / 2520 runs: decode 4.5 ms · regex 2.5 ms · DOM parse 1475 ms (~25 ms a page).
+    // Parsing every page to be safe would have cost twelve seconds at open on a 500-page book, to fix
+    // the ordering of the pages that have none. The substring test is the whole optimisation.
     const XMLU = { '&quot;': '"', '&amp;': '&', '&lt;': '<', '&gt;': '>' };
     const unesc = s => s.replace(/&(?:quot|amp|lt|gt);/g, m => XMLU[m]);
     const RUN = /<g id="(t\d+)" data-ocd="run"[^>]*? data-text="([^"]*)"/g;
     const pages = Object.keys(state.files)
         .filter(p => /^OEBPS\/pages\/page-\d+\.xhtml$/.test(p)).sort();
+    let parser = null;
     pages.forEach((path, i) => {
         const xml = dec(book.get(path));
-        const runs = [];
-        let m; while ((m = RUN.exec(xml))) runs.push({ id: m[1], text: unesc(m[2]) });
+        let runs = [];
+        if (xml.includes('data-order')) {
+            try {
+                parser ??= new DOMParser();
+                const svg = parser.parseFromString(xml, 'application/xml').querySelector('svg');
+                if (svg) runs = readingRuns(svg).map(r => ({ id: r.id, text: r.getAttribute('data-text') || '' }));
+            } catch { /* fall through to the painted order rather than index nothing */ }
+        }
+        if (!runs.length) { RUN.lastIndex = 0; let m; while ((m = RUN.exec(xml))) runs.push({ id: m[1], text: unesc(m[2]) }); }
         jx.runs[i] = runs;
         if (state.pages[i]) state.pages[i].text = runs.map(r => r.text).join(' ').replace(/\s+/g, ' ').trim();
     });
@@ -314,13 +332,16 @@ function renderInspector() {
 P.hooks.ttsNodes = (doc, idx) => {
     if (!jx.on) return null;                                 // generic EPUB → chassis fallback
     const paras = [];
-    for (const pEl of doc.querySelectorAll('svg [data-ocd="paragraph"]')) {
-        const runs = [...pEl.querySelectorAll('[data-ocd="run"]')];
+    // READING order, not the DOM's — `inReadingOrder` (ocd.js) is the one authority, and the reason is
+    // written there. Measured before it: a page painted lower-block-first was read "SECOND … FIRST"
+    // while the engine's own read-out said "FIRST … SECOND".
+    for (const pEl of inReadingOrder([...doc.querySelectorAll('svg [data-ocd="paragraph"]')])) {
+        const runs = readingRuns(pEl);
         if (!runs.length) continue;
         const role = runs[0].getAttribute('data-role');
         if (role === 'page-header' || role === 'page-footer') continue;
-        const lineEls = [...pEl.querySelectorAll(':scope > [data-ocd="line"]')];
-        const lines = lineEls.length ? lineEls.map(l => [...l.querySelectorAll('[data-ocd="run"]')]) : [runs];
+        const lineEls = inReadingOrder([...pEl.querySelectorAll(':scope > [data-ocd="line"]')]);
+        const lines = lineEls.length ? lineEls.map(l => readingRuns(l)) : [runs];
         const nodes = [];
         lines.forEach((line, li) => {
             line.forEach((el, ri) => {
@@ -417,7 +438,9 @@ function jumpToStruct(n) {
     P.whenFrameReady(pi, doc => {
         let first = null;
         for (const id of ids) {
-            const el = doc.getElementById(id) || doc.getElementById(paraOf(pi, id));
+            // A struct ref names a run or the paragraph around it, and BOTH ids are in the page
+            // (SvgOcdWriter writes `id` on either), so one lookup is the whole of it.
+            const el = doc.getElementById(id);
             if (!el) continue;
             P.markRect(doc, el, 'data-px-hl', 'rgba(51,105,159,.30)');
             if (!first) first = el;
@@ -426,8 +449,6 @@ function jumpToStruct(n) {
     });
 }
 
-// A struct ref may point at a run inside a paragraph group — either id exists in the page.
-const paraOf = () => '';
 
 /* -- Export as… : the container bytes through the engine -------------- */
 

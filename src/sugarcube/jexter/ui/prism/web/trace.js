@@ -103,7 +103,7 @@ function facts(el) {
   if (kind === 'run') {
     const u = el.getAttribute('data-text') || '';
     const glyphs = el.querySelectorAll('use').length;
-    const blanks = (el.getAttribute('data-b') || '').trim().split(/\s+/).filter(Boolean).length;
+    const blanks = (el.getAttribute('data-blanks') || '').trim().split(/\s+/).filter(Boolean).length;
     const m = /matrix\(([-\d.eE]+)[ ,]+([-\d.eE]+)/.exec(el.getAttribute('transform') || '');
     const angle = m ? num(Math.atan2(+m[2], +m[1]) * 180 / Math.PI) : null;
     return { title: 'text run', sub: el.id, body:
@@ -153,7 +153,7 @@ function facts(el) {
     const lines = el.querySelectorAll('[data-ocd="line"]').length;
     const text = runs.map(r => r.getAttribute('data-text') || '').join('');
     const glyphs = el.querySelectorAll('use').length;
-    const blanks = runs.reduce((n, r) => n + (r.getAttribute('data-b') || '').trim().split(/\s+/).filter(Boolean).length, 0);
+    const blanks = runs.reduce((n, r) => n + (r.getAttribute('data-blanks') || '').trim().split(/\s+/).filter(Boolean).length, 0);
     const fonts = [...new Set(runs.map(r => r.getAttribute('data-font')).filter(Boolean))];
     const sizes = [...new Set(runs.map(r => r.getAttribute('data-size')).filter(Boolean))];
     const role = el.querySelector('[data-role]')?.getAttribute('data-role');
@@ -305,7 +305,7 @@ function showCaptionFor(el, p) {
 // in as an overlay mode of Analysis, declared in that tool's ribbon, and this file stays separate — the
 // merge is an interface decision, not a reason to move 300 lines into another module.
 //
-// `on` is owned here and read by jexter.js through P.trace, so one flag decides who paints.
+// `on` is owned here and read by engine.js through P.trace, so one flag decides who paints.
 let on = false;
 
 function setOn(v) {

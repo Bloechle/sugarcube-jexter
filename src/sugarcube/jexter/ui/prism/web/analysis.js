@@ -4,11 +4,11 @@
 // the members, the page's node tree, and Re-analyze. Trace — the real-geometry pointer — is `trace.js`;
 // this tool only flips its flag, and that module turns itself off when the tool changes.
 //
-// Split out of `jexter.js` on 2026-09-07: the file registering this tool was also Prism's engine seam,
+// Split out of the engine seam (then `jexter.js`, now `engine.js`) on 2026-09-07: the file registering this tool was also Prism's engine seam,
 // and a newcomer looking for either found both. The seam is `engine.js`, and everything this file needs
 // from it is imported by name.
 import { jx, engine, bookBytes, pageIndexOf, activeStructure } from './engine.js';
-import { SVG_NS } from '/shared/js/ocd.js';        // the namespace every overlay element is created in
+import { SVG_NS, inReadingOrder, readingRuns } from '/shared/js/ocd.js';  // the overlay namespace, and the one reading-order authority
 import * as backend from './backend.js';
 import { book } from '/shared/js/book.js';
 
@@ -98,7 +98,10 @@ function drawOverlays(doc, idx) {
     const g = doc.createElementNS(SVG_NS, 'g');
     g.setAttribute('data-px-ov', '1'); g.setAttribute('pointer-events', 'none');
     const hmap = headingMap(idx);
-    const blocks = [...w.querySelectorAll(':scope > [data-ocd="paragraph"], :scope > image, :scope > [data-ocd="media"]')];
+    // Reading order, not the DOM's — this overlay's whole subject IS the reading order ("Draw the
+    // reading order"), so taking the blocks as they were PAINTED would draw the arrows of a page the
+    // model does not have. `inReadingOrder` (ocd.js) states the rule once.
+    const blocks = inReadingOrder([...w.querySelectorAll(':scope > [data-ocd="paragraph"], :scope > image, :scope > [data-ocd="media"]')]);
     const boxes = [];
     for (const b of blocks) {
         let bb; try { bb = b.getBBox(); } catch { continue; }
@@ -212,7 +215,7 @@ function buildTree(idx) {
             const ocd = el.getAttribute?.('data-ocd') || '';
             const id = el.getAttribute?.('id') || '';
             if (!id) continue;
-            const label = ocd === 'paragraph' ? truncate([...el.querySelectorAll('[data-ocd="run"]')].map(t => runText(idx, t.id)).join(' ').trim() || 'paragraph', 34)
+            const label = ocd === 'paragraph' ? truncate(readingRuns(el).map(t => runText(idx, t.id)).join(' ').trim() || 'paragraph', 34)
                 : ocd ? (KIND[ocd] || ocd)
                 : el.tagName === 'image' ? 'image' : el.tagName === 'path' ? 'path' : el.tagName.toLowerCase();
             host.appendChild(row(el, 0, label, id));
@@ -287,7 +290,7 @@ function renderInspect(el, idx) {
     if (ocd === 'paragraph' || ocd === 'group' || ocd === 'graphic') kv('children', el.children.length);
     let text = '';
     if (ocd === 'run') text = runText(idx, id);
-    else if (ocd === 'paragraph') text = [...el.querySelectorAll('[data-ocd="run"]')].map(t => runText(idx, t.id)).join(' ').trim();
+    else if (ocd === 'paragraph') text = readingRuns(el).map(t => runText(idx, t.id)).join(' ').trim();
     host.innerHTML = `<div class="nd-type">${P.esc(kind)}</div><div class="nd-rows">${rows.join('')}</div>`
         + (text ? `<div class="nd-text">${P.esc(text)}</div>` : '');
 }

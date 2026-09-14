@@ -123,7 +123,7 @@ public final class SvgOcdWriter {
         // <g> block would serialize its whole subtree at the group's z and silently invert the
         // paint interleave in the stored file (measured: icon connectors covered by their tile).
         // Groups that carry a paint context (transform, clip, blend, alpha) stay atomic, as in
-        // paint. Reading order is carried by data-o against the same spliced list on both sides —
+        // paint. Reading order is carried by data-order against the same spliced list on both sides —
         // emitted ONLY where the two orders disagree, so a document that reads as it paints says nothing.
         var spliced = spliceGraphics(content);
         var reading = new java.util.IdentityHashMap<OCDNode, Integer>(spliced.size());
@@ -305,10 +305,10 @@ public final class SvgOcdWriter {
         double k = fs > 0 ? fs : 1;
         var b = new StringBuilder();
         int i = 0;
-        // ONE predicate decides the partition. A glyph is recorded in data-b iff it will not be
+        // ONE predicate decides the partition. A glyph is recorded in data-blanks iff it will not be
         // painted, and it will not be painted iff it has no outline to reference — glyphDef returns
         // null for the Spacer's sentinel (gid −1), for an unknown gid and for an inkless glyph alike.
-        // Driving data-b off isBlank() (unicode-blank) while <use> skipped on "no outline" made two
+        // Driving data-blanks off isBlank() (unicode-blank) while <use> skipped on "no outline" made two
         // predicates partition the same set, and a glyph that is inkless but NOT unicode-blank fell
         // between them: NBSP (U+00A0) is not whitespace to Character.isWhitespace, so it was painted
         // nowhere and recorded nowhere, while data-text still carried its char. The reader then aligned
@@ -335,7 +335,7 @@ public final class SvgOcdWriter {
 
         for (OCDText.Glyph g : t.glyphs()) {
             String def = glyphDef(font, ff, g.gid(), glyphs);
-            if (def == null) continue;                        // no outline: recorded in data-b above, paints nothing
+            if (def == null) continue;                        // no outline: recorded in data-blanks above, paints nothing
             // x="0" est la valeur par défaut de SVG et celle que le lecteur applique : ne pas l'écrire.
             String gx = f(g.x() / k);
             sb.append("<use href=\"fonts.svg#").append(def);

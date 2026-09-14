@@ -84,7 +84,7 @@ public final class OCDStructNode {
     public boolean         isEmpty()                    { return refs.isEmpty() && children.isEmpty(); }
 
     @Override public String toString() {
-        return "OCDStruct[" + type + (level > 0 ? " L" + level : "")
+        return "OCDStructNode[" + type + (level > 0 ? " L" + level : "")
                 + (header != HeaderKind.NONE ? " " + header : "")
                 + (text.isEmpty() ? "" : " \"" + text + "\"") + " refs=" + refs.size()
                 + (children.isEmpty() ? "" : " (" + children.size() + ")") + "]";

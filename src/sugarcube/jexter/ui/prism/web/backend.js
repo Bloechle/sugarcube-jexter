@@ -1,6 +1,6 @@
 // backend.js — DESKTOP hub of Prism.
 //
-// The single per-environment seam: the front (jexter.js) imports this and never names a
+// The single per-environment seam: the front (engine.js) imports this and never names a
 // route or a transport itself. Here, the local Prism Java server is a stateless convert
 // engine; the front holds the book bytes and posts to /api/convert for everything.
 // A web hub with the SAME contract (QryServer gateway → sugarcloud, auth, library) can

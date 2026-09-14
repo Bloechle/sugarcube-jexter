@@ -318,7 +318,7 @@ public final class OCDReader {
         for (OCDFont f : doc.fonts().values()) bySafe.put(JxName.safe(f.id()), f);
 
         var parsed = new LinkedHashMap<String, OCDNode>();     // id -> node, in paint (document) order
-        var ord = new HashMap<OCDNode, Integer>();             // node -> data-o (reading index)
+        var ord = new HashMap<OCDNode, Integer>();             // node -> data-order (reading index)
         float[] z = { 0f };
         Element body = firstBelowRotation(svg, page);
         for (Element el : children(body)) {
@@ -326,8 +326,8 @@ public final class OCDReader {
             walk(el, page, css, grads, clipDefs, bySafe, parsed, z, null, null, ord);
         }
 
-        // reading order: paint order re-sorted by data-o (content index), exact reconstruction —
-        // nodes without data-o were emitted at their content position already
+        // reading order: paint order re-sorted by data-order (content index), exact reconstruction —
+        // nodes without data-order were emitted at their content position already
         for (OCDNode n : parsed.values())
             if (topLevel(n, parsed)) page.add(n);
         reorder(page.content(), ord);
