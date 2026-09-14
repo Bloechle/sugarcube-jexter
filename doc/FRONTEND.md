@@ -132,8 +132,10 @@ SHARED (both sides)                      PER ENVIRONMENT
   engine.js     (the SEAM: PDF import, text layer, fonts, structures, export)
   analysis.js   (tool: overlays, inspect, node tree — imports what it needs from engine.js)
   trace.js      (Analysis' Trace overlay: point at anything, read-only)
-  redact.js     (tool: audit · pick zone/block/page · find via to=zones&match · items persist as ocd/redact.json,
-                 previewed opaque at once, applied by the engine on Export or Apply; an unclean result is refused)
+  redact.js     (tool: the VERDICT — to=audit, run on entry, never persisted — plus pick zone/block/page ·
+                 find via to=zones&match · Repair, the one crossing from verdict to work; items persist as
+                 ocd/redact.json, previewed opaque at once, applied by the engine on Export or Apply; an
+                 unclean result is refused)
   prism-sw.js   (Service Worker)
   /shared/js/ocd.js  (the grammar: read, create, adopt, build)
   /shared/js/book.js (THE document authority — see below)
@@ -156,6 +158,33 @@ The displayed DOM is the source of truth; the epub file is transport. Three laye
    with a DOCTYPE dies on the next export. Numbers go through `F`, which is
    `JxNum.fmt` — four decimals, trailing zeros trimmed: the client and the engine
    are two writers of one format and have to agree on the digits.
+
+   **Draw in DOM order · read in `data-order`.** The page is written in PAINT order because the
+   rendering is the priority and may never regress — so anything that paints, hit-tests or measures
+   walks the DOM as it stands. Reading order is the logical layer recovered on top, stated in
+   `data-order` only where it differs, so anything that READS the content re-sorts first: the search
+   index (`engine.js`), read-aloud (`hooks.ttsNodes`), the reading-flow overlay and the block labels
+   (`analysis.js`), any text a tool quotes. `ocd.js` states the rule once — `inReadingOrder`,
+   `readingRuns` — and every one of those goes through it. Getting it backwards is SILENT: the page
+   looks perfect and only the words come out in the wrong order, on exactly the pages (two columns, a
+   bottom-up producer, a knockout label) where the order was worth stating. Measured 2026-09-14, before
+   the rule had one authority: read-aloud and search both said "SECOND … FIRST" on a page the engine's
+   own read-out read "FIRST … SECOND".
+
+   The cheap half of it: `data-order` appears ONLY where the two orders disagree, so a page that does
+   not contain the string needs no re-sort at all. `engine.js` keeps its regex pass for those and parses
+   only the pages that say otherwise — measured on 60 pages / 2520 runs, the regex is 1.8 ms and parsing
+   every page is 352 ms.
+
+   **`ocd.js` and the engine are two authors of ONE format, and nothing makes them agree.** The client
+   parses with regexes and writes attributes by hand, so a name it gets wrong returns nothing and no
+   surface complains — the page still renders, the gate still passes. Three had rotted apart by
+   2026-09-14: a run's blanks (`data-b` for `data-blanks`, which truncated every authored run on the
+   next engine read), its wrappers (`p`/`l` for `paragraph`/`line`, which reparented the run to the page
+   root), and every font metric (`data-asc`/`data-desc`/`data-cap`/`data-x`/`data-sp` for
+   `data-ascent`/`data-descent`/`data-capheight`/`data-xheight`/`data-space`, so both font panels lost
+   their guides). After any change to the grammar, diff the names `SvgOcdWriter` writes and `OCDReader`
+   reads against every `getAttribute`/`setAttribute` in `ui/**`.
 
    A page's GEOMETRY lives on its root and nowhere else (`FORMAT.md` §B2): the
    crop IS the `viewBox`, the rotation IS `data-rotate`, and the coordinate frame is
@@ -240,6 +269,13 @@ The displayed DOM is the source of truth; the epub file is transport. Three laye
    writing *Premier jet* in a font imported for *Bonjour, Jean-Luc!* prints `re erje`, correctly and
    silently: the text is in the model, the ink is not. Edit names the characters that will not paint
    and points at Font…, which adds a file for exactly the characters typed.
+
+   **A tool that only LOOKS may not queue work.** Redact's audit runs by itself on entry, because a
+   verdict is not a command you go hunting for; its findings therefore live in a report, never in the
+   item list, because that list is a container member (`ocd/redact.json`) the engine applies on EVERY
+   export — a tool that wrote it on its own would repair a document because somebody opened a tab.
+   *Repair* is the one verb that crosses from the report into the work. The general rule: anything a
+   tool does WITHOUT being asked may write nothing, and anything that writes is a verb the reader presses.
 
    **A tool may change what the page SHOWS without changing the page.** Redact's *Reveal* is the
    pattern: a generated stylesheet (`data-ui`, so `persist()` strips it) whose rules are keyed on the

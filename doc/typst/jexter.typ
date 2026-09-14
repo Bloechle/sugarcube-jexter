@@ -644,7 +644,7 @@
   <g transform="translate(504,20)">
     <rect width="236" height="118" rx="12" fill="#e7edf4" stroke="#3b5b7a" stroke-width="1.6"/>
     <text x="16" y="28" font-size="14.5" font-weight="600" fill="#27425c">Logical</text>
-    <text x="16" y="50" font-size="11" fill="#33506e">OCDStruct (tree node)</text>
+    <text x="16" y="50" font-size="11" fill="#33506e">OCDStructNode (tree node)</text>
     <text x="16" y="68" font-size="11" fill="#33506e">OCDStructure (named, provenance)</text>
     <text x="16" y="86" font-size="11" fill="#33506e">OCDOutline · OCDMeta</text>
     <text x="16" y="104" font-size="11" fill="#33506e">reading order · headings · lists</text>
@@ -1048,7 +1048,7 @@ space is *Y-up*. Geometry is local plus a per-node transform — glyphs in em un
 images and media in the unit square, paths in page space. Colours are sRGB `int`
 argb with alpha folded in. Bounding boxes are *derived*, never stored, so they cannot
 drift out of sync. Identifiers are 1-based with `0` reserved as a sentinel. And the
-logical `OCDStruct` tree only ever *references* content — it cannot alter what paints.
+logical `OCDStructNode` tree only ever *references* content — it cannot alter what paints.
 
 #callout("Native text without embedded fonts", accent: indigo, bg: indigoP)[
   The OCD-EPUB container is deliberately TrueType-free: every font lives once in a
@@ -1098,7 +1098,7 @@ builds a structure tree by reference, and never touches geometry, z-order, glyph
 
 The single most important property is in that caption: *nothing here moves a pixel.*
 Every pass sets `OCDNode.role`, reorders the page `content` into reading order, or builds an
-`OCDStruct` tree by reference. The renderer still paints by `z` — reading order *is* the content
+`OCDStructNode` tree by reference. The renderer still paints by `z` — reading order *is* the content
 array order, paint order is `z`, and the two are independent. So the sacred round-trip fidelity
 bar cannot regress no matter how aggressive the structure heuristics become — a freedom
 that lets the analysis be bold without risk.

@@ -6,7 +6,17 @@ Sugarcube jexter (artifactId `sugarcube-jexter`) parses a PDF with
 Apache PDFBox, normalizes it into a single in-memory model — the **Open Canonical
 Document** (**OCD**) — and writes it back out to PDF, EPUB3 fixed-layout
 (**epubcheck-validated**), **reflowable HTML**, SVG, or the self-contained
-**OCD-EPUB** (`.ocd.epub`) working format. Beyond faithful presentation it
+**OCD-EPUB** (`.ocd.epub`) working format.
+
+**Rendering first, structure second — in that order, always.** The presentation is
+what may never regress: a page is stored in PAINT order, so drawing it in document
+order reproduces the document exactly, with no structure involved. The logical layer
+is recovered ON TOP of a rendering that is already right, and it is purely additive —
+it states things BY REFERENCE and never moves a pixel. Reading order is the clearest
+case: it is stated in `data-order`, only where it differs from the paint order, so a
+consumer *draws in DOM order and reads in `data-order`* (see `doc/FORMAT.md` §B3).
+
+Beyond faithful presentation it
 recovers a **logical structure layer** — reading order, headings and paragraphs by
 geometry (richer roles — lists, figures, tables, captions — from tagged-PDF
 ingestion or the optional LLM refinement), accessibility text — and embeds
@@ -84,8 +94,10 @@ PDF ─[convert.PdfImporter]→ OCDDocument ─[write.*]→ PDF · EPUB · HTML 
   fields; then the result is audited and the export only happens when it is
   clean. `--redact=audit` repairs a badly redacted PDF in one pass, keeping its
   look (the covering boxes stay, what they hid is gone). Pixel-identical outside
-  the zones. In Prism, the **Redact** tab: Audit paints what is still under the
-  boxes in red (hidden text on hover); pick a zone (drag), a block (click; Shift =
+  the zones. In Prism, the **Redact** tab answers the question on entry,
+  without being asked: the audit runs by itself and paints what is still under the
+  boxes in red (hidden text on hover), as a verdict that writes nothing — **Repair**
+  is what turns those findings into zones. Then pick a zone (drag), a block (click; Shift =
   one run), the whole page, or Find a regex — the engine returns each match's
   exact glyph span (`--to=zones --match=…`); every item previews at once, opaque.
   Apply is page-scoped (`--to=patch`): the engine reads only the touched pages,

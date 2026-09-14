@@ -1629,8 +1629,8 @@ function send(action){
 function drawer(open){ $('#drawer').cls('open',open); $('#scrim').cls('open',open); }
 function connect(){
   es=new EventSource('/events');
-  es.onopen=function(){ $('#dot').cls('on',true).cls('off',false); $('#conn').txt('online'); };
-  es.onerror=function(){ $('#dot').cls('on',false).cls('off',true); $('#conn').txt('offline'); };
+  es.onopen=function(){ $('#dot').cls('on',true).cls('off',false); $('#conn').txt('linked'); };
+  es.onerror=function(){ $('#dot').cls('on',false).cls('off',true); $('#conn').txt('not linked'); };
   es.onmessage=function(e){ try{ handle(JSON.parse(e.data)); }catch(x){} };
 }
 

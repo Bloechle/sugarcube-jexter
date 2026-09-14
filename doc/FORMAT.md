@@ -39,7 +39,7 @@ OEBPS/
                                   (JPEG 2000, JBIG2, CCITT) is decoded at import
                                   and stored in one of those two
   media/<ref>                     audio/video payloads (referenced by a media node, §B3)
-  images/cover.png                optional cover (rendered page 1)
+  images/cover.jpg                optional cover (rendered page 1, JPEG — see Part B)
   ocd/
     meta.json                     document identity & metadata
     outline.json                  navigation tree (page + y targets)
@@ -78,7 +78,7 @@ The navigation tree, one node per entry:
 
 ```jsonc
 { "bookmarks": [ { "title": "Art. 10 Traitement médical",
-                   "page": "page-006", "y": 640.2,      // target page id + y (page space)
+                   "page": "p6", "y": 640.2,            // target page id + y (page space)
                    "children": [ … ] } ] }
 ```
 
@@ -95,8 +95,8 @@ content by `page` + node `id`, and never move a pixel:
 { "default": "pdf",                  // doc.defaultStructureId, when set
   "structures": [ {
     "id": "pdf", "label": "…",
-    "source": "pdf_ua|heuristic|manual|llm",
-    "by": "…", "at": 1720000000,     // epoch, when set
+    "source": "pdf|heuristic|model|manual|other",   // OCDStructure.Source, lowercased
+    "by": "…", "at": 1789371763139,  // epoch MILLIS, when set
     "how": "…", "purpose": "…",
     "root": { "type": "document", "kids": [
       { "type": "h1", "level": 1, "text": "…", "lang": "…", "alt": "…",
@@ -122,7 +122,7 @@ Non-paintable page payloads that have no SVG home. **Links are NOT here** — th
 are native `<a>` in the pages (§B5).
 
 ```jsonc
-{ "pages": { "page-004": {
+{ "pages": { "p4": {
     "annots": [ { "type": "highlight|note|redact|…", "rect": [x,y,w,h],
                   "color": "#rrggbb", "author": "…", "modified": "…",
                   "contents": "…", "quads": [ … ] } ],
@@ -347,6 +347,30 @@ wrong on a rotation, which is exactly how it once escaped notice.
 
 - **`data-order`** — the content (reading) index, emitted only where it differs from
   the paint position. A reader re-sorts by `data-order` to recover reading order.
+
+  > **THE RULE, AND IT HAS A DIRECTION: draw in DOM order · read in `data-order`.**
+  >
+  > The page is written in PAINT order, and that is the priority, not an accident of
+  > serialization: the RENDERING comes first and may never regress, so the DOM *is* the
+  > paint. Draw the children in the order they appear and the page is exactly the page —
+  > no re-sorting, no structure needed, nothing to get wrong.
+  >
+  > The logical layer is recovered SECOND, on top of a rendering that is already right,
+  > and it never moves a pixel: it only *states* things by reference. `data-order` is that
+  > statement for reading order, and it appears only where the two orders disagree — a
+  > two-column page, a producer that painted bottom-up, a knockout label. A page without
+  > it is a page whose paint order already is its reading order.
+  >
+  > So a consumer splits in two. Anything that PAINTS, hit-tests or measures takes the DOM
+  > as it stands. Anything that READS the content — search, read-aloud, text extraction, a
+  > reading-flow overlay, a label quoted from a block — re-sorts by `data-order` first.
+  > Getting it backwards is silent: the page still looks perfect and only the words come
+  > out in the wrong order, on exactly the documents where the order was worth stating.
+  >
+  > The re-sort rule is `OCDReader.reorder`'s, which is the authority: the key is
+  > `data-order` when stated, and the node's own position when it is not — a node without
+  > the attribute was emitted at its content position already. The client states the same
+  > rule once, in `ocd.js` (`inReadingOrder`, `readingRuns`).
 - **`data-role`** — the analysis verdicts that pages consume directly (furniture,
   headings). Everything richer lives in `ocd/structures.json` by reference.
 - **`data-flow`** — a page-scoped text-flow id, emitted **only** on a paragraph
