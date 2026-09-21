@@ -100,6 +100,7 @@ public final class OCDRenderer {
 
         BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
+        g.setClip(0, 0, w, h);   // the canvas, stated: a group composited as one sizes its layer on it
         try {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -152,6 +153,7 @@ public final class OCDRenderer {
         int h = Math.max(1, (int) Math.ceil(bounds.height() * scale));
         BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
+        g.setClip(0, 0, w, h);   // the canvas, stated: a group composited as one sizes its layer on it
         try {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -218,14 +220,56 @@ public final class OCDRenderer {
                     }
                 }
                 case OCDText t   -> paintText(g, t, doc);
-                case OCDGroup gr -> paintAll(g, gr.children(), page, doc, pageTx, imageCache, view);
+                case OCDGroup gr -> {
+                    if (gr.compositesAsOne()) paintAsOne(g, gr, page, doc, pageTx, imageCache, view);
+                    else paintAll(g, gr.children(), page, doc, pageTx, imageCache, view);
+                }
                 case OCDBreak b  -> { }   // line-break sentinel: paints nothing
             }
         } finally {
-            g.setComposite(savedComposite);
-            g.setClip(savedClip);
+            // Transform FIRST: setClip reads its shape in the CURRENT user space, and savedClip was
+            // taken under savedT. Restored under the node's own transform (an image's unit square,
+            // a group's matrix) it came back scaled by it — harmless while the canvas carried no
+            // clip, and a 400 000-pixel layer the day it did.
             g.setTransform(savedT);
+            g.setClip(savedClip);
+            g.setComposite(savedComposite);
         }
+    }
+
+    /**
+     * A group whose blend or opacity acts on the whole ({@link OCDGroup#compositesAsOne}): its
+     * children are painted onto a layer of their own with ordinary compositing, and only the layer
+     * meets the canvas — through the group's composite, which {@link #paint} has already set. The
+     * layer spans the visible part of the canvas (its clip, in device space) and carries the same
+     * transform, clip and hints, so the children land exactly where they would have.
+     */
+    private static void paintAsOne(Graphics2D g, OCDGroup gr, OCDPage page, OCDDocument doc,
+                                   AffineTransform pageTx, Map<String, BufferedImage> imageCache, View view) {
+        // The layer spans the visible canvas: the clip in device space. A Graphics handed in with no
+        // clip has no stated extent (its device configuration answers Integer.MAX_VALUE squared), so
+        // it gets the per-leaf painting rather than an unbounded layer.
+        Shape clip = g.getClip();
+        if (clip == null) { paintAll(g, gr.children(), page, doc, pageTx, imageCache, view); return; }
+        java.awt.Rectangle db = g.getTransform().createTransformedShape(clip).getBounds();
+        if (db.isEmpty()) return;
+        BufferedImage layer = new BufferedImage(db.width, db.height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D lg = layer.createGraphics();
+        try {
+            lg.setRenderingHints(g.getRenderingHints());
+            lg.translate(-db.x, -db.y);
+            lg.transform(g.getTransform());
+            if (clip != null) lg.clip(clip);
+            AffineTransform layerPageTx = new AffineTransform(pageTx);
+            layerPageTx.preConcatenate(AffineTransform.getTranslateInstance(-db.x, -db.y));
+            paintAll(lg, gr.children(), page, doc, layerPageTx, imageCache, view);
+        } finally {
+            lg.dispose();
+        }
+        AffineTransform t = g.getTransform();
+        g.setTransform(new AffineTransform());
+        g.drawImage(layer, db.x, db.y, null);
+        g.setTransform(t);
     }
 
     /** Paint a sibling list in <b>{@code z} order</b> — the authoritative paint order — rather than child

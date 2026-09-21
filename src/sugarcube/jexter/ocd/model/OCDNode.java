@@ -43,6 +43,7 @@ public sealed abstract class OCDNode permits OCDText, OCDPath, OCDImage, OCDGrou
     protected String clipId;                                // ref into the page clip table; null = inherit page clip
     protected float  alpha = 1f;                            // scalar opacity 0..1 (multiplies any per-leaf colour alpha)
     protected String blend;                                 // blend-mode name; null = Normal
+    protected sugarcube.jexter.core.JxCmyk fillCmyk, strokeCmyk;   // source CMYK behind fill/stroke; null = none stated
 
     // ── identity / order ─────────────────────────────────────────────────────
     public String  id()             { return id; }
@@ -94,6 +95,13 @@ public sealed abstract class OCDNode permits OCDText, OCDPath, OCDImage, OCDGrou
     public OCDNode     blend(String b)          { this.blend = b; return this; }
     public boolean     hasBlend()               { return blend != null && !blend.isEmpty(); }
 
+    /** The source CMYK behind the fill / stroke colour, when the document stated one — see
+     *  {@link sugarcube.jexter.core.JxCmyk}. Paint-only: nothing reads it but a CMYK-capable writer. */
+    public sugarcube.jexter.core.JxCmyk fillCmyk()                                    { return fillCmyk; }
+    public OCDNode                      fillCmyk(sugarcube.jexter.core.JxCmyk k)      { this.fillCmyk = k; return this; }
+    public sugarcube.jexter.core.JxCmyk strokeCmyk()                                  { return strokeCmyk; }
+    public OCDNode                      strokeCmyk(sugarcube.jexter.core.JxCmyk k)    { this.strokeCmyk = k; return this; }
+
     // ── geometry ─────────────────────────────────────────────────────────────
     /** Axis-aligned bounds in page space, derived from content. */
     public abstract JxRect bounds();
@@ -124,6 +132,8 @@ public sealed abstract class OCDNode permits OCDText, OCDPath, OCDImage, OCDGrou
         n.clipId = this.clipId;
         n.alpha = this.alpha;
         n.blend = this.blend;
+        n.fillCmyk = this.fillCmyk;        // immutable
+        n.strokeCmyk = this.strokeCmyk;
         return n;
     }
 

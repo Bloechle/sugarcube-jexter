@@ -162,17 +162,24 @@ public final class BlendComposite implements Composite {
                     dstIn.getPixel(x, y, dstPx);
 
                     blend(mode, srcPx, dstPx, result);
-
-                    // Mix the blended colour over the destination by the SOURCE pixel's own
-                    // coverage (src alpha) times the constant alpha — NOT the blended result
-                    // alpha, which is 255 wherever the destination is opaque and would make
-                    // transparent source pixels darken the backdrop (so a group layer with
-                    // transparent gaps stays correct: src alpha 0 → destination unchanged).
-                    float srcA = (srcPx[3] / 255f) * alpha;
-                    for (int i = 0; i < 3; i++)
-                        dstPx[i] = (int) (dstPx[i] + (result[i] - dstPx[i]) * srcA);
-                    dstPx[3] = Math.max(dstPx[3], result[3]);
-
+                    // PDF 32000 §11.3.6, non-premultiplied. The blend function only has a meaning
+                    // where there IS a backdrop, so it enters in proportion to the backdrop's alpha:
+                    // over nothing, a Multiply paints the source colour itself. Reading a transparent
+                    // pixel as black instead turned every yellow drop shadow of a press page — a
+                    // yellow rectangle multiplied under a soft mask, baked on a transparent canvas —
+                    // into a dark grey one. Over an opaque backdrop this is exactly the former mix:
+                    // the blended colour laid over the destination by the source's own coverage
+                    // (src alpha × constant alpha), so src alpha 0 leaves the destination unchanged.
+                    float as = (srcPx[3] / 255f) * alpha;
+                    if (as <= 0f) { dstOut.setPixel(x, y, dstPx); continue; }
+                    float ab = dstPx[3] / 255f;
+                    float ar = ab + as - ab * as;
+                    float k = as / ar;
+                    for (int i = 0; i < 3; i++) {
+                        float mixed = (1 - ab) * srcPx[i] + ab * result[i];
+                        dstPx[i] = Math.round(dstPx[i] + (mixed - dstPx[i]) * k);
+                    }
+                    dstPx[3] = Math.round(ar * 255f);
                     dstOut.setPixel(x, y, dstPx);
                 }
             }

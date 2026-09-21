@@ -27,6 +27,23 @@ public non-sealed class OCDGroup extends OCDNode {
     public int           size()          { return children.size(); }
     public boolean       isEmpty()       { return children.isEmpty(); }
 
+    /**
+     * True when this group's blend mode or opacity must act on the group as ONE composite — PDF's
+     * transparency-group semantics — and not on each child in turn. The children are painted onto
+     * their own canvas with ordinary compositing, and only that result is blended (or faded) onto
+     * what lies beneath. Folding a Multiply onto every leaf instead multiplies each child with the
+     * others: a photo no longer covers the red it sits on, it tints with it. Measured on a press
+     * page placed as a Multiply group: 63.6% of pixels off, the whole page red.
+     *
+     * <p>A lone leaf is the exception: with nothing to overlap, the per-leaf reading is the same
+     * picture. A lone GROUP is not — its own children overlap.
+     */
+    public boolean compositesAsOne() {
+        boolean blends = hasBlend() && !"Normal".equalsIgnoreCase(blend());
+        if (!blends && alpha() >= 1f) return false;
+        return size() > 1 || (size() == 1 && children.get(0) instanceof OCDGroup);
+    }
+
     /** A copy of the group AND of its subtree — a container that shared its children would be two
      *  groups editing one another. The concrete type is preserved through {@link #shell()}, which each
      *  subtype answers for itself, so a paragraph copies as a paragraph and keeps its own facets. */

@@ -47,8 +47,10 @@ import java.util.Map;
  */
 public final class Jexter extends WebApp {
 
-    /** The one suffix. Output naming and output detection both derive from it — change it here only. */
-    private static final String SUFFIX = "-normalized.pdf";
+    /** The default suffix, before {@code .pdf}. Output naming and output detection both derive from the
+     *  suffix in force — this one, or the caller's ({@code --suffix=} on the command line, the Settings
+     *  field in the window), so the headless daemon and the window can name files alike. */
+    public static final String SUFFIX = "-normalized";
 
     // ── engine ───────────────────────────────────────────────────────────────────
 
@@ -78,18 +80,32 @@ public final class Jexter extends WebApp {
         return ConvertOptions.fromMap(m);
     }
 
-    /** {@code foo.pdf} (or {@code /a/b/foo.pdf}) → {@code foo-normalized.pdf} — the only place a name is formed. */
-    public static String outName(String name) {
+    /** {@code foo.pdf} (or {@code /a/b/foo.pdf}) → {@code foo<suffix>.pdf} — the only place a name is formed. */
+    public static String outName(String name, String suffix) {
         String base = (name == null || name.isBlank()) ? "document" : name;
         int slash = Math.max(base.lastIndexOf('/'), base.lastIndexOf('\\'));
         if (slash >= 0) base = base.substring(slash + 1);
         int dot = base.lastIndexOf('.');
         if (dot > 0) base = base.substring(0, dot);
-        return base + SUFFIX;
+        return base + suffix(suffix) + ".pdf";
     }
-    public static String  outName(File f)       { return outName(f.getName()); }
-    /** True for our own output files — so no pass ever re-normalizes a {@code *-normalized.pdf}. */
-    public static boolean isOutput(String name) { return name.toLowerCase().endsWith(SUFFIX); }
+    public static String  outName(String name)              { return outName(name, SUFFIX); }
+    public static String  outName(File f)                   { return outName(f.getName(), SUFFIX); }
+    /** True for our own output files — so no pass ever re-normalizes a {@code *<suffix>.pdf}. With an
+     *  EMPTY suffix nothing is an output by its name: output and source then need separate folders. */
+    public static boolean isOutput(String name, String suffix) {
+        String s = suffix(suffix);
+        return !s.isEmpty() && name.toLowerCase().endsWith((s + ".pdf").toLowerCase());
+    }
+    public static boolean isOutput(String name)             { return isOutput(name, SUFFIX); }
+
+    /** A suffix made safe as part of a file name — the rule the window applies to its Settings field:
+     *  no path or reserved characters, at most 40 characters. {@code null} means the default. */
+    public static String suffix(String s) {
+        if (s == null) return SUFFIX;
+        String clean = s.replaceAll("[/\\\\:*?\"<>|]", "");
+        return clean.length() > 40 ? clean.substring(0, 40) : clean;
+    }
 
     /** Write to a sibling temp file, then atomically move it into place — a folder watcher or
      *  downstream tool never sees a half-written PDF. Falls back to a plain replace where atomic

@@ -63,6 +63,12 @@ public final class OCDDocument {
         return null;
     }
 
+    // ── output intent (document resource) ───────────────────────────────────────
+    private OCDOutputIntent outputIntent;
+    /** The printing condition the document's device colours were prepared for — see {@link OCDOutputIntent}. */
+    public OCDOutputIntent outputIntent()                  { return outputIntent; }
+    public OCDDocument     outputIntent(OCDOutputIntent v) { this.outputIntent = v; return this; }
+
     // ── cover (container resource) ──────────────────────────────────────────────
     // The EPUB cover is a RESOURCE, not a projection: a re-export of the same document
     // must carry the same bytes, or write(read(x)) = x breaks on one member. The reader

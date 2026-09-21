@@ -3,6 +3,8 @@ package sugarcube.jexter.write;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
@@ -22,6 +24,7 @@ import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlin
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageFitWidthDestination;
 
 import sugarcube.jexter.core.ConvertOptions;
+import sugarcube.jexter.core.JxCmyk;
 import sugarcube.jexter.core.JxLog;
 import sugarcube.jexter.core.JxPath;
 import sugarcube.jexter.core.JxRect;
@@ -37,6 +40,7 @@ import sugarcube.jexter.ocd.model.OCDGroup;
 import sugarcube.jexter.ocd.model.OCDImage;
 import sugarcube.jexter.ocd.model.OCDMedia;
 import sugarcube.jexter.ocd.model.OCDNode;
+import sugarcube.jexter.ocd.model.OCDOutputIntent;
 import sugarcube.jexter.ocd.model.OCDPage;
 import sugarcube.jexter.ocd.model.OCDPath;
 import sugarcube.jexter.ocd.model.OCDText;
@@ -93,6 +97,7 @@ public final class PdfWriter {
             PdfForms.write(pdf, doc);                // the model fields → a real, fillable AcroForm
             PdfAnnots.write(pdf, doc);               // the annotation layer: live links, review markup
             outline(pdf, doc);                       // navigable bookmarks from the heading structure
+            outputIntent(pdf, doc);                  // what the device colours mean — as the source said
             stamp(pdf, doc);                         // deterministic CreationDate + trailer /ID
             pdf.save(out);
         }
@@ -110,6 +115,13 @@ public final class PdfWriter {
         PDPage page = new PDPage(new PDRectangle((float) box.minX(), (float) box.minY(),
                                                  (float) box.width(), (float) box.height()));
         if (p.rotation() != 0) page.setRotation(p.rotation());   // content stays in unrotated user space
+        if (p.cmykBlending()) {                                   // stated back: the page composites in CMYK
+            COSDictionary grp = new COSDictionary();
+            grp.setItem(COSName.TYPE, COSName.GROUP);
+            grp.setItem(COSName.S, COSName.TRANSPARENCY);
+            grp.setItem(COSName.CS, COSName.DEVICECMYK);
+            page.getCOSObject().setItem(COSName.GROUP, grp);
+        }
         pdf.addPage(page);
         try (PDPageContentStream cs = new PDPageContentStream(pdf, page)) {
             for (OCDNode n : OCDNode.inPaintOrder(p.content())) paint(cs, n, doc, p);
@@ -143,7 +155,8 @@ public final class PdfWriter {
                     // paints unscaled at the origin. q/Q come from the enclosing save/restore.
                     if (g.transform() != null && !g.transform().isIdentity())
                         cs.transform(new org.apache.pdfbox.util.Matrix(g.transform().awt()));
-                    for (OCDNode c : OCDNode.inPaintOrder(g.children())) paint(cs, c, doc, page);
+                    if (g.compositesAsOne()) paintGroupForm(cs, g, doc, page);
+                    else for (OCDNode c : OCDNode.inPaintOrder(g.children())) paint(cs, c, doc, page);
                 }
                 default -> { }
             }
@@ -152,9 +165,54 @@ public final class PdfWriter {
         }
     }
 
+    /**
+     * A group whose blend or opacity acts on the whole ({@link OCDGroup#compositesAsOne}) goes back
+     * to PDF as what it came from: a transparency-group form XObject, drawn under the ExtGState
+     * {@link #applyState} has just set for the group. A group resets blend, alpha and soft mask on
+     * entry (PDF 32000 §11.6.6), so the children composite normally among themselves and only their
+     * result is blended — written flat in the page's stream instead, every child inherited the
+     * group's Multiply.
+     *
+     * <p>The form is a {@link PDAppearanceStream} only because that is the form XObject PDFBox 3
+     * opens a {@link PDPageContentStream} on: the painting helpers all take that type, and the
+     * common base is package-private. An appearance stream IS a form XObject — nothing else is set.
+     * It is born without resources, and fonts, images and states land there, so they are given.
+     */
+    private void paintGroupForm(PDPageContentStream cs, OCDGroup g, OCDDocument doc, OCDPage page) throws IOException {
+        PDAppearanceStream form = new PDAppearanceStream(pdf);
+        form.setResources(new PDResources());
+        form.setBBox(groupBBox(g, page));
+        COSDictionary grp = new COSDictionary();
+        grp.setItem(COSName.TYPE, COSName.GROUP);
+        grp.setItem(COSName.S, COSName.TRANSPARENCY);
+        form.getCOSObject().setItem(COSName.GROUP, grp);
+        try (PDPageContentStream fs = new PDPageContentStream(pdf, form)) {
+            for (OCDNode c : OCDNode.inPaintOrder(g.children())) paint(fs, c, doc, page);
+        }
+        cs.drawForm(form);
+    }
+
+    /** The form's BBox, in the group's own space: the page box brought back through the group's
+     *  transform. A box that crops nothing the page shows — the children carry their own clips. */
+    private static PDRectangle groupBBox(OCDGroup g, OCDPage page) {
+        JxRect b = page.effectiveBox();
+        java.awt.geom.Rectangle2D r = new java.awt.geom.Rectangle2D.Double(b.minX(), b.minY(), b.width(), b.height());
+        if (g.transform() != null && !g.transform().isIdentity()) {
+            try { r = g.transform().awt().createInverse().createTransformedShape(r).getBounds2D(); }
+            catch (java.awt.geom.NoninvertibleTransformException e) { /* degenerate: keep the page box */ }
+        }
+        return new PDRectangle((float) r.getMinX(), (float) r.getMinY(), (float) r.getWidth(), (float) r.getHeight());
+    }
+
     // ── paths ────────────────────────────────────────────────────────────────
     private void paintPath(PDPageContentStream cs, OCDPath p) throws IOException {
         if (p.geometry() == null) return;
+        // A path that paints nothing must not be written at all. Its construction operators with
+        // no painting operator leave it as the CURRENT PATH across the Q that follows (the path is
+        // not graphics state), so the next `S` in the stream strokes it too: measured on a press
+        // ad whose zero-alpha placeholder rectangles came out as orange frames around every star
+        // and photo, in the colour and width of the border stroked right after them.
+        if (!p.isFilled() && !p.isStroked()) return;
         boolean eo = p.geometry().isEvenOdd();
 
         // Gradient fill → re-emit a faithful PDF axial/radial shading clipped to the path,
@@ -163,7 +221,7 @@ public final class PdfWriter {
             paintGradient(cs, p);
             if (p.isStroked()) {
                 int s = p.stroke();
-                cs.setStrokingColor(r(s), g(s), b(s));
+                strokeColor(cs, p, s);
                 cs.setLineWidth((float) Math.max(p.strokeWidth(), 0));
                 cs.setLineCapStyle(p.cap());
                 cs.setLineJoinStyle(p.join());
@@ -181,7 +239,7 @@ public final class PdfWriter {
         }
         if (p.isStroked()) {
             int s = p.stroke();
-            cs.setStrokingColor(r(s), g(s), b(s));
+            strokeColor(cs, p, s);
             cs.setLineWidth((float) Math.max(p.strokeWidth(), 0));
             cs.setLineCapStyle(p.cap());
             cs.setLineJoinStyle(p.join());
@@ -193,7 +251,7 @@ public final class PdfWriter {
                 cs.setLineDashPattern(f, (float) p.dashPhase());
             }
         }
-        if (p.isFilled()) { int f = p.fill(); cs.setNonStrokingColor(r(f), g(f), b(f)); }
+        if (p.isFilled()) fillColor(cs, p, p.fill());
 
         emitGeom(cs, p.geometry());
         if (p.isFilled() && p.isStroked()) { if (eo) cs.fillAndStrokeEvenOdd(); else cs.fillAndStroke(); }
@@ -294,8 +352,7 @@ public final class PdfWriter {
         if (font == null) return;
         boolean doStroke = t.hasStrokePaint();
         boolean doFill   = t.hasFill() || !doStroke;
-        int fill = t.fill();
-        cs.setNonStrokingColor(r(fill), g(fill), b(fill));
+        fillColor(cs, t, t.fill());
         double fs = t.fontSize();
         if (doStroke) setGlyphStroke(cs, t, fs);   // line params in em space (glyph outline drawn scaled by fs)
         AffineTransform base = t.transform().awt();
@@ -322,8 +379,7 @@ public final class PdfWriter {
 
     /** Stroke graphics state for an em-scaled glyph outline: page-space width/dash divided by {@code fs}. */
     private void setGlyphStroke(PDPageContentStream cs, OCDText t, double fs) throws IOException {
-        int s = t.stroke();
-        cs.setStrokingColor(r(s), g(s), b(s));
+        strokeColor(cs, t, t.stroke());
         cs.setLineWidth((float) Math.max(t.strokeWidth() / fs, 0));
         cs.setLineCapStyle(t.cap());
         cs.setLineJoinStyle(t.join());
@@ -340,8 +396,7 @@ public final class PdfWriter {
     /** Stroke graphics state for {@code showText}: the line width is user-space (the text matrix scales the
      *  glyph by font size, but the stroke width is the general line width), so no {@code /fs} division. */
     private void setTextStroke(PDPageContentStream cs, OCDText t) throws IOException {
-        int s = t.stroke();
-        cs.setStrokingColor(r(s), g(s), b(s));
+        strokeColor(cs, t, t.stroke());
         cs.setLineWidth((float) Math.max(t.strokeWidth(), 0));
         cs.setLineCapStyle(t.cap());
         cs.setLineJoinStyle(t.join());
@@ -363,7 +418,6 @@ public final class PdfWriter {
         Map<Integer, Integer> rev = font.reverseCmap();   // gid → encodable codepoint (cached)
 
         int fill = t.fill();
-        float cr = r(fill), cg = g(fill), cb = b(fill);
         double fs = t.fontSize();
         boolean doStroke = t.hasStrokePaint();
         boolean doFill   = t.hasFill() || !doStroke;
@@ -387,7 +441,7 @@ public final class PdfWriter {
                 try {
                     if (!inText) {
                         if (doStroke) setTextStroke(cs, t);   // line params before BT; showText stroke width is user-space (not /fs)
-                        cs.beginText(); cs.setRenderingMode(rm); cs.setFont(pdFont, (float) fs); cs.setNonStrokingColor(cr, cg, cb); inText = true;
+                        cs.beginText(); cs.setRenderingMode(rm); cs.setFont(pdFont, (float) fs); fillColor(cs, t, t.fill()); inText = true;
                     }
                     AffineTransform at = new AffineTransform(base);
                     at.translate(gl.x(), 0);
@@ -400,7 +454,7 @@ public final class PdfWriter {
                 if (inText) { cs.endText(); inText = false; }
                 OCDGlyph fg = font.glyph(gl.gid());
                 if (fg != null && fg.outline() != null && !fg.isSpace()) {
-                    cs.setNonStrokingColor(cr, cg, cb);
+                    fillColor(cs, t, t.fill());
                     if (doStroke) setGlyphStroke(cs, t, fs);   // fallback outline is em-scaled
                     AffineTransform at = new AffineTransform(base);
                     at.translate(gl.x(), 0);
@@ -435,6 +489,46 @@ public final class PdfWriter {
             images.put(ref, img);
         }
         cs.drawImage(img, new Matrix(im.transform().awt()));   // unit square → page
+    }
+
+    /** The document's output intent, stated back verbatim (see {@link OCDOutputIntent}). Without it every
+     *  {@code k} this writer emits is read through the reader's DEFAULT CMYK profile instead of the one
+     *  the source was prepared for — the same colour, shown differently. */
+    private static void outputIntent(PDDocument pdf, OCDDocument doc) throws IOException {
+        OCDOutputIntent oi = doc.outputIntent();
+        if (oi == null) return;
+        COSDictionary d = new COSDictionary();
+        d.setItem(COSName.TYPE, COSName.getPDFName("OutputIntent"));
+        d.setItem(COSName.S, COSName.getPDFName(oi.subtype()));
+        d.setString(COSName.getPDFName("OutputConditionIdentifier"), oi.conditionId() == null ? "" : oi.conditionId());
+        if (oi.condition() != null) d.setString(COSName.getPDFName("OutputCondition"), oi.condition());
+        if (oi.info() != null)      d.setString(COSName.INFO, oi.info());
+        if (oi.registry() != null)  d.setString(COSName.getPDFName("RegistryName"), oi.registry());
+        if (oi.profile() != null) {
+            org.apache.pdfbox.cos.COSStream st = pdf.getDocument().createCOSStream();
+            try (OutputStream o = st.createOutputStream(COSName.FLATE_DECODE)) { o.write(oi.profile()); }
+            st.setInt(COSName.N, oi.components());
+            d.setItem(COSName.DEST_OUTPUT_PROFILE, st);
+        }
+        COSArray list = new COSArray();
+        list.add(d);
+        pdf.getDocumentCatalog().getCOSObject().setItem(COSName.OUTPUT_INTENTS, list);
+    }
+
+    // ── colour: the source CMYK when it still stands, else the model's sRGB ──────────
+    /** The fill colour as the source stated it — {@code k} when the node carries a CMYK that still
+     *  matches its argb ({@link JxCmyk#stands}), else {@code rg}. A reader then shows the CMYK through
+     *  its own profile, exactly as it shows the original. */
+    private static void fillColor(PDPageContentStream cs, OCDNode n, int argb) throws IOException {
+        JxCmyk k = n.fillCmyk();
+        if (k != null && k.stands(argb)) cs.setNonStrokingColor(k.c(), k.m(), k.y(), k.k());
+        else cs.setNonStrokingColor(r(argb), g(argb), b(argb));
+    }
+
+    private static void strokeColor(PDPageContentStream cs, OCDNode n, int argb) throws IOException {
+        JxCmyk k = n.strokeCmyk();
+        if (k != null && k.stands(argb)) cs.setStrokingColor(k.c(), k.m(), k.y(), k.k());
+        else cs.setStrokingColor(r(argb), g(argb), b(argb));
     }
 
     // ── per-node alpha (fill/stroke) + blend via ExtGState ───────────────────

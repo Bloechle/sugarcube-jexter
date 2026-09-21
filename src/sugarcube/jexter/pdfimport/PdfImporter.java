@@ -100,6 +100,8 @@ public final class PdfImporter extends PdfStreamEngine {
             extractMetadata(pdf, doc.meta());
             extractOutline(pdf, doc);
             extractLayers(pdf, doc);
+            extractOutputIntent(pdf, doc);
+            OutputIntentCmyk intentCmyk = OutputIntentCmyk.of(doc.outputIntent());
             // Import is the long half of a conversion — a thousand-page book spends ~26 s here. One step
             // every 25 pages, which costs a record and nothing else.
             for (int i = 0; i < total; i++) {
@@ -112,9 +114,11 @@ public final class PdfImporter extends PdfStreamEngine {
                 if (cb != null)
                     page.cropBox(new JxRect(cb.getLowerLeftX(), cb.getLowerLeftY(), cb.getWidth(), cb.getHeight()));
                 page.rotation(pd.getRotation());
+                page.cmykBlending(blendsInCmyk(pd));
                 extractPrintBoxes(pd, page);
 
                 PdfImporter engine = new PdfImporter(pd, doc, page, fonts, opts);
+                engine.intentCmyk(intentCmyk);
                 final int pageIx = i;
                 // The reference raster feeds the unified fallback for paints the model cannot
                 // vectorise (tiling patterns, soft-masked fills): PDFBox's own renderer, lazily,
@@ -172,6 +176,30 @@ public final class PdfImporter extends PdfStreamEngine {
         // the catalog /Lang is the document's declared primary language → last word
         String lang = pdf.getDocumentCatalog().getLanguage();
         if (lang != null) m.language(lang);
+    }
+
+    /** The FIRST output intent of the catalog, verbatim (see {@link sugarcube.jexter.ocd.model.OCDOutputIntent}).
+     *  PDF/X allows one; a file carrying several (PDF/X + PDF/A) keeps the first, which is the one
+     *  readers apply to device colour. Anything unreadable is simply no intent. */
+    private static void extractOutputIntent(PDDocument pdf, OCDDocument doc) {
+        try {
+            var list = pdf.getDocumentCatalog().getOutputIntents();
+            if (list == null || list.isEmpty()) return;
+            var oi = list.get(0);
+            org.apache.pdfbox.cos.COSDictionary d = oi.getCOSObject();
+            byte[] profile = null;
+            int n = 0;
+            if (d.getDictionaryObject(org.apache.pdfbox.cos.COSName.DEST_OUTPUT_PROFILE) instanceof org.apache.pdfbox.cos.COSStream st) {
+                try (var in = st.createInputStream()) { profile = in.readAllBytes(); }
+                n = st.getInt(org.apache.pdfbox.cos.COSName.N, 0);
+            }
+            String sub = d.getNameAsString(org.apache.pdfbox.cos.COSName.S);
+            doc.outputIntent(new sugarcube.jexter.ocd.model.OCDOutputIntent(sub == null ? "GTS_PDFX" : sub,
+                    oi.getOutputConditionIdentifier(), oi.getOutputCondition(), oi.getInfo(), oi.getRegistryName(),
+                    profile, n));
+        } catch (Exception e) {
+            JxLog.debug(PdfImporter.class, "output intent unreadable", e);
+        }
     }
 
     private static void splitInto(String s, String regex, java.util.function.Consumer<String> add) {
@@ -595,6 +623,7 @@ public final class PdfImporter extends PdfStreamEngine {
         try {
             JxRect crop = bakeCrop(g);
             if (crop == null) return false;
+            liftBlend(g);   // should the bake fail, the vector group left behind composites as one: same picture
             emitBaked(g, crop, OCDRenderer.renderNodes(g.children(), crop, page, doc, groupRasterDpi));
             return true;
         } catch (Exception e) {
@@ -603,12 +632,40 @@ public final class PdfImporter extends PdfStreamEngine {
         }
     }
 
+    /**
+     * A bake renders the group ALONE, on a transparent canvas — but a leaf's blend mode is defined
+     * against what lies UNDER it on the page. When every painted leaf of the group carries the same
+     * non-Normal blend (and the group none of its own), that blend is lifted off the leaves onto the
+     * group, so the baked image is blended with the page instead of with nothing. The usual case is
+     * an InDesign drop shadow: one rectangle in Multiply under a soft mask. A WHITE one multiplied
+     * onto a light page is invisible, and baked in isolation it came out as a visible white halo
+     * behind a headline; a yellow one onto white paper stays yellow either way. Only overlaps
+     * between the leaves themselves differ, and a shadow has one leaf.
+     * @return the lifted blend, now set on {@code g}, or null when nothing was lifted
+     */
+    private static String liftBlend(OCDGroup g) {
+        if (g.hasBlend() && !"Normal".equals(g.blend())) return null;
+        String common = null;
+        java.util.List<OCDNode> leaves = g.stream().filter(n -> !(n instanceof OCDGroup)
+                && !(n instanceof sugarcube.jexter.ocd.model.OCDBreak)).toList();
+        for (OCDNode n : leaves) {
+            String b = n.hasBlend() ? n.blend() : "Normal";
+            if ("Normal".equals(b) || (common != null && !common.equals(b))) return null;
+            common = b;
+        }
+        if (common == null) return null;
+        for (OCDNode n : leaves) n.blend(null);
+        g.blend(common);
+        return common;
+    }
+
     /** Bake a Luminosity-soft-masked group: render the content and the mask isolated over the same
      *  crop, multiply the content's alpha by the mask's luminosity, emit the result as one image. */
     private boolean maskedBake(OCDGroup g, OCDGroup mgrp, PDSoftMask sm) {
         try {
             JxRect crop = bakeCrop(g);
             if (crop == null) return false;
+            liftBlend(g);
             BufferedImage cimg = OCDRenderer.renderNodes(g.children(), crop, page, doc, groupRasterDpi);
             BufferedImage mimg = OCDRenderer.renderNodes(mgrp.children(), crop, page, doc, groupRasterDpi);
             int bd = backdropLuma(sm);
@@ -639,6 +696,22 @@ public final class PdfImporter extends PdfStreamEngine {
         double dpi = args.length > 3 ? Double.parseDouble(args[3]) : 144;
         ImageIO.write(OCDRenderer.render(doc.page(pi), doc, dpi), "png", new File(out));
         System.out.println("converted " + args[0] + " page " + pi + " -> " + out + "  " + doc);
+    }
+
+    /** The page's transparency group names a four-component blending space (see
+     *  {@link OCDPage#cmykBlending()}). Anything unreadable counts as no statement. */
+    private static boolean blendsInCmyk(PDPage pd) {
+        try {
+            org.apache.pdfbox.cos.COSDictionary g = pd.getCOSObject().getCOSDictionary(org.apache.pdfbox.cos.COSName.GROUP);
+            if (g == null) return false;
+            org.apache.pdfbox.cos.COSBase cs = g.getDictionaryObject(org.apache.pdfbox.cos.COSName.CS);
+            if (cs == null) return false;
+            return org.apache.pdfbox.pdmodel.graphics.color.PDColorSpace.create(cs, pd.getResources())
+                    .getNumberOfComponents() == 4;
+        } catch (Exception e) {
+            JxLog.debug(PdfImporter.class, "page group colour space unreadable", e);
+            return false;
+        }
     }
 
     /** First 8 hex chars of the source's SHA-256 — the document identity is content-addressed, so a

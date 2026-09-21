@@ -433,7 +433,7 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
     // ── painting ────────────────────────────────────────────────────────────────
     @Override public void fillPath(int windingRule) throws IOException {
         path.setWindingRule(windingRule);
-        if (needsReferenceRaster() && fillGradientOrNull() == null && emitFromReference(new Area(path)))
+        if (needsReferenceRaster() && emitFromReference(new Area(path)))
             { applyPendingClip(); path = new JxPath(); return; }
         emit(fillPaint(new OCDPath(path)));
         applyPendingClip();
@@ -441,23 +441,80 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
     }
 
     @Override public void strokePath() throws IOException {
-        OCDPath n = new OCDPath(path).stroke(strokeArgb(), strokeWidth());
-        applyStrokeStyle(n);
-        emit(n);
+        OCDPath outline = strokeOutline();
+        if (outline != null) emit(outline);
+        else {
+            OCDPath n = new OCDPath(path).stroke(strokeArgb(), strokeWidth());
+            n.strokeCmyk(strokeCmyk());
+            applyStrokeStyle(n);
+            emit(n);
+        }
         applyPendingClip();
         path = new JxPath();
     }
 
     @Override public void fillAndStrokePath(int windingRule) throws IOException {
         path.setWindingRule(windingRule);
-        if (needsReferenceRaster() && fillGradientOrNull() == null
-                && emitFromReference(new Area(path)))
+        if (needsReferenceRaster() && emitFromReference(new Area(path)))
             { applyPendingClip(); path = new JxPath(); return; }
-        OCDPath n = fillPaint(new OCDPath(path)).stroke(strokeArgb(), strokeWidth());
-        applyStrokeStyle(n);
-        emit(n);
+        OCDPath outline = strokeOutline();
+        if (outline != null) { emit(fillPaint(new OCDPath(path))); emit(outline); }
+        else {
+            OCDPath n = fillPaint(new OCDPath(path)).stroke(strokeArgb(), strokeWidth());
+            n.strokeCmyk(strokeCmyk());
+            applyStrokeStyle(n);
+            emit(n);
+        }
         applyPendingClip();
         path = new JxPath();
+    }
+
+    /**
+     * The stroke as the FILLED outline it paints, when one width cannot say it — or null.
+     *
+     * <p>A PDF pen is a circle in USER space: under a CTM that scales x and y differently it lands
+     * on the page as an ellipse, and a line is as thick as that ellipse is across it. The model's
+     * stroke has one page-space width, which PDFBox's {@code transformWidth} averages over both
+     * axes. A chart drew its year gridlines as horizontal segments turned upright by
+     * {@code 0 -6.9853 0.14316 0 cm}, 2.407 wide: the ellipse is 0.34 pt across the line and
+     * 16.8 pt along it, the average said 11.8, and every gridline came out a black bar.
+     * Here the pen is traced where it lives — the path brought back to user space, stroked there
+     * with the full line style, the outline carried forward by the CTM — so it is exact for any
+     * direction, dashes and caps included. Isotropic CTMs (translation, rotation, uniform scale)
+     * keep the ordinary stroke, and so does a hairline, which has no width to distort.
+     */
+    private OCDPath strokeOutline() {
+        PDGraphicsState gs = getGraphicsState();
+        float lw = gs.getLineWidth();
+        if (lw <= 0) return null;
+        AffineTransform ctm = gs.getCurrentTransformationMatrix().createAffineTransform();
+        double a = ctm.getScaleX(), b = ctm.getShearY(), c = ctm.getShearX(), d = ctm.getScaleY();
+        double p = a * a + b * b + c * c + d * d, det = Math.abs(a * d - b * c);
+        double disc = Math.sqrt(Math.max(0, p * p - 4 * det * det));
+        double smax = Math.sqrt((p + disc) / 2), smin = Math.sqrt(Math.max(0, (p - disc) / 2));
+        if (smin <= 1e-9 || smax / smin < 1.02) return null;          // isotropic enough, or degenerate
+        if (strokeWidth() < 0.05 || lw * smin < 0.05) return null;    // a hairline stays a hairline
+        try {
+            java.awt.Shape local = ctm.createInverse().createTransformedShape(path);
+            float[] dash = null;
+            float phase = 0;
+            PDLineDashPattern dp = gs.getLineDashPattern();
+            if (dp != null && dp.getDashArray() != null && dp.getDashArray().length > 0) {
+                float sum = 0;
+                boolean valid = true;
+                for (float v : dp.getDashArray()) { if (v < 0) valid = false; sum += v; }
+                if (valid && sum > 0) { dash = dp.getDashArray(); phase = Math.max(0, dp.getPhase()); }
+            }
+            java.awt.BasicStroke pen = new java.awt.BasicStroke(lw, Math.clamp(gs.getLineCap(), 0, 2),
+                    Math.clamp(gs.getLineJoin(), 0, 2), Math.max(1f, gs.getMiterLimit()), dash, phase);
+            JxPath outline = new JxPath(ctm.createTransformedShape(pen.createStrokedShape(local)));
+            outline.setWindingRule(java.awt.geom.Path2D.WIND_NON_ZERO);
+            OCDPath o = new OCDPath(outline).fill(strokeArgb());
+            o.fillCmyk(strokeCmyk());                                 // the pen's colour, now a fill
+            return o;
+        } catch (java.awt.geom.NoninvertibleTransformException | IllegalArgumentException e) {
+            return null;
+        }
     }
 
     /** Apply the current non-stroking paint to a path: the solid argb, plus a first-class gradient
@@ -466,6 +523,7 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         n.fill(fillArgb());
         OCDGradient g = fillGradientOrNull();
         if (g != null) n.fill(g.flatArgb()).fillGradient(g);
+        else n.fillCmyk(fillCmyk());
         return n;
     }
 
@@ -475,7 +533,10 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
     private BufferedImage refRasterCache;
 
     /** True when the current non-stroking paint cannot be expressed by the model as vectors:
-     *  a tiling pattern, or any paint under a soft mask (ExtGState /SMask). */
+     *  a tiling pattern, or any paint under a soft mask (ExtGState /SMask) — a gradient fill and a
+     *  `sh` included. Those two used to take their own vector route and dropped the mask on the way:
+     *  a blue gradient that fades out over a photo under a luminosity mask came back as an opaque
+     *  slab hiding the photo (a press cover ad, measured). The model has a gradient; it has no mask. */
     private boolean needsReferenceRaster() {
         PDGraphicsState gs = getGraphicsState();
         if (gs.getSoftMask() != null) return true;
@@ -570,6 +631,7 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
             if (area.isEmpty()) return;
             Rectangle2D b = area.getBounds2D();
             if (b.getWidth() < 0.5 || b.getHeight() < 0.5) return;
+            if (getGraphicsState().getSoftMask() != null && emitFromReference(area)) return;
             float alpha = (float) getGraphicsState().getNonStrokeAlphaConstant();
 
             // Axial/radial → first-class gradient: emit the fill region (extent ∩ clip) as an OCDPath
@@ -776,8 +838,10 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         // Blend mode is run state too (the renderer composites text by node.blend, like paths). Non-Normal
         // only — Normal/unmapped is null, so the key is unchanged for the overwhelming fill+Normal case.
         String blend = blendName(getGraphicsState().getBlendMode());
+        // The source CMYK is run state as well: two CMYK colours may land on one sRGB value.
+        sugarcube.jexter.core.JxCmyk fk = fillCmyk();
         String key = fontId + "|" + fill + "|" + mode + "|" + sig(at)
-                + strokeSig + (blend != null ? "|bm:" + blend : "");
+                + strokeSig + (blend != null ? "|bm:" + blend : "") + (fk != null ? "|k:" + fk.toData() : "");
         // A clip no larger than one glyph cell is a per-glyph self-clip (some generators clip
         // each letter to its own outline): visually neutral for the glyph it accompanies, so we
         // ignore it — keeps runs merged and avoids registering a tiny clip per letter.
@@ -790,7 +854,13 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         if (cont) {
             double[] o = { at.getTranslateX(), at.getTranslateY() };
             runInverse.transform(o, 0, o, 0, 1);
-            if (Math.abs(o[1]) > 0.2) cont = false;   // moved to another line
+            // Off the run's baseline → a new run. A run stores ONE baseline and x per glyph, so a
+            // glyph kept despite an offset is silently put back on the line: at 0.2 em a phone
+            // number whose digits sit 1.82 pt (0.096 em) higher than its prefix — a text rise done
+            // with Tm — came back with every digit after "06" dropped onto the prefix's baseline.
+            // 0.01 em is far under what an eye sees (0.1 pt at 10 pt) and far over generator
+            // rounding (a 3-decimal Tm at 6 pt is 0.0002 em).
+            if (Math.abs(o[1]) > 0.01) cont = false;
             else localX = o[0];
         }
         if (!cont) startRun(fontId, fill, mode, at, key, cid);
@@ -819,8 +889,10 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         runClippedOut = clippedOut();
         try { runInverse = at.createInverse(); } catch (Exception e) { runInverse = new AffineTransform(); }
         run = new OCDText(fontId, fs).fill(fill).renderMode(mode);
+        run.fillCmyk(fillCmyk());
         if (run.hasStroke()) {
             run.strokePaint(strokeArgb(), strokeWidth());
+            run.strokeCmyk(strokeCmyk());
             applyStrokeStyle(run);                                  // cap/join/miter/dash — parity with paths
         }
         run.transform(JxTransform.of(base));
@@ -996,6 +1068,58 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         return resolveArgb(gs.getNonStrokingColorSpace(), gs.getNonStrokingColor(), (float) gs.getNonStrokeAlphaConstant());
     }
 
+    /** The fill's colour AS THE DOCUMENT STATED IT, when that was CMYK — see {@link sugarcube.jexter.core.JxCmyk}. */
+    private sugarcube.jexter.core.JxCmyk fillCmyk() {
+        PDGraphicsState gs = getGraphicsState();
+        return cmykOf(gs.getNonStrokingColorSpace(), gs.getNonStrokingColor(), fillArgb());
+    }
+
+    private sugarcube.jexter.core.JxCmyk strokeCmyk() {
+        PDGraphicsState gs = getGraphicsState();
+        return cmykOf(gs.getStrokingColorSpace(), gs.getStrokingColor(), strokeArgb());
+    }
+
+    /**
+     * DeviceCMYK as it is; a Separation or DeviceN whose ALTERNATE is DeviceCMYK through its own tint
+     * transform — which is what a spot colour means to any reader without that ink, and exactly what a
+     * press subset carries. Everything else (ICC-based CMYK included: its profile would be lost by a
+     * bare {@code k}) states no CMYK and keeps the sRGB alone.
+     */
+    private static sugarcube.jexter.core.JxCmyk cmykOf(PDColorSpace cs, PDColor color, int argb) {
+        float[] v = cmykComponents(cs, color);
+        return v == null ? null : new sugarcube.jexter.core.JxCmyk(v[0], v[1], v[2], v[3], argb);
+    }
+
+    /** The paint as four CMYK components, when it is one (see {@link #cmykOf}); null otherwise. */
+    private static float[] cmykComponents(PDColorSpace cs, PDColor color) {
+        try {
+            float[] v = color == null ? null : color.getComponents();
+            if (v == null) return null;
+            if (cs instanceof org.apache.pdfbox.pdmodel.graphics.color.PDDeviceCMYK) {
+                if (v.length != 4) return null;
+            } else if (cs instanceof org.apache.pdfbox.pdmodel.graphics.color.PDSeparation sep) {
+                if (!(sep.getAlternateColorSpace() instanceof org.apache.pdfbox.pdmodel.graphics.color.PDDeviceCMYK)) return null;
+                v = sep.getCOSObject() instanceof org.apache.pdfbox.cos.COSArray a ? tint(a, v) : null;
+            } else if (cs instanceof org.apache.pdfbox.pdmodel.graphics.color.PDDeviceN dn) {
+                if (!(dn.getAlternateColorSpace() instanceof org.apache.pdfbox.pdmodel.graphics.color.PDDeviceCMYK)) return null;
+                v = dn.getTintTransform().eval(v);
+            } else return null;
+            return v == null || v.length != 4 ? null : v;
+        } catch (Exception e) {
+            return null;                                       // unreadable tint → sRGB only, as before
+        }
+    }
+
+    /** The document's CMYK output intent, when it has one — installed by the importer, shared by every
+     *  page. Null: {@code DeviceCMYK} converts through PDFBox's built-in profile, as it always did. */
+    private OutputIntentCmyk intentCmyk;
+    void intentCmyk(OutputIntentCmyk c) { this.intentCmyk = c; }
+
+    /** A Separation's tint transform, read off its array: {@code [/Separation name alternate tintTransform]}. */
+    private static float[] tint(org.apache.pdfbox.cos.COSArray sep, float[] v) throws IOException {
+        return org.apache.pdfbox.pdmodel.common.function.PDFunction.create(sep.getObject(3)).eval(v);
+    }
+
     private int strokeArgb() {
         PDGraphicsState gs = getGraphicsState();
         return resolveArgb(gs.getStrokingColorSpace(), gs.getStrokingColor(), (float) gs.getAlphaConstant());
@@ -1020,6 +1144,10 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
             if (cs instanceof PDPattern pcs) {
                 Integer sampled = shadingArgb(pcs, color, alpha);
                 return sampled != null ? sampled : neutral(alpha);
+            }
+            if (intentCmyk != null) {                          // CMYK means what the output intent says it means
+                float[] k = cmykComponents(cs, color);
+                if (k != null) return argb(intentCmyk.toRGB(k), alpha);
             }
             float[] rgb = cs.toRGB(color.getComponents());
             return argb(rgb, alpha);

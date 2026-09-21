@@ -30,9 +30,17 @@ import java.util.stream.Stream;
  * ({@link #convertLogged}); the daemon adds only the size-stability gate and the watch loop.
  *
  * <pre>
- *   Jexter &lt;in.pdf|folder&gt; [out] [--recursive] [--threads=&lt;n&gt;] [--outline] [--&lt;opt&gt;=&lt;val&gt;]
- *   Jexter --hotfolder &lt;dir&gt; [outDir] [--recursive] [--threads=&lt;n&gt;] [--interval=&lt;sec&gt;] [--&lt;opt&gt;=&lt;val&gt;]
+ *   Jexter &lt;in.pdf|folder&gt; [out] [--recursive] [--threads=&lt;n&gt;] [--outline] [--suffix=&lt;s&gt;] [--&lt;opt&gt;=&lt;val&gt;]
+ *   Jexter --hotfolder &lt;dir&gt; [outDir] [--recursive] [--threads=&lt;n&gt;] [--interval=&lt;sec&gt;] [--done[=&lt;name&gt;]] [--suffix=&lt;s&gt;] [--&lt;opt&gt;=&lt;val&gt;]
  * </pre>
+ *
+ * <p>{@code --done} moves each source, once its output is written, into a sub-folder of the input
+ * folder ({@code Done} unless named) — or, given a full path ({@code --done=D:\Archive}), into that
+ * folder — mirroring its relative path; a failed source stays where it is.
+ * The hot folder never reads that sub-folder, so what is left in the inbox is what is still to do.
+ * {@code --suffix} names the outputs {@code <name><suffix>.pdf} ({@code -normalized} by default) — the
+ * same rule as the window's Settings field; {@code --suffix=} (empty) keeps the source name, which
+ * needs a separate output folder.
  *
  * <p>Console output stays ASCII on purpose: {@code stdout.encoding} follows the platform (a Windows
  * console is cp850/cp1252, this sandbox reports ANSI_X3.4-1968), so an em-dash prints as {@code ?}.
@@ -49,15 +57,23 @@ final class JexterCli {
 
     static void run(String[] args) throws Exception {
         Opts o = Opts.parse(args);
+        if (o.hot && o.in != null && o.suffix.isEmpty() && sameFolder(o)) {
+            System.err.println("--suffix= (empty) keeps the source name: give the hot folder a separate output folder");
+            System.exit(2); return;
+        }
         if (o.hot) { hotfolder(o); return; }
         if (o.in == null) { usage(); System.exit(2); return; }
+        if (o.suffix.isEmpty() && sameFolder(o)) {       // the output would BE the source
+            System.err.println("--suffix= (empty) keeps the source name: give a separate output folder");
+            System.exit(2); return;
+        }
         if (o.in.isDirectory()) batch(o); else single(o);
     }
 
     // ── single file ──────────────────────────────────────────────────────────────
     private static void single(Opts o) throws Exception {
         File out = (o.out != null) ? o.out
-                : new File(o.in.getAbsoluteFile().getParentFile(), Jexter.outName(o.in));
+                : new File(o.in.getAbsoluteFile().getParentFile(), Jexter.outName(o.in.getName(), o.suffix));
         OCDDocument d = Jexter.normalize(o.in, out, o.map, o.selectable);
         System.out.println("normalized " + o.in.getName() + " -> " + out.getName()
                 + (o.selectable ? " (selectable)" : " (outline)") + "  (" + d.pageCount() + " pages)");
@@ -68,7 +84,7 @@ final class JexterCli {
         File root = o.in.getAbsoluteFile();
         File outRoot = (o.out != null ? o.out : o.in).getAbsoluteFile();
         ensureDir(outRoot);
-        List<Job> jobs = plan(root, outRoot, o.recursive);
+        List<Job> jobs = plan(root, outRoot, o);
         if (jobs.isEmpty()) { System.err.println("no PDF files in " + root); System.exit(1); return; }
 
         ExecutorService pool = Executors.newFixedThreadPool(o.threads);
@@ -88,44 +104,56 @@ final class JexterCli {
 
         ExecutorService pool = Executors.newFixedThreadPool(o.threads);
         AtomicInteger ok = new AtomicInteger(), ko = new AtomicInteger();
-        Map<String, Long> sizes = new HashMap<>();   // path → last seen size (stability gate)
-        Set<String> done = new HashSet<>();           // paths already handed to the pool
+        Map<String, String> sizes = new HashMap<>();  // path → last seen signature (stability gate)
+        Map<String, String> done = new HashMap<>();   // path → signature of the version handed to the pool
         // both maps are touched only on this thread; they are pruned each pass to the live tree
 
         System.out.println("hotfolder: watching " + root + (o.recursive ? " (recursive)" : "")
-                + "  ->  " + outRoot + "   threads=" + o.threads + "   (Ctrl-C to stop)");
+                + "  ->  " + outRoot + (o.done != null ? "   done -> " + o.done : "")
+                + "   threads=" + o.threads + "   (Ctrl-C to stop)");
 
         Path path = root.toPath();
         try (WatchService ws = path.getFileSystem().newWatchService()) {
             path.register(ws, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_MODIFY);  // root wake-up
-            sweep(root, outRoot, o, sizes, done, pool, ok, ko);                  // initial pass over existing files
+            sweep(root, outRoot, o, sizes, done, pool, ok, ko, true);            // initial pass over existing files
             while (true) {
                 WatchKey key = ws.poll(o.intervalMs, TimeUnit.MILLISECONDS);     // wake on events, else time out and sweep anyway
                 if (key != null) { key.pollEvents(); key.reset(); }              // drain; the recursive sweep below is the source of truth
-                sweep(root, outRoot, o, sizes, done, pool, ok, ko);
+                sweep(root, outRoot, o, sizes, done, pool, ok, ko, false);
             }
         } finally {
             pool.shutdown();
         }
     }
 
-    /** One daemon pass: submit every stable, not-yet-handled PDF; prune bookkeeping to the live tree. */
-    private static void sweep(File root, File outRoot, Opts o, Map<String, Long> sizes, Set<String> done,
-                              ExecutorService pool, AtomicInteger ok, AtomicInteger ko) {
+    /**
+     * One daemon pass: submit every stable PDF whose CURRENT version has not been handled; prune the
+     * bookkeeping to the live tree.
+     *
+     * <p>A source is known by what it is — size and modification time — not by its name. The daemon used
+     * to skip any source whose output already existed, and so a PDF deleted and delivered again under the
+     * same name was never normalized a second time: its old output was still there. Now an existing output
+     * means «done» on the {@code first} pass only (work from an earlier session, output newer than its
+     * source); afterwards, a source that appears or changes is new work and its output is replaced.
+     */
+    private static void sweep(File root, File outRoot, Opts o, Map<String, String> sizes, Map<String, String> done,
+                              ExecutorService pool, AtomicInteger ok, AtomicInteger ko, boolean first) {
         Set<String> present = new HashSet<>();
-        for (Job j : plan(root, outRoot, o.recursive)) {
+        for (Job j : plan(root, outRoot, o)) {
             String key = j.in().getPath();                                       // full path: names can repeat across sub-dirs
             present.add(key);
-            if (done.contains(key)) continue;
-            if (j.out().exists()) { done.add(key); sizes.remove(key); continue; }     // already normalized earlier
             long size = j.in().length();
-            Long prev = sizes.get(key);
-            if (prev == null || prev != size || size == 0L) { sizes.put(key, size); continue; }  // still arriving → wait a pass
+            String sig = size + ":" + j.in().lastModified();
+            if (sig.equals(done.get(key))) continue;                             // this very version was handled
+            if (first && j.out().exists() && j.out().lastModified() >= j.in().lastModified()) {
+                done.put(key, sig); sizes.remove(key); continue;                 // normalized in an earlier session
+            }
+            if (size == 0L || !sig.equals(sizes.get(key))) { sizes.put(key, sig); continue; }  // still arriving → wait a pass
             sizes.remove(key);
-            done.add(key);
+            done.put(key, sig);
             pool.submit(() -> convertLogged(root, outRoot, j, o, ok, ko));
         }
-        done.retainAll(present);                                                  // forget vanished sources → bounded memory
+        done.keySet().retainAll(present);                                         // forget vanished sources: a return is new work
         sizes.keySet().retainAll(present);
     }
 
@@ -133,11 +161,13 @@ final class JexterCli {
 
     /** Every source PDF under {@code root} paired with its output path (mirrored under {@code outRoot}
      *  when that differs from {@code root}); our own {@code *-normalized.pdf} outputs are skipped. */
-    private static List<Job> plan(File root, File outRoot, boolean recursive) {
+    private static List<Job> plan(File root, File outRoot, Opts o) {
         List<Job> jobs = new ArrayList<>();
-        for (File p : listPdfs(root, recursive)) {
-            if (Jexter.isOutput(p.getName())) continue;
-            jobs.add(new Job(p, outFor(root, outRoot, p)));
+        Path doneDir = o.done == null ? null : root.toPath().resolve(o.done).toAbsolutePath().normalize();
+        for (File p : listPdfs(root, o.recursive)) {
+            if (Jexter.isOutput(p.getName(), o.suffix)) continue;
+            if (doneDir != null && p.toPath().toAbsolutePath().normalize().startsWith(doneDir)) continue;   // already done: never re-read
+            jobs.add(new Job(p, outFor(root, outRoot, p, o.suffix)));
         }
         return jobs;
     }
@@ -145,7 +175,8 @@ final class JexterCli {
     private static void convertLogged(File root, File outRoot, Job j, Opts o, AtomicInteger ok, AtomicInteger ko) {
         try {
             OCDDocument d = Jexter.normalize(j.in(), j.out(), o.map, o.selectable);
-            System.out.println("OK   " + rel(root, j.in()) + " -> " + rel(outRoot, j.out()) + "  (" + d.pageCount() + " pages)");
+            System.out.println("OK   " + rel(root, j.in()) + " -> " + rel(outRoot, j.out()) + "  (" + d.pageCount() + " pages)"
+                    + moveToDone(root, j.in(), o.done));
             ok.incrementAndGet();
         } catch (Exception e) {
             System.out.println("ERR  " + rel(root, j.in()) + "  :  " + e.getMessage());
@@ -153,9 +184,26 @@ final class JexterCli {
         }
     }
 
+    /** With {@code --done}: move a converted source to {@code <root>/<doneName>/<its relative path>} — an
+     *  absolute {@code doneName} replaces {@code <root>/<doneName>} ({@link Path#resolve} semantics),
+     *  replacing a same-named file there (a re-delivery). Only after its output was written — a failure
+     *  never reaches here and leaves the source in the inbox. Returns the log suffix. */
+    private static String moveToDone(File root, File src, String doneName) {
+        if (doneName == null) return "";
+        try {
+            Path rel = root.toPath().relativize(src.toPath());
+            Path target = root.toPath().resolve(doneName).resolve(rel);
+            Files.createDirectories(target.getParent());
+            Files.move(src.toPath(), target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            return "  [moved to " + doneName + "]";
+        } catch (IOException e) {
+            return "  [left in place: " + e.getMessage() + "]";
+        }
+    }
+
     /** Output path for a source PDF: next to the source, or mirrored under a separate {@code outRoot}. */
-    private static File outFor(File root, File outRoot, File pdf) {
-        String name = Jexter.outName(pdf);
+    private static File outFor(File root, File outRoot, File pdf, String suffix) {
+        String name = Jexter.outName(pdf.getName(), suffix);
         if (outRoot.equals(root)) return new File(pdf.getParentFile(), name);    // in place (recursive: in its own sub-dir)
         Path relDir = root.toPath().relativize(pdf.getParentFile().toPath());    // mirror the source sub-tree
         return new File(new File(outRoot, relDir.toString()), name);
@@ -178,6 +226,15 @@ final class JexterCli {
         return out;
     }
 
+    /** True when the outputs would land beside their sources: no output given, or the input folder itself. */
+    private static boolean sameFolder(Opts o) {
+        if (o.out == null) return true;
+        File inDir = o.in.isDirectory() ? o.in : o.in.getAbsoluteFile().getParentFile();
+        File outDir = o.in.isDirectory() || o.out.isDirectory() ? o.out : o.out.getAbsoluteFile().getParentFile();
+        if (!o.in.isDirectory() && !o.out.isDirectory()) return o.in.getAbsoluteFile().equals(o.out.getAbsoluteFile());
+        return inDir.getAbsoluteFile().toPath().normalize().equals(outDir.getAbsoluteFile().toPath().normalize());
+    }
+
     private static void ensureDir(File dir) throws IOException {
         if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot create " + dir);
     }
@@ -185,9 +242,11 @@ final class JexterCli {
         try { return base.toPath().relativize(f.toPath()).toString(); } catch (Exception e) { return f.getName(); }
     }
     private static void usage() {
-        System.err.println("usage: Jexter <in.pdf|folder> [out] [--recursive] [--threads=<n>] [--outline] [--<option>=<value>]");
+        System.err.println("usage: Jexter <in.pdf|folder> [out] [--recursive] [--threads=<n>] [--outline] [--suffix=<s>] [--<option>=<value>]");
         System.err.println("       --threads defaults to half the cores (max " + MAX_LANES + "); one document per thread. Higher is allowed.");
-        System.err.println("       Jexter --hotfolder <dir> [outDir] [--recursive] [--threads=<n>] [--interval=<sec>] [--<option>=<value>]");
+        System.err.println("       Jexter --hotfolder <dir> [outDir] [--recursive] [--threads=<n>] [--interval=<sec>] [--done[=<name>]] [--<option>=<value>]");
+        System.err.println("       --done moves each converted source into <dir>/Done; --done=<name> into <dir>/<name>; --done=<full path> into that folder");
+        System.err.println("       --suffix=<s> names outputs <name><s>.pdf (default -normalized); --suffix= keeps the name (use a separate out folder)");
     }
 
     // ── one parser for every headless mode ───────────────────────────────────────
@@ -199,6 +258,8 @@ final class JexterCli {
     private static final class Opts {
         File in, out;
         boolean hot, recursive, selectable = true;
+        String done;                                    // --done[=<name|path>]: where processed sources go (a name is a sub-folder of the input); null = off
+        String suffix = Jexter.SUFFIX;                  // --suffix=<s>: outputs are <name><s>.pdf
         /** Documents converted AT ONCE. The engine is single-threaded WITHIN a document on purpose
          *  (PDFBox's PDDocument is not thread-safe for concurrent page access) — the parallel axis is
          *  the document. Defaulting to 1 left a batch on one core unless the caller knew about the
@@ -218,6 +279,9 @@ final class JexterCli {
                 else if (a.equals("--recursive") || a.equals("-r")) o.recursive = true;
                 else if (a.equals("--outline"))                    o.selectable = false;
                 else if (a.equals("--selectable"))                 o.selectable = true;
+                else if (a.equals("--done"))                       o.done = "Done";
+                else if (a.startsWith("--done="))                  o.done = a.substring(7).isBlank() ? "Done" : a.substring(7);
+                else if (a.startsWith("--suffix="))                o.suffix = Jexter.suffix(a.substring(9));
                 else if (a.equals("--port") || a.equals("--web"))  i++;                       // window flags carry a value
                 else if (a.startsWith("--threads="))  o.threads    = Math.max(1, Integer.parseInt(a.substring(10)));
                 else if (a.startsWith("--interval=")) o.intervalMs = Math.max(500L, (long) (Double.parseDouble(a.substring(11)) * 1000));

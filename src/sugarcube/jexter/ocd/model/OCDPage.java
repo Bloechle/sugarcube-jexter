@@ -27,6 +27,7 @@ public final class OCDPage {
     private JxRect artBox;
     private int    rotation;         // 0 / 90 / 180 / 270
     private double dpi = 72;
+    private boolean cmykBlending;    // the page's transparency group blends in CMYK (PDF /Group /CS, 4 components)
 
     private final List<OCDNode>        content = new ArrayList<>();
     private final Map<String, OCDClip> clips   = new LinkedHashMap<>();
@@ -57,6 +58,18 @@ public final class OCDPage {
     public OCDPage artBox(JxRect r)   { this.artBox = r; return this; }
 
     public OCDPage dpi(double v) { this.dpi = v; return this; }
+
+    /**
+     * True when the page's own transparency group states a CMYK blending space ({@code /Group /CS
+     * /DeviceCMYK}, or an ICC profile of four components). It is a PAGE property, not a colour: the
+     * model keeps sRGB, and this says the page is composited in CMYK before it is shown — which is what
+     * Acrobat, MuPDF and poppler do with it, and what gamut-maps a saturated RGB photo and every
+     * translucent layer on that page. Dropped, a press cover came out visibly more violet with its ad's
+     * translucent blue as an opaque slab: 11.0% of pixels off under MuPDF, 2.6% once stated again.
+     * PDFBox ignores it — which is why the reference raster never showed the difference.
+     */
+    public boolean cmykBlending()             { return cmykBlending; }
+    public OCDPage cmykBlending(boolean v)    { this.cmykBlending = v; return this; }
 
     public OCDPage rotation(int degrees) {
         int r = ((degrees % 360) + 360) % 360;
@@ -155,7 +168,7 @@ public final class OCDPage {
     public OCDPage copy(String newId) {
         OCDPage p = new OCDPage(newId == null ? id : newId, mediaBox);
         p.cropBox = cropBox; p.bleedBox = bleedBox; p.trimBox = trimBox; p.artBox = artBox;
-        p.rotation = rotation; p.dpi = dpi;
+        p.rotation = rotation; p.dpi = dpi; p.cmykBlending = cmykBlending;
         for (OCDNode n : content) p.content.add(n.copy());
         for (var e : clips.entrySet()) p.clips.put(e.getKey(), e.getValue().copy());
         for (OCDLink l : links) p.links.add(l.copy());

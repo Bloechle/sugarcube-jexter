@@ -45,10 +45,12 @@ OEBPS/
     outline.json                  navigation tree (page + y targets)
     structures.json               logical structure trees (by reference) — when any
     annots.json                   PDF annotations & form fields — sparse, when any
+    output-intent.icc             the output intent's ICC profile — when the source embeds one (§A2)
 ```
 
 Everything under `ocd/` is a declared publication resource (manifest items
-`jx-meta`, `jx-outline`, `jx-structures`, `jx-annots`; `fonts.svg` is item `glyphs`,
+`jx-meta`, `jx-outline`, `jx-structures`, `jx-annots`, `jx-output-intent` with media type
+`application/vnd.iccprofile`; `fonts.svg` is item `glyphs`,
 media type `image/svg+xml`). A generic EPUB reader ignores `ocd/*`; jexter
 tooling requires `meta.json` to treat the file as a model (a foreign EPUB is a
 book, not a model).
@@ -62,12 +64,23 @@ book, not a model).
   "analysis": {                            // only when analysis ran
     "textSegmented": true, "headingsDetected": true },
   "layers": [ { "id", "name", "visible", "order" } ],   // PDF OCGs, when any
+  "outputIntent": {                        // the source's first /OutputIntents entry, when any
+    "subtype": "GTS_PDFX", "conditionId": "FOGRA27", "condition": "…",
+    "info": "Coated FOGRA39 (ISO 12647-2:2004)", "registry": "http://www.color.org",
+    "profile": "output-intent.icc", "components": 4 },    // profile: a member under ocd/
   "title": "…", "authors": ["…"], "subject": "…",
   "keywords": ["…"], "creator": "…", "producer": "…", "language": "fr-CH",
   "created": "…", "modified": "…",                      // language: PDF /Lang or detected (BCP-47)
   "custom": { "…": "…" }                                // XMP custom fields, when any
 }
 ```
+
+`outputIntent` says what the document's DEVICE colours mean: Acrobat and MuPDF read every
+`DeviceCMYK` value through its profile, a reader without it through its own default. It is carried
+verbatim and written back by the PDF projection; when its profile is CMYK the importer also converts
+`DeviceCMYK` paint to the model's sRGB through it (Java's `ICC_ColorSpace.toRGB`, within 1–2 levels of
+MuPDF on the same file) instead of PDFBox's built-in profile. Measured on a press page with Coated
+FOGRA39: a `1 0.5 0 0.2 k` background shows 0,89,154 with the intent and 0,94,157 without.
 
 Empty fields are omitted. `language` is the DOCUMENT language; each page also
 carries its own detected `xml:lang` (see §B2).
@@ -255,7 +268,7 @@ is one `<svg>`:
      viewBox="0 0 595.3 841.9" width="595.3" height="841.9"
      data-ocd="page" data-version="2" xml:lang="fr"
      data-mediabox="0 0 595.3 841.9" [data-bleedbox|data-trimbox|data-artbox]
-     [data-dpi] [data-rotate]>
+     [data-dpi] [data-rotate] [data-blending]>
 ```
 
 - **viewBox — the crop.** The page's coordinate frame is the **media box**: that is
@@ -283,6 +296,15 @@ is one `<svg>`:
   A page written before this — recognisable by that carrier, which nothing mints here any
   more — states its crop as `data-crop` and rotates itself; `OCDReader` reads such a page
   on its own terms rather than misframing it on these.
+- **`data-blending="cmyk"` — the page composites in CMYK.** Stated only when the source
+  page's own transparency group names a four-component space (`/Group /CS /DeviceCMYK`, or
+  an ICC profile with `N 4`); absent means the default. The colours stay sRGB — this is a
+  property of the PAGE, not of a paint: the page is composited in CMYK before it is shown,
+  which gamut-maps saturated photos and changes every translucent layer on it. `PdfWriter`
+  states it back as the page's `/Group`. PDFBox ignores it, so the reference raster cannot
+  show its absence; MuPDF, poppler and Acrobat all honour it (measured on a press cover:
+  11.0 % of pixels off under MuPDF without it, 2.6 % with it). A browser has no CMYK
+  compositing, so the SVG surfaces carry it and do not paint it.
 - **`xml:lang`** — the page language, detected at write time from the page's own
   text (`LanguageDetector`: dominant non-Latin script first, Latin stopwords
   second, abstains when unsure), falling back to the document language. Drives
@@ -329,7 +351,7 @@ without either moving. The wrapper is a paint carrier, spliced on read.
 | `OCDText` run | `<g id="tN" data-ocd="run" data-font data-size data-text [data-chars] [data-blanks] [data-order] [data-render] class transform>` | see §B4 |
 | `OCDPath` | `<path id d class transform>` | `SvgWriter`'s audited emitter |
 | `OCDImage` | `<image id xlink:href="../images/…" transform>` | shared resources |
-| `OCDGroup` / graphic / layer | `<g id data-ocd="group\|graphic\|layer" [data-matrix] [data-layer]>` | `data-layer` = the layer id (§B4b) |
+| `OCDGroup` / graphic / layer | `<g id data-ocd="group\|graphic\|layer" [data-matrix] [data-layer] [style]>` | `data-layer` = the layer id (§B4b); `style` paints the group's blend and alpha, see below |
 | `OCDMedia` | `<g id data-ocd="media" data-kind="video\|audio" data-src [data-poster] [data-matrix] [data-controls] [data-autoplay] [data-loop] [data-muted]>` | payload in `media/<ref>`; a poster `<image>` inside is a paint copy, not a node |
 | clip carrier | `<g data-ocd="clip" data-clip="cN" clip-path transform><g transform>…</g></g>` | not a node — see below |
 
@@ -337,6 +359,24 @@ Every node also carries the shared paint state where it departs from the default
 **`data-name`**, **`data-blend`**, **`data-alpha`**, and — on a group or a media
 node, whose placement cannot ride in a `transform` the reader would confuse with
 the page flip — **`data-matrix`** (the node's own matrix, six numbers).
+
+A run, a path or a group whose paint the document stated in CMYK also carries that colour:
+**`data-cmyk`** (fill) and **`data-cmyk-stroke`**, each `"c m y k #rrggbb"` — the four components
+in 0..1, then the sRGB they were resolved to at import. The sRGB in the class stays the paint on
+every surface; the CMYK is for a projection that can state it (the PDF writer writes `k` / `K`),
+so a reader shows it through its own profile exactly as it shows the source. It is recorded for
+`DeviceCMYK`, and for a `Separation` or `DeviceN` whose alternate is `DeviceCMYK` (through its
+tint transform); an ICC-based CMYK keeps sRGB alone, since a bare `k` would drop its profile. The
+trailing `#rrggbb` is the proof the pair still holds: a node recoloured since — by Prism, by
+anything — no longer paints that sRGB, and the stale CMYK is then ignored, never written.
+
+On a GROUP, `data-blend` and `data-alpha` are also painted, by a `style` the writer derives from
+them — `mix-blend-mode` (the PDF name in CSS spelling, `ColorDodge` → `color-dodge`) and `opacity`.
+A group's blend and opacity act on the group AS ONE: its children composite normally among
+themselves and only their result is blended, PDF's transparency-group semantics, which a `<g>`
+carrying those two properties reproduces in any SVG engine. Applied to each child instead, a
+Multiply group tints every photo with whatever it covers. The `style` is paint, never model: a
+reader takes the two `data-*` and ignores it.
 
 The six numbers are in the order **PDF, SVG and Java2D all use** — `m00 m10 m01 m11 e f`, meaning
 `x' = a·x + c·y + e` — so a matrix crossing any of those boundaries needs no reordering and cannot

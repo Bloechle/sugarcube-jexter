@@ -31,7 +31,8 @@ import static sugarcube.jexter.write.EpubPackage.safe;
  *       reading order, lines, links, roles as data), fonts live once in {@code pages/fonts.svg}
  *       (outlines + metrics + cmap — the single representation), and the few non-visual
  *       members ride as JSON under {@code ocd/}: {@code meta.json}, {@code outline.json},
- *       {@code structures.json}, sparse {@code annots.json}.</li>
+ *       {@code structures.json}, sparse {@code annots.json}, and {@code output-intent.icc} when the source
+ *       carries an output intent with a profile.</li>
  * </ul>
  *
  * <p>Editable = the presence of {@code ocd/}. For platform distribution, export the
@@ -136,6 +137,8 @@ public final class OcdEpubWriter {
 
     private static void members(JxZip zip, OCDDocument doc) throws IOException {
         zip.deflated(JX + "meta.json", utf8(OcdMembers.metaJson(doc)));
+        if (doc.outputIntent() != null && doc.outputIntent().profile() != null)
+            zip.deflated(JX + OcdMembers.OUTPUT_INTENT_PROFILE, doc.outputIntent().profile());
         zip.deflated(JX + "outline.json", utf8(OcdMembers.outlineJson(doc)));
         if (!doc.structures().isEmpty())
             zip.deflated(JX + "structures.json", utf8(OcdMembers.structuresJson(doc)));
@@ -219,6 +222,9 @@ public final class OcdEpubWriter {
         }
         // the authoritative face — every ocd/* member is a declared publication resource
         jx(manifest, "jx-meta", "meta.json");
+        if (doc.outputIntent() != null && doc.outputIntent().profile() != null)
+            manifest.append("    <item id=\"jx-output-intent\" href=\"ocd/").append(OcdMembers.OUTPUT_INTENT_PROFILE)
+                    .append("\" media-type=\"application/vnd.iccprofile\"/>\n");
         jx(manifest, "jx-outline", "outline.json");
         if (!doc.structures().isEmpty()) jx(manifest, "jx-structures", "structures.json");
         if (OcdMembers.hasAnnots(doc)) jx(manifest, "jx-annots", "annots.json");

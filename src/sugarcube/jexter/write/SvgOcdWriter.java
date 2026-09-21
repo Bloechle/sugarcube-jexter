@@ -19,7 +19,6 @@ import sugarcube.jexter.ocd.model.OCDText;
 import sugarcube.jexter.ocd.model.OCDVideo;
 
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -32,7 +31,7 @@ import java.util.Map;
  * <p>Grammar v2 (all OCD semantics ride on {@code data-*} attributes, stripped by generic export):
  * <ul>
  *   <li>{@code <svg data-ocd="page" data-version="2" data-mediabox="x y w h" [data-bleedbox|data-trimbox|data-artbox]
- *       [data-dpi] [data-rotate]>} — viewBox = the CROP WINDOW over the media frame, Y-up→SVG flip exactly
+ *       [data-dpi] [data-rotate] [data-blending]>} — viewBox = the CROP WINDOW over the media frame, Y-up→SVG flip exactly
  *       as {@link SvgWriter} (same audited math);</li>
  *   <li>{@code OCDParagraph} → {@code <g id data-ocd="paragraph">} containing {@code <g data-ocd="line">}
  *       line groups (children in CONTENT order, split on {@link sugarcube.jexter.ocd.model.OCDBreak}
@@ -85,6 +84,7 @@ public final class SvgOcdWriter {
         String lang = pageLang(doc, page);
         if (!lang.isEmpty()) sb.append(" xml:lang=\"").append(esc(lang)).append('"');
         if (page.rotation() != 0) sb.append(" data-rotate=\"").append(page.rotation()).append('"');
+        if (page.cmykBlending()) sb.append(" data-blending=\"cmyk\"");
         // The crop IS the viewBox and the rotation IS data-rotate: one representation each, both on the
         // root, so neither can reach a content element. There is no data-crop.
         box(sb, "data-mediabox", page.mediaBox());
@@ -184,7 +184,12 @@ public final class SvgOcdWriter {
                 if (open) sb.append("</g>\n");
                 sb.append("</g>\n");
             }
-            case OCDPath p   -> { int at = sb.length(); SvgWriter.path(sb, page, p, styles, clips, grads, n.id()); oInject(sb, at, order); }
+            case OCDPath p   -> {
+                int at = sb.length();
+                SvgWriter.path(sb, page, p, styles, clips, grads, n.id());
+                oInject(sb, at, order);
+                inject(sb, at, cmykAttrs(p));   // the path helper is SvgWriter's, shared: the model's extras go in here
+            }
             case OCDImage im -> { int at = sb.length(); SvgWriter.image(sb, page, im, clips, n.id()); oInject(sb, at, order); }
             case OCDMedia m  -> {
                 sb.append("<g id=\"").append(m.id()).append("\" data-ocd=\"media\"");
@@ -216,6 +221,7 @@ public final class SvgOcdWriter {
                 if (g instanceof sugarcube.jexter.ocd.model.OCDLayerContent lc && lc.layerId() != null)
                     sb.append(" data-layer=\"").append(esc(lc.layerId())).append('"');
                 state(sb, g);
+                sb.append(SvgWriter.groupStyle(g));   // data-blend/-alpha are the model; this is the paint
                 sb.append(">\n");
                 children(sb, doc, page, g.children(), styles, clips, grads, glyphs);
                 sb.append("</g>\n");
@@ -241,6 +247,7 @@ public final class SvgOcdWriter {
         if (n.hasRole())  sb.append(" data-role=\"").append(esc(n.role())).append('"');
         if (n.hasBlend()) sb.append(" data-blend=\"").append(esc(n.blend())).append('"');
         if (n.alpha() < 1f) sb.append(" data-alpha=\"").append(f(n.alpha())).append('"');
+        sb.append(cmykAttrs(n));
     }
 
     private static String esc(String v) {
@@ -435,11 +442,24 @@ public final class SvgOcdWriter {
     /** Injects {@code data-order} into an element just emitted by a {@link SvgWriter} helper (path,
      *  image): right after its id attribute — the helpers open with {@code <tag id="…"}. */
     private static void oInject(StringBuilder sb, int at, int order) {
-        if (order < 0) return;
+        if (order >= 0) inject(sb, at, " data-order=\"" + order + "\"");
+    }
+
+    /** Insert {@code attrs} right after the id of the element a shared helper just wrote at {@code at}. */
+    private static void inject(StringBuilder sb, int at, String attrs) {
+        if (attrs.isEmpty()) return;
         int id = sb.indexOf("id=\"", at);
         if (id < at) return;                                 // helper emitted no id (e.g. a poster)
         int close = sb.indexOf("\"", id + 4);
-        if (close > 0) sb.insert(close + 1, " data-order=\"" + order + "\"");
+        if (close > 0) sb.insert(close + 1, attrs);
+    }
+
+    /** The source CMYK behind a node's fill and stroke, when the document stated one (§B3). */
+    private static String cmykAttrs(OCDNode n) {
+        String s = "";
+        if (n.fillCmyk() != null)   s += " data-cmyk=\"" + n.fillCmyk().toData() + "\"";
+        if (n.strokeCmyk() != null) s += " data-cmyk-stroke=\"" + n.strokeCmyk().toData() + "\"";
+        return s;
     }
 
     /** PDF link annotations as native SVG anchors: transparent hit-rects, clickable in any
@@ -524,7 +544,7 @@ public final class SvgOcdWriter {
             if (sa < 1f) css.append(";stroke-opacity:").append(f(sa));
         }
         if (t.hasBlend() && !t.blend().equalsIgnoreCase("Normal"))
-            css.append(";mix-blend-mode:").append(t.blend().toLowerCase(Locale.US));
+            css.append(";mix-blend-mode:").append(SvgWriter.cssBlend(t.blend()));
         return css.toString();
     }
 

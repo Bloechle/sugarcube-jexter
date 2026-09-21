@@ -97,6 +97,9 @@ public final class OcdMembers {
 
     // ── document members ─────────────────────────────────────────────────────────
 
+    /** The output intent's ICC profile, a member of its own under {@code ocd/} — binary, so not in the JSON. */
+    public static final String OUTPUT_INTENT_PROFILE = "output-intent.icc";
+
     public static String metaJson(OCDDocument doc) {
         OCDMeta m = doc.meta();
         JxStringer js = new JxStringer(512).obj()
@@ -113,6 +116,16 @@ public final class OcdMembers {
             js.arr("layers");
             for (var l : doc.layers().values())
                 js.obj().str("id", l.id()).str("name", l.name()).bool("visible", l.visible()).num("order", (long) l.order()).end();
+            js.end();
+        }
+        var oi = doc.outputIntent();
+        if (oi != null) {                        // FORMAT §A2: what the device colours mean; the profile rides beside
+            js.obj("outputIntent").str("subtype", oi.subtype());
+            str(js, "conditionId", oi.conditionId());
+            str(js, "condition", oi.condition());
+            str(js, "info", oi.info());
+            str(js, "registry", oi.registry());
+            if (oi.profile() != null) js.str("profile", OUTPUT_INTENT_PROFILE).num("components", (long) oi.components());
             js.end();
         }
         str(js, "title", m.title());

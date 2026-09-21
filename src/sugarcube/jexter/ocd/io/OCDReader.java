@@ -1,6 +1,7 @@
 package sugarcube.jexter.ocd.io;
 
 import sugarcube.jexter.core.JxXml;
+import sugarcube.jexter.core.JxCmyk;
 import sugarcube.jexter.core.JxColor;
 import sugarcube.jexter.core.JxJson;
 import sugarcube.jexter.core.JxName;
@@ -159,6 +160,15 @@ public final class OCDReader {
 
         OCDDocument doc = new OCDDocument();
         readMeta(meta, doc);
+        Map<String, Object> oi = obj(meta, "outputIntent");
+        if (oi != null) {
+            byte[] profile = null;
+            ZipEntry pe = has(oi, "profile") ? zf.getEntry(JX + s(oi, "profile")) : null;
+            if (pe != null) try (var in = zf.getInputStream(pe)) { profile = in.readAllBytes(); }
+            doc.outputIntent(new sugarcube.jexter.ocd.model.OCDOutputIntent(
+                    has(oi, "subtype") ? s(oi, "subtype") : "GTS_PDFX", s(oi, "conditionId"), s(oi, "condition"),
+                    s(oi, "info"), s(oi, "registry"), profile, profile == null ? 0 : ii(oi, "components", 0)));
+        }
 
         Map<String, Object> nav = json(zf, JX + "outline.json");
         if (nav != null) for (Object o : arr(nav, "bookmarks")) doc.addOutline(outline((Map<String, Object>) o));
@@ -300,6 +310,7 @@ public final class OCDReader {
         if (media == null) media = new JxRect(0, 0, dbl(svg.getAttribute("width"), 0), dbl(svg.getAttribute("height"), 0));
         OCDPage page = new OCDPage("p" + number, media);
         if (svg.hasAttribute("data-rotate")) page.rotation((int) dbl(svg.getAttribute("data-rotate"), 0));
+        page.cmykBlending("cmyk".equals(svg.getAttribute("data-blending")));
         if (svg.hasAttribute("data-dpi")) page.dpi(dbl(svg.getAttribute("data-dpi"), 72));
         JxRect r;
         // The crop is a WINDOW: the root viewBox states it (§B2), so a re-crop moves no element and the
@@ -473,6 +484,7 @@ public final class OCDReader {
             case "path" -> {
                 if (!el.hasAttribute("id")) return;            // glyph defs live in <defs>; content paths carry ids
                 OCDPath p = path(el, css, grads, clipDefs);
+                cmyk(el, p);
                 p.z(z[0] += 1f);
                 register(out, p, parent, wrapClip);
                 oAttr(el, p, ord);
@@ -639,6 +651,14 @@ public final class OCDReader {
         if (el.hasAttribute("data-role"))  n.role(el.getAttribute("data-role"));
         if (el.hasAttribute("data-blend")) n.blend(el.getAttribute("data-blend"));
         if (el.hasAttribute("data-alpha")) n.alpha((float) dbl(el.getAttribute("data-alpha"), 1));
+        cmyk(el, n);
+    }
+
+    /** The source CMYK behind a node's fill / stroke (FORMAT §B3) — on runs and groups through
+     *  {@link #state}, on paths directly: a path's other paint rides in its class. */
+    private static void cmyk(Element el, OCDNode n) {
+        if (el.hasAttribute("data-cmyk"))        n.fillCmyk(JxCmyk.parse(el.getAttribute("data-cmyk")));
+        if (el.hasAttribute("data-cmyk-stroke")) n.strokeCmyk(JxCmyk.parse(el.getAttribute("data-cmyk-stroke")));
     }
 
     private static void blend(Map<String, String> d, OCDNode n) {

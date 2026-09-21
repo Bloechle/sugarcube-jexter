@@ -130,10 +130,37 @@ public final class SvgWriter {
                     image(sb, page, poster, clips);
                 }
             }
-            case OCDGroup g -> { for (OCDNode c : OCDNode.inPaintOrder(g.children())) node(sb, doc, page, c, styles, faces, clips, grads, fontSrc); }
+            case OCDGroup g -> {
+                String gs = groupStyle(g);
+                if (!gs.isEmpty()) sb.append("<g").append(gs).append(">\n");
+                for (OCDNode c : OCDNode.inPaintOrder(g.children())) node(sb, doc, page, c, styles, faces, clips, grads, fontSrc);
+                if (!gs.isEmpty()) sb.append("</g>\n");
+            }
             default -> { }
         }
         if (!open.isEmpty()) sb.append(CLIP_CLOSE);
+    }
+
+    /**
+     * The paint a group applies AS ONE — its blend mode and its opacity — as an SVG style, or "" when
+     * it has none. On a {@code <g>}, {@code mix-blend-mode} and {@code opacity} composite the group's
+     * content first and blend the result: PDF's transparency-group semantics, which the children
+     * cannot reproduce one by one (see {@link OCDGroup#compositesAsOne}). Before this, both SVG
+     * writers dropped a group's blend and alpha altogether. Shared with {@link SvgOcdWriter}.
+     */
+    static String groupStyle(OCDGroup g) {
+        StringBuilder css = new StringBuilder();
+        if (g.hasBlend() && !g.blend().equalsIgnoreCase("Normal"))
+            css.append("mix-blend-mode:").append(cssBlend(g.blend()));
+        if (g.alpha() < 1f) css.append(css.isEmpty() ? "" : ";").append("opacity:").append(JxNum.fmt(g.alpha()));
+        return css.isEmpty() ? "" : " style=\"" + css + "\"";
+    }
+
+    /** A PDF blend-mode name as CSS spells it: {@code ColorDodge} → {@code color-dodge}. Lower-casing
+     *  alone gave {@code colordodge}, which no browser knows — it dropped the declaration and painted
+     *  the four two-word modes (ColorDodge, ColorBurn, HardLight, SoftLight) as Normal. */
+    static String cssBlend(String pdfName) {
+        return pdfName.replaceAll("(?<=[a-z])(?=[A-Z])", "-").toLowerCase(Locale.US);
     }
 
     // ── Text: one <text> per run, placed via pageFlip · transform · flipY ─────
@@ -193,7 +220,7 @@ public final class SvgWriter {
             if (sa < 1f) css.append(";stroke-opacity:").append(f(sa));
         }
         if (t.hasBlend() && !t.blend().equalsIgnoreCase("Normal"))
-            css.append(";mix-blend-mode:").append(t.blend().toLowerCase(Locale.US));
+            css.append(";mix-blend-mode:").append(cssBlend(t.blend()));
         String cls = classFor(styles, css.toString());
 
         sb.append("<text transform=\"matrix(").append(mat(T)).append(")\" ")
@@ -282,7 +309,7 @@ public final class SvgWriter {
             if (sa < 1f) css.append(";stroke-opacity:").append(f(sa));
         }
         if (p.hasBlend() && !p.blend().equalsIgnoreCase("Normal"))
-            css.append(";mix-blend-mode:").append(p.blend().toLowerCase(Locale.US));
+            css.append(";mix-blend-mode:").append(cssBlend(p.blend()));
 
         String cls = classFor(styles, css.toString());
         sb.append("<path ");
@@ -361,7 +388,7 @@ public final class SvgWriter {
         var s = new StringBuilder();
         if (im.alpha() < 1f) s.append(" opacity=\"").append(f(im.alpha())).append('"');
         if (im.hasBlend() && !im.blend().equalsIgnoreCase("Normal"))
-            s.append(" style=\"mix-blend-mode:").append(im.blend().toLowerCase(Locale.US)).append('"');
+            s.append(" style=\"mix-blend-mode:").append(cssBlend(im.blend())).append('"');
         return s.toString();
     }
 
