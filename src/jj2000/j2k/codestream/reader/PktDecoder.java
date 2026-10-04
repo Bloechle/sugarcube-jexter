@@ -1,4 +1,4 @@
-/**
+/*
  * CVS identifier:
  *
  * $Id: PktDecoder.java,v 1.46 2002/07/19 12:35:14 grosbois Exp $

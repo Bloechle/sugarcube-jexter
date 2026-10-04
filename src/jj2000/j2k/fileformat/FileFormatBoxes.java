@@ -53,7 +53,7 @@ public interface FileFormatBoxes
   public static final int CAPTURE_RESOLUTION_BOX = 0x72657363;
   public static final int DEFAULT_DISPLAY_RESOLUTION_BOX = 0x72657364;
   public static final int READER_REQUIREMENTS_BOX = 0x72726571;//added by zoubi
-  /**
+  /*
    * End of JP2 Header boxes
    */
   /**
@@ -61,7 +61,7 @@ public interface FileFormatBoxes
    */
   public static final int UUID_LIST_BOX = 0x75637374;
   public static final int URL_BOX = 0x75726c20;
-  /**
+  /*
    * end of UUID Info boxes
    */
   /**
@@ -71,7 +71,7 @@ public interface FileFormatBoxes
   public static final int IMB_C = 7;
   public static final int IMB_UnkC = 1;
   public static final int IMB_IPR = 0;
-  /**
+  /*
    * end of Image Header Box Fields
    */
   /**
@@ -82,7 +82,7 @@ public interface FileFormatBoxes
   public static final int CSB_APPROX = 0;
   public static final int CSB_ENUM_SRGB = 16;
   public static final int CSB_ENUM_GREY = 17;
-  /**
+  /*
    * en of Colour Specification Box Fields
    */
   /**
