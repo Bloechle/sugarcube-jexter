@@ -9,14 +9,32 @@
 > members, field by field. **Part B** specifies the page & font grammar: the
 > strongly-typed SVG dialect the pages are written in.
 
-Extension: **`.ocd.epub`** · media type `application/epub+zip` · no backward
-compatibility — the grammar evolves in place under gates, `data-version="2"`.
+Extension: **`.ocd.epub`** · media type `application/epub+zip` · current version
+**3** (`data-version="3"`, `"version": "3"`) — see *Versions* below for what that promises.
 
-Status: **v2 — implemented and gated** (`SvgOcdWriter` · `OcdMembers` ·
-`OcdEpubWriter` · `OCDReader`). Standing gates: `write(read(v2)) = v2`
+Status: **v3 — implemented and gated** (`SvgOcdWriter` · `OcdMembers` ·
+`OcdEpubWriter` · `OCDReader`). Standing gates: `write(read(v3)) = v3`
 byte-identical (60/60 Fedlex pages + `fonts.svg`), `pdf→doctags ≡ (pdf→ocd)→doctags`
 byte-identical, fonts reread exactly (glyphs / cmap / weights), `ocd→pdf`
 selectable and `ocd→epub` from a reread container, `javac` 0 errors / 0 warnings.
+
+## Versions
+
+The format is the canonical model of a document, not a container that accretes options. So:
+
+- **A change to the grammar is a new VERSION, designed in this document first** — never an
+  attribute slipped in beside the others. The engine states the version from ONE place
+  (`OCDVocab.VERSION`), the client from one (`ocd.js` `OCD_VERSION`).
+- **A new version owes nothing to the old readers.** It may drop, rename or reshape anything;
+  backward compatibility is not a constraint on the design.
+- **A reader REFUSES a version it does not know**, with a message that says so — a reader that
+  half-understands a format is how a document is silently misread (`OCDVocab.readable`). It
+  reads an older version only where that version is a strict subset of the current one.
+
+| version | since | what it is |
+|---|---|---|
+| 2 | 2026-08 | the self-contained page: text stream, reading order, lines, links and boxes in the page; fonts once in `fonts.svg` |
+| 3 | 2026-10-04 | **recognized text is native**: OCR text is a *recognition layer* over the picture (§B4b) naming the engine that read it, every word carrying its confidence (§B4 `data-conf`). A v2 container is v3 without them, and reads as one |
 
 ---
 
@@ -32,7 +50,7 @@ OEBPS/
   nav.xhtml                       EPUB nav (from the outline)
   toc.ncx                         EPUB 2 fallback nav
   pages/
-    page-001.xhtml …              SVG-OCD v2 pages (one spine item each)
+    page-001.xhtml …              SVG-OCD v3 pages (one spine item each)
     fonts.svg                         THE font representation (shared, see §B6)
   images/<ref>                    shared raster resources (page <image> hrefs)
                                   PNG or JPEG only — a source in any other codec
@@ -59,11 +77,13 @@ book, not a model).
 
 ```jsonc
 {
-  "format": "ocd-epub", "version": "2",
+  "format": "ocd-epub", "version": "3",
   "id": "…",                              // document id, when set
   "analysis": {                            // only when analysis ran
     "textSegmented": true, "headingsDetected": true },
-  "layers": [ { "id", "name", "visible", "order" } ],   // PDF OCGs, when any
+  "layers": [ { "id", "name", "visible", "order",       // PDF OCGs and authored layers, when any
+                "ocr": { "engine": "azure-read",          // ocr: a recognition layer only (§B4b)
+                         "prep": "zigzag-gray" } } ],     //   prep: what the picture went through first
   "outputIntent": {                        // the source's first /OutputIntents entry, when any
     "subtype": "GTS_PDFX", "conditionId": "FOGRA27", "condition": "…",
     "info": "Coated FOGRA39 (ISO 12647-2:2004)", "registry": "http://www.color.org",
@@ -217,12 +237,12 @@ container. `to=ocd` on a PDF is *open*; on an OCD-EPUB it is *re-export*.
 - **Not the distribution flavor** — that is the generic EPUB export (`to=epub`):
   native text, compiled OTF, no `ocd/` members, universal readers.
 - **Not scripted** — no JS in pages or members; viewers own behavior.
-- **Not versioned by suffix** — `data-version="2"` is the grammar's identity, evolved
-  in place under gates, never bumped per tweak.
+- **Not versioned by suffix** — `data-version` is the grammar's identity (see *Versions*):
+  a grammar change is a new version, never a tweak slipped into the current one.
 
 ---
 
-# Part B — the page & font grammar (SVG-OCD v2)
+# Part B — the page & font grammar (SVG-OCD v3)
 
 ## B1. Principles
 
@@ -266,7 +286,7 @@ is one `<svg>`:
 ```xml
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
      viewBox="0 0 595.3 841.9" width="595.3" height="841.9"
-     data-ocd="page" data-version="2" xml:lang="fr"
+     data-ocd="page" data-version="3" xml:lang="fr"
      data-mediabox="0 0 595.3 841.9" [data-bleedbox|data-trimbox|data-artbox]
      [data-dpi] [data-rotate] [data-blending]>
 ```
@@ -554,6 +574,11 @@ size in the analysis signals. **The format states, it does not infer.**
 - **`data-render`** — the text render mode (PDF `Tr`), emitted only when it is not
   plain fill: `1` stroke, `2` fill+stroke, `3` invisible, `4..7` the clipping
   variants.
+- **`data-conf`** — the recognizer's confidence in this word, in `[0, 1]` (v3), on a run
+  of a recognition layer (§B4b) when the engine gave one. Absent on composed text,
+  which nothing recognized — so every composed run is byte-identical to v2. The engine's own
+  scale, carried as stated: a value extracted from a document can only be doubted if the
+  confidence of the words it came from survived the trip.
 - **`data-fill`** — the run's fill colour as `#rrggbbaa`, emitted **only** when the
   render mode paints no fill (`1`, `3`, the clipping variants) and the run carries a
   real colour. The paint class then says `fill:none`, which is correct — and leaves
@@ -588,6 +613,47 @@ The explicit form exists for content that needs stratification (client-tool
 placements, future annotation/media layers); the reader parses it wherever tools
 mint it.
 
+### Recognized text — a recognition layer (v3)
+
+The text an OCR engine reads from a page's picture is a **layer over that picture**, because that is
+exactly what it is: a second stratum, the engine's reading, laid on the image it came from. Nothing new
+is invented for it — the page, the layer, the run and the paragraph all keep their v2 meaning:
+
+```xml
+<image id="i1" xlink:href="../images/img_0001.jpg" …/>                     <!-- the picture: base stratum -->
+<g id="g1" data-ocd="layer" data-layer="ocr">                              <!-- the reading, over it -->
+  <g id="p1" data-ocd="paragraph" data-order="0"><g data-ocd="line">
+    <g id="t1" data-ocd="run" data-font="OCR" data-size="7.92" data-text="Plate " data-render="3"
+       data-conf="0.96" data-blanks="0:24:0 1:19:0.5 2:25:1 3:26:1.5 4:21:2 5:2" class="s0"
+       transform="matrix(9.984 0 0 -7.92 46.56 116.256)"></g>
+  </g></g>
+</g>
+```
+
+```json
+"layers": [ { "id": "ocr", "name": "Recognized text", "visible": true, "order": 0,
+              "ocr": { "engine": "azure-read" } } ]
+```
+
+- **The picture is the page's base stratum**, stored byte for byte. The reading never touches it.
+- **The registry entry says WHO read, and from WHAT** — `ocr.engine`, and `ocr.prep` when the engine was
+  given a prepared picture rather than the stored one (`zigzag-gray`: ZigZag background removal in grey
+  levels, its window sized from the image, which moves no pixel, so the boxes still land on the stored
+  picture). Provenance lives once, on
+  the layer, because it is a property of the reading and not of a page or a word. A layer without `ocr`
+  is any other layer.
+- **A word is a run** in render mode `3` — searchable, selectable, redactable, segmented by the same
+  analysis as any text (it builds the layer's paragraphs and lines inside the layer) — carrying the
+  engine's confidence (`data-conf`, §B4).
+- **A word has no shape, only a place, an extent and a text.** Its glyphs belong to a font whose glyphs
+  carry no outline (`d=""`, §B6) and one shared advance; the run's matrix stretches it to the word's
+  width, and every word of a line the engine read is set at that line's height and baseline, so a line
+  reads at one size. A viewer that wants to SEE the reading draws the text from `data-text` in that box —
+  the shapes would be a projection, not data, and the format does not store them.
+- **One reading, one layer.** Re-reading a page with another engine, or another preparation, replaces
+  the layer and leaves the picture alone. A scanned PDF that arrives with a text layer of its own keeps it where it was, unlabelled:
+  the format does not guess who read it.
+
 ## B5. Links — native `<a>`
 
 PDF link annotations become native SVG anchors in a trailing group — clickable in
@@ -606,7 +672,7 @@ any reader, no script:
 One shared sibling file carries every font of the document — paint **and** model:
 
 ```xml
-<svg xmlns="http://www.w3.org/2000/svg" data-ocd="fonts" data-version="2">
+<svg xmlns="http://www.w3.org/2000/svg" data-ocd="fonts" data-version="3">
 <defs>
 <g id="f0" data-font="ArialMT" data-id="ArialMT" [data-name] [data-family]
    [data-weight="bold"] [data-style="italic"] [data-embedded="1"]

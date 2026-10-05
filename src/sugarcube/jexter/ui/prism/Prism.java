@@ -7,12 +7,15 @@ import sugarcube.jexter.core.JxStringer;
 import sugarcube.jexter.core.JxLog;
 import sugarcube.jexter.core.JxJson;
 import sugarcube.jexter.core.LlmClient;
+import sugarcube.jexter.core.OcrClient;
 import sugarcube.jexter.ui.WebApp;
 import sugarcube.jexter.write.Conversion;
 import sugarcube.jexter.ocd.io.OCDReader;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.tool.HttpLlmClient;
+import sugarcube.jexter.tool.AzureOcrClient;
+import sugarcube.jexter.tool.TesseractOcrClient;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -71,6 +74,7 @@ public final class Prism extends WebApp {
     @Override protected void routes(HttpServer server) {
         installLogBridge();                                   // mirror JxLog → /api/log (in-page console)
         bindModel();                                          // bind an LLM iff a key is in env or saved config
+        bindOcr();                                            // bind an OCR engine iff the environment names one
         server.createContext("/api/convert",  this::convert); // the one engine route: bytes (+ to/opts) → artifact bytes
         server.createContext("/api/options",  this::options); // the ConvertOptions registry (+ bound-model status)
         server.createContext("/api/targets",  this::targets); // valid `to` ids
@@ -82,7 +86,7 @@ public final class Prism extends WebApp {
         server.createContext("/api/progress", this::progress);// conversion progress SSE
     }
 
-    // ── /api/convert — the single conversion entry (PDF or OCD-EPUB → any target) ──
+    // ── /api/convert — the single conversion entry (PDF, image or OCD-EPUB → any target) ──
     private void convert(HttpExchange x) throws IOException {
         try {
             Map<String, String> opts = new LinkedHashMap<>(query(x));
@@ -102,7 +106,7 @@ public final class Prism extends WebApp {
             } else {
                 body = x.getRequestBody().readAllBytes();
             }
-            if (body.length == 0) { error(x, new IllegalArgumentException("empty body — POST a PDF or an OCD-EPUB, or pass ?url= / ?path=")); return; }
+            if (body.length == 0) { error(x, new IllegalArgumentException("empty body — POST a PDF, an image or an OCD-EPUB, or pass ?url= / ?path=")); return; }
 
             boolean refining = "true".equalsIgnoreCase(opts.get("refineStructure"));
             if (refining) refineThread = Thread.currentThread();   // expose this worker to /api/ai/stop
@@ -114,7 +118,7 @@ public final class Prism extends WebApp {
                         sugarcube.jexter.core.ConvertOptions.fromMap(opts).progress(p -> pushProgress(p.toJson()));
                 Conversion.Output out = isOcd(body)
                         ? Conversion.convert(readOcd(body), to, co)     // OCD-EPUB → re-export
-                        : Conversion.convert(body, to, co);            // PDF  → import + export
+                        : Conversion.convert(body, to, co);            // PDF or image → import + export
                 pushProgress(new sugarcube.jexter.core.JxProgress(
                         sugarcube.jexter.core.JxProgress.Stage.WRITE, 0, 0, "done").toJson());
                 send(x, out);
@@ -233,6 +237,18 @@ public final class Prism extends WebApp {
     }
 
     // ── AI: bind a language model (env key wins, else the saved panel config) ──
+    /** The OCR engine an imported image is read with — named by the environment ({@code JEXTER_OCR}:
+     *  {@code azure} or {@code tesseract}), none by default: an image then imports as a page with no text
+     *  layer. A named engine that cannot be built says why and stays unbound. */
+    private void bindOcr() {
+        if (OcrClient.isBound()) return;
+        try {
+            OcrClient c = AzureOcrClient.fromEnv();
+            if (c == null) c = TesseractOcrClient.fromEnv();
+            if (c != null) { OcrClient.bind(c); JxLog.info(this, "OCR bound from environment \u2014 " + c.engine()); }
+        } catch (RuntimeException e) { JxLog.warn(this, "OCR not bound: " + e.getMessage()); }
+    }
+
     private void bindModel() {
         if (LlmClient.isBound()) return;
         String key = System.getenv("JEXTER_LLM_KEY");

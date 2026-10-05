@@ -9,6 +9,7 @@
 *.ttf    binary
 *.otf    binary
 *.epub   binary
+*.ico    binary
 
 # ── GitHub linguist: report the engine, not the assets ───────────────────────
 lib/**   linguist-vendored

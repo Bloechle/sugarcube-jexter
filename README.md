@@ -123,8 +123,8 @@ the same `-Xlint:all -Werror` gate as CI. It opens a local deck, or runs headles
 
 ```bash
 node nimbus-jexter.cjs                      # deck: jar · build (jar + app-image) · ai bundle
-node nimbus-jexter.cjs --run=jar  $(pwd)    # _prod/sugarcube-jexter.jar
-node nimbus-jexter.cjs --run=build $(pwd)   # + _prod/SugarcubeJexter/ (bundled runtime, one .exe per tool)
+node nimbus-jexter.cjs --run=jar  $(pwd)    # _artifacts/sugarcube-jexter.jar
+node nimbus-jexter.cjs --run=build $(pwd)   # + _artifacts/SugarcubeJexter/ (bundled runtime, one .exe per tool)
 ```
 
 Or compile directly with the bundled jars (`lib/`):
@@ -223,8 +223,8 @@ Four documents under [`doc/`](doc/), one per subsystem:
   authority on the stage order; this document carries the reasoning and the
   measurements behind it.
 - **[doc/FRONTEND.md](doc/FRONTEND.md)** — the HTTP **convert contract** shared by
-  every tier, the per-environment seam (`backend.js`), capability gating, the
-  deploy layout, and the three-layer tool architecture of the Prism workbench.
+  the Prism server and the conversion service, the transport seam (`backend.js`),
+  the layout, and the three-layer tool architecture of the Prism workbench.
 - **[doc/TRACER.md](doc/TRACER.md)** — the from-scratch Potrace raster→vector
   tracer (`sugarcube.jexter.trace`), with measured rasterize-back fidelity.
 

@@ -55,7 +55,7 @@ let seq = 0;
 window.prism = { state, hooks: {}, on };        // the tool seam: state · providers · events
 // EVENTS (multicast, chassis-emitted): 'tool'(id) · 'book'(state) · 'close'() ·
 // 'page'(idx) · 'frame'(iframe, idx). Subscribe with P.on(evt, cb) → off().
-// PROVIDERS (singular, hooks.*): openPdf · highlight · ttsNodes — one implementation
+// PROVIDERS (singular, hooks.*): openSource · highlight · ttsNodes — one implementation
 // answers the chassis (engine.js owns them today).
 // THE escaping rule, exported as P.esc. Quotes included: a value that is safe in text is not safe in an
 // attribute, and three modules had each rewritten a stricter copy because this one was not. One rule, the
@@ -425,15 +425,25 @@ function swPut(path, bytes) {
 
 /* -- Open: file -> unzip -> serve -> load --------------------------- */
 
+// What only an engine can open, by SIGNATURE, never by name: %PDF, PNG, JPEG, TIFF (both byte orders).
+// The engine sniffs the same four bytes (Conversion), so the two can never disagree on what a file is.
+const isSource = h => (h[0] === 0x25 && h[1] === 0x50 && h[2] === 0x44 && h[3] === 0x46)
+  || (h[0] === 0x89 && h[1] === 0x50 && h[2] === 0x4E && h[3] === 0x47)
+  || (h[0] === 0xFF && h[1] === 0xD8 && h[2] === 0xFF)
+  || (h[0] === 0x49 && h[1] === 0x49 && h[2] === 0x2A && h[3] === 0x00)
+  || (h[0] === 0x4D && h[1] === 0x4D && h[2] === 0x00 && h[3] === 0x2A);
+// The names a picker or a drop offers to it — the gate before the bytes are read.
+const OPENABLE = /\.(epub|pdf|png|jpe?g|tiff?)$/i;
+
 async function openEpub(buffer, name) {
   state.name = name || state.name || 'document';
   const head = new Uint8Array(buffer.slice(0, 4));
-  if (head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46) {   // %PDF
-    if (window.prism.hooks.openPdf) {
+  if (isSource(head)) {                                   // a PDF or an image: the engine converts it, the chassis cannot
+    if (window.prism.hooks.openSource) {
       clearSurfaces(); $('body').cls('+is-loading');
-      return window.prism.hooks.openPdf(buffer, name);
+      return window.prism.hooks.openSource(buffer, name);
     }
-    toast('This is a PDF — no conversion engine is available here. Open an .epub / .ocd.epub.', 'warning');
+    toast('This is a PDF or an image — no conversion engine is available here. Open an .epub / .ocd.epub.', 'warning');
     return;
   }
   setStatus('<sl-spinner></sl-spinner> Opening\u2026');
@@ -909,7 +919,7 @@ function bindFrameInput(f, idx) {
     f.contentDocument.addEventListener('dragover', e => e.preventDefault());
     f.contentDocument.addEventListener('drop', async e => {    // frames are part of the drop zone:
       e.preventDefault();                                      // never let the frame navigate away;
-      const file = [...(e.dataTransfer?.files || [])].find(x => /\.(epub|pdf)$/i.test(x.name));
+      const file = [...(e.dataTransfer?.files || [])].find(x => OPENABLE.test(x.name));
       if (file) openEpub(await file.arrayBuffer(), file.name); // tools' own targets stopPropagation first
     });
   } catch (e) { logLine('warn', `input wiring failed on page ${idx + 1} — ${e.message || e}`, 'reader'); }
@@ -993,8 +1003,11 @@ function showPaged() {
 
 /* -- Zoom ----------------------------------------------------------- */
 
+// Up to 500%: an OCR'd scan is judged word by word — a box against the glyphs under it — and at 300% a
+// line of small print was still too small to tell a misread O from a 0.
+const ZOOM_MIN = 0.4, ZOOM_MAX = 5;
 function setZoom(z) {
-  state.zoom = clamp(z, 0.4, 3);
+  state.zoom = clamp(z, ZOOM_MIN, ZOOM_MAX);
   $('#epub-scroll').style.setProperty('--zoom', state.zoom);
   $('#zoom-info').text(Math.round(state.zoom * 100) + '%');
 }
@@ -1096,8 +1109,21 @@ const clearAllHl = () => $.all('.prism-frame').forEach(f => clearHl(f.contentDoc
 // Flat, marker-style rectangle. The pad is expressed in PAGE units: a v2 run's
 // local space is em-scaled (the font size lives in its matrix), so the pad is
 // divided by the local scale — same optical margin at every font size.
-function markRect(doc, el, attr, fill) {
-  let bb; try { bb = el.getBBox(); } catch { return; }
+//
+// `box` is the element's OCCUPIED box in its parent's space, for what has no ink: an inkless run (an OCR
+// layer) measures 0 × 0 by getBBox, and a highlight drawn from that is a point. The rect then sits in the
+// parent's space, untransformed — the box already went through the element's matrix.
+function markRect(doc, el, attr, fill, box) {
+  let bb; try { bb = el.getBBox(); } catch { bb = null; }
+  if ((!bb || (!bb.width && !bb.height)) && box) {
+    const r = doc.createElementNS(SVG_NS, 'rect');
+    r.setAttribute('x', box.x); r.setAttribute('y', box.y);
+    r.setAttribute('width', box.width); r.setAttribute('height', box.height);
+    r.setAttribute('fill', fill); r.setAttribute('pointer-events', 'none'); r.setAttribute(attr, '1');
+    el.parentNode.insertBefore(r, el);
+    return;
+  }
+  if (!bb) return;
   let k = 1;
   const m = /matrix\(([^)]+)\)/.exec(el.getAttribute('transform') || '');
   if (m) {
@@ -1346,9 +1372,9 @@ function wireChrome() {
     e.target.value = '';
   });
   makeDropZone(document.body, { label: 'Drop your .epub', onFiles: async files => {
-    const doc = [...files].find(f => /\.(epub|pdf)$/i.test(f.name));
+    const doc = [...files].find(f => OPENABLE.test(f.name));
     if (doc) openEpub(await doc.arrayBuffer(), doc.name);
-    else toast('Drop a .epub / .ocd.epub to open it.', 'warning');
+    else toast('Drop a .epub / .ocd.epub, a PDF or an image to open it.', 'warning');
   }});
 
   $.all('.tab-btn').forEach(btn => btn.on('click', () => {

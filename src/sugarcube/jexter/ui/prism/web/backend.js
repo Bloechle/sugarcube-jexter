@@ -1,10 +1,9 @@
-// backend.js — DESKTOP hub of Prism.
+// backend.js — Prism's transport seam.
 //
-// The single per-environment seam: the front (engine.js) imports this and never names a
-// route or a transport itself. Here, the local Prism Java server is a stateless convert
-// engine; the front holds the book bytes and posts to /api/convert for everything.
-// A web hub with the SAME contract (QryServer gateway → sugarcloud, auth, library) can
-// replace this file and the chrome doesn't change — that's the whole point.
+// The front (engine.js and the tools) imports this and never names a route or a transport
+// itself. The local Prism Java server is a stateless convert engine, on the same contract as
+// the conversion service (doc/FRONTEND.md); the front holds the book bytes and posts to
+// /api/convert for everything.
 
 const API = ''; // same-origin
 
@@ -77,20 +76,6 @@ function headersOf(raw) {
 }
 const qs = (to, opts) => '?' + new URLSearchParams({ to, ...opts }).toString();
 
-// What this environment can do — the front gates its UI on these (no transport knowledge leaks up).
-// Which environment this build runs in — the single web/desktop discriminator for the chrome
-// (caps stay for individual features). One implementation, env-driven differences.
-export const env = 'desktop';
-
-// Shared-asset root: desktop serves the logo/favicon SVGs under /shared, the web front at root.
-export const assetsBase = '/shared';
-
-export const caps = {
-    reconvert: true, options: true, targets: true, health: true,
-    ai: true, auth: false, library: false, catalog: false, logStream: true, openByPath: true,
-    repository: false, backendStatus: false,   // no /repository/ samples; local engine -> no remote health dot
-};
-
 // The window-alive heartbeat: the local server self-exits when no client holds this open.
 export const aliveUrl = '/api/alive';
 
@@ -128,8 +113,6 @@ export const ai = {
     // Interrupt a running refine; the page-windowed pass stops at the next page and keeps a partial structure.
     stop: () => fetch('/api/ai/stop', { method: 'POST' }).then((r) => r.json()),
 };
-
-// Curated sample PDFs (open by URL via convertUrl).
 
 // The front opens an EventSource on this for the F2 console.
 export const logStreamUrl = '/api/log';

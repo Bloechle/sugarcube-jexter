@@ -146,7 +146,9 @@ public final class PdfWriter {
             applyState(cs, n);
             switch (n) {
                 case OCDPath p   -> paintPath(cs, p);
-                case OCDText t   -> { if (selectable) paintTextEmbedded(cs, t, doc); else paintTextOutline(cs, t, doc); }
+                // An invisible run (a scan's OCR layer) has no ink to make pixel-exact, so it is always written
+                // as real text: the outline mode keeps the page searchable instead of dropping the layer.
+                case OCDText t   -> { if (selectable || t.isInvisible()) paintTextEmbedded(cs, t, doc); else paintTextOutline(cs, t, doc); }
                 case OCDImage im -> paintImage(cs, im, doc);
                 case OCDMedia m  -> { /* media has no PDF re-export representation */ }
                 case OCDGroup g  -> {
@@ -409,19 +411,23 @@ public final class PdfWriter {
     // the codepoint that maps to its gid (reverse of the font cmap — reliable,
     // unlike the source ToUnicode), giving real selectable text with exact
     // shapes. Glyphs absent from the cmap fall back to an exact outline fill.
+    // An INVISIBLE run is shown in mode 3 (NEITHER): searchable and selectable, no ink — and a glyph the
+    // face cannot encode is skipped, never filled as an outline.
     private void paintTextEmbedded(PDPageContentStream cs, OCDText t, OCDDocument doc) throws IOException {
-        if (t.isInvisible() || t.glyphs().isEmpty()) return;
+        if (t.glyphs().isEmpty()) return;
+        boolean invisible = t.isInvisible();
         OCDFont font = doc.findFont(t.fontId());
         if (font == null) return;
         PDFont pdFont = fonts.computeIfAbsent(t.fontId(), k -> loadFont(font));
-        if (pdFont == null) { paintTextOutline(cs, t, doc); return; }
+        if (pdFont == null) { if (!invisible) paintTextOutline(cs, t, doc); return; }
         Map<Integer, Integer> rev = font.reverseCmap();   // gid → encodable codepoint (cached)
 
         int fill = t.fill();
         double fs = t.fontSize();
-        boolean doStroke = t.hasStrokePaint();
+        boolean doStroke = !invisible && t.hasStrokePaint();
         boolean doFill   = t.hasFill() || !doStroke;
-        RenderingMode rm = !doStroke ? RenderingMode.FILL
+        RenderingMode rm = invisible ? RenderingMode.NEITHER
+                : !doStroke ? RenderingMode.FILL
                 : (doFill ? RenderingMode.FILL_STROKE : RenderingMode.STROKE);
         AffineTransform base = t.transform().awt();
         boolean inText = false;
@@ -450,7 +456,7 @@ public final class PdfWriter {
                     shown = true;
                 } catch (RuntimeException ignore) { /* not encodable → outline below */ }
             }
-            if (!shown) {
+            if (!shown && !invisible) {
                 if (inText) { cs.endText(); inText = false; }
                 OCDGlyph fg = font.glyph(gl.gid());
                 if (fg != null && fg.outline() != null && !fg.isSpace()) {

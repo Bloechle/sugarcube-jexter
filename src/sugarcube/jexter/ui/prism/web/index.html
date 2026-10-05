@@ -24,6 +24,7 @@
   <!-- the seam first: analysis.js imports from it -->
   <script type="module" src="./engine.js"></script>
   <script type="module" src="./analysis.js"></script>
+  <script type="module" src="./ocr.js"></script>
   <script type="module" src="./tts.js"></script>
   <script type="module" src="./editor.js"></script>
   <script type="module" src="./redact.js"></script>
@@ -58,7 +59,7 @@
     <button id="b-config" class="px-icon" aria-label="Settings" title="Settings"><i data-lucide="sliders-horizontal"></i></button>
     <button id="b-help" class="px-icon" aria-label="Shortcuts" title="Keyboard shortcuts"><i data-lucide="keyboard"></i></button>
     <button id="b-theme" class="px-icon" aria-label="Toggle theme" title="Dark / light"><i data-lucide="moon"></i></button>
-    <input type="file" id="file-input" accept=".pdf,.epub,application/pdf,application/epub+zip" hidden>
+    <input type="file" id="file-input" accept=".pdf,.epub,.png,.jpg,.jpeg,.tif,.tiff,application/pdf,application/epub+zip,image/png,image/jpeg,image/tiff" hidden>
     <input type="file" id="media-input" accept="video/*,audio/*,image/*" hidden>
   </header>
 
@@ -125,6 +126,14 @@
              what is READ: the node tree and the inspector, which used to start below two rows of controls. -->
         <div id="page-tree" class="ntree"><div class="search-info">Open a page to browse its nodes.</div></div>
         <div id="inspect-body" class="inspect-body"><div class="search-info">Click content on a page to inspect it.</div></div>
+      </section>
+
+      <section id="ocr-drawer" class="px-pane-slot">
+        <!-- Commands live in this tool's ribbon (ocr.js). The drawer keeps what is READ: the page's
+             counts, what the selected word or line IS, and the recognized text in reading order. -->
+        <div id="ocr-info" class="search-info">Open a document first.</div>
+        <div id="ocr-detail" class="search-info"></div>
+        <ul id="ocr-list" class="nav-list"></ul>
       </section>
 
       <section id="edit-drawer" class="px-pane-slot">
@@ -259,7 +268,9 @@
       <sl-switch class="cv-opt" data-opt="graphics" size="small">Group vector graphics</sl-switch>
       <sl-switch class="cv-opt" data-opt="generateOutline" size="small">Generate heuristic outline</sl-switch>
       <sl-switch class="cv-opt" data-opt="renderAnnotations" size="small">Render annotations</sl-switch>
-      <div class="cfg-hint">Applied when a PDF is imported through the engine.</div>
+      <!-- A switch over a STRING option: data-value is what "on" sends; off sends the engine's default. -->
+      <sl-switch class="cv-opt" data-opt="ocrPrep" data-value="zigzag-gray" size="small">Clean images before OCR (ZigZag)</sl-switch>
+      <div class="cfg-hint">Applied when a PDF or an image is imported through the engine.</div>
     </div>
 
     <div class="cfg-sec jx-only" hidden>

@@ -1,30 +1,34 @@
 # FRONTEND — the convert contract and the tool architecture
 
-One HTTP convert contract, three tiers, one shared front-end chrome with a thin
-per-environment seam (`backend.js`). The same Java facade —
-`sugarcube.jexter.write.Conversion` — is the engine on every tier, so a target or
-an option is added **once**, in jexter, and every tier inherits it.
+One HTTP convert contract, spoken by two engines, and one front-end (Prism) on a thin transport
+seam (`backend.js`). The same Java facade — `sugarcube.jexter.write.Conversion` — is the engine
+behind both, so a target or an option is added **once**, in jexter, and both inherit it.
 
 ```
-  DESKTOP   engine.js ─ backend.js ─▶ Prism (Java, com.sun.httpserver)          stateless convert engine (local)
-  WEB       engine.js ─ backend.js ─▶ qry-server ─▶ sugarcloud (Tomcat WAR)     gateway (auth+library) + engine
+  DESKTOP   Prism front (engine.js ─ backend.js) ─▶ Prism server (Java, com.sun.httpserver)   local, stateless
+  SERVICE   any HTTP consumer ───────────────────▶ the jexter conversion service (sugarcloud)  keyed, stateless
 ```
+
+Prism is a desktop workbench. The conversion service is consumed server-to-server (one API key per
+consumer); it is not a host for the Prism front, and how a consumer builds its own pages on it is
+that consumer's business, outside this repository.
 
 ## The convert contract
 
-### Shared routes — desktop Prism **and** sugarcloud, identical
+### Shared routes — Prism and the conversion service, identical
 
 | Method | Route | Body / query | Returns |
 |--------|-------|--------------|---------|
 | `POST` | `/api/convert?to=<target>[&<opt>=<val>…]` | a **PDF** (`%PDF`) → import+export · or an **OCD-EPUB** (`PK` zip) → re-export | the artifact bytes (media type + `Content-Disposition` from jexter) |
 | `GET`  | `/api/options` | — | `{ aiBound, aiModel, aiProvider, aiEffort, options:[ {key,label,help,type,group,def} … ] }` |
-| `GET`  | `/api/targets` | — | `{ targets:[ "svg","pdf","epub","epub-reflow","html","md","doctags","ocd","stages" ] }` |
+| `GET`  | `/api/targets` | — | `{ targets:[ "svg","pdf","epub","epub-reflow","html","md","doctags","ocd","stages","audit","zones","patch" ] }` — `Conversion.Target`, the only list |
 | `GET`  | `/api/health`  | — | `"ok"` (liveness) |
 
 - **`to`** is the only consumed query key; every other key is forwarded verbatim
   to `ConvertOptions` — the introspectable registry, serialized once by
   `ConvertOptions.optionsJson` and shared by both engines, so they emit a
-  byte-identical option shape.
+  byte-identical option shape. A consumer that checks what it asks for against
+  `/targets` and `/options` can never ask for something the engine has dropped.
 - **Input is sniffed, never declared:** `%PDF…` ⇒ import + export; `PK…` (OCD-EPUB)
   ⇒ re-export. So `to=ocd` on a PDF is *open*; `to=ocd&<opts>` on a PDF is
   *reconvert*; `to=pdf|epub|…` on either is *export*. There is no separate
@@ -34,64 +38,40 @@ an option is added **once**, in jexter, and every tier inherits it.
   is likewise a client-side property carried in the `.ocd.epub` the front holds.
 - **Refine is not its own route** — logical-structure refinement rides the shared
   call, `POST /api/convert?to=ocd&refineStructure=true[&llmModel=…]`, and the
-  bound LLM runs inside the engine, identically on desktop and cloud.
+  bound LLM runs inside the engine.
+- The conversion service adds asynchronous jobs (`/api/jobs`) for documents whose
+  conversion outlives a request; its consumer documentation is served with it.
 
-### Desktop-only routes (Prism — the local Java process)
+### Desktop-only routes (the Prism server)
 
 | Method | Route | Body / query | Returns |
 |--------|-------|--------------|---------|
 | `POST` | `/api/ai/config` | `{ provider, endpoint, key, model, effort, keyless, clear }` | bind / unbind a model |
 | `GET`  | `/api/log` | — | Server-Sent Events: `JxLog` records (the **F2** console) |
+| `GET`  | `/api/progress` | — | Server-Sent Events: `{stage, done, total, detail}` while a conversion runs |
 | `GET`  | `/api/alive` | — | SSE heartbeat. `WebApp` runs a watchdog that exits the process if no client ever connects; the chrome opens this at boot so the local server stays up. |
 
-`/api/ai/config` is desktop-only because the cloud's model is configured
-server-side. The desktop `/api/convert` also accepts `?url=<http(s)>` (the engine
-fetches it server-side — no browser CORS) and
-`?path=<local file>` (re-open a recent file off disk — `caps.openByPath`). The
-cloud reads the request body only.
-
-### Web-only routes (qry-server gateway)
-
-The gateway relays the four shared routes to sugarcloud (adding the per-client
-key, which never reaches the browser) and adds the user layer:
-
-| Method | Route | Purpose |
-|--------|-------|---------|
-| `GET`  | `/api/health` | gateway probe — `{ ok, backend, requireAuth, configured }` (also pings the engine) |
-| `GET`  | `/api/targets` · `/api/options` | proxied from sugarcloud |
-| `POST` | `/api/convert` | proxied from sugarcloud (streamed both ways) |
-| `*`    | `/api/auth/*` | session + OAuth (qry-server, Infomaniak kAuth) |
-| `GET`/`POST`/`DELETE` | `/api/data/documents[/:id]` | per-user library **metadata** (owner-scoped) |
-| `PUT`/`GET` | `/api/library/source/:id` | the document's source PDF (owner-gated) |
-| `DELETE` | `/api/library/doc/:id` | source file + metadata together |
-
-The cloud has no LLM and no in-page log: the web tier reports `ai:false`,
-`logStream:false`, and adds `auth:true`, `library:true`.
+The desktop `/api/convert` also accepts `?url=<http(s)>` (the engine fetches it
+server-side — no browser CORS) and `?path=<local file>` (re-open a file off disk).
+The conversion service reads the request body only.
 
 ## The seam — `backend.js`
 
-The **only** file that differs between environments. It exports `env`
-(`'desktop'` | `'web'`) as the single discriminator, plus `caps` for feature
-gating. The chrome imports it (`import * as backend from './backend.js'`) and
-gates UI on `env` / `caps` and the presence of each panel's DOM — never on a
-route or transport.
+The one file that knows routes and transport. The chrome imports it
+(`import * as backend from './backend.js'`) and never names a route itself:
 
 ```js
-env       // 'desktop' | 'web'
-caps      // { reconvert, options, targets, health, ai, auth, library, logStream, openByPath }
-convert(src, to='ocd', opts={})  ->  { blob, bytes, filename, mediaType }   // the one workhorse
-options() · targets() · health()
-// desktop extras
-ai?       { config(cfg) }            // refine itself = convert?to=ocd&refineStructure=true
-convertUrl? · convertPath? · logStreamUrl? · aliveUrl?
-// web extras
-auth?     { me, login, logout, password, register, config, oauthUrl }
-library?  { list, create, get, update, removeDoc, getSource, putSource }
+convert(src, to='ocd', opts={}, onStep)  ->  { blob, bytes, filename, mediaType }   // the one workhorse
+stages(src) · options() · targets() · health()
+convertUrl(url, to, opts) · convertPath(path, to, opts)      // ?url= / ?path= (desktop server)
+ai.config(cfg) · ai.stop()                                   // bind a model; refine = convert?to=ocd&refineStructure=true
+logStreamUrl · progressUrl · aliveUrl                        // the SSE channels
 ```
 
 `open`, `reconvert`, `export` are all just `convert(...)` with a different `to` /
-body — no dedicated methods, no dedicated routes. One verb, sniffed input,
-capability-gated extras.
+body — no dedicated methods, no dedicated routes. One verb, sniffed input. The
+transport reports what only it can see (upload and download progress) in the same
+`{stage, done, total, detail}` shape as the engine's own progress channel.
 
 ### One options model
 
@@ -100,38 +80,18 @@ returned registry (grouped by `group`, seeded from `def`, overridden by the
 front's `state.opts`). Both engines return the same registry
 (`ConvertOptions.optionsJson`), so there is no hardcoded client-side option spec.
 
-### Capability gating
-
-The shared chrome reads `env` / `caps` and toggles panels (`applyCaps`); it never
-reads a cap to choose a transport (that is the seam's job).
-
-- `caps.ai` (desktop) → the **AI** tab: connect/unbind a model
-  (`backend.ai.config`) and refine (`convert?refineStructure=true`). On the web
-  the AI tab is hidden; the structure **editor** and the `manual` structure stay
-  (they are client-side and shared).
-- `caps.logStream` (desktop) → the **F2** console also subscribes to
-  `backend.logStreamUrl` (server log) on top of the shared JS capture.
-- `caps.openByPath` (desktop) → **Recents** in the header menu, re-opened off disk
-  via `POST /api/convert?path=…`. Paths are recorded only when the desktop webview
-  exposes `file.path`; a plain browser records none (web sets `openByPath:false`,
-  so the slots stay hidden).
-- `caps.auth` + `caps.library` (web) → the auth dialogs, the per-user library, and
-  "Save to library" in the structure editor. Hidden on desktop, where the editor's
-  Export-structures.json stays.
-
-## Deployment
-
-The only per-environment file is `js/backend.js`; everything else is
-byte-identical.
+## Layout
 
 ```
-SHARED (both sides)                      PER ENVIRONMENT
-  index.html · prism.css                  DESKTOP — served by Prism from .../ui/prism/web/
-  prism.js      (the chassis)               backend.js   ← desktop seam (local engine; caps: ai, logStream, openByPath)
-  augment.js       (tool: augmentations)       (no qry-api.js — the desktop seam doesn't use it)
+  index.html · prism.css                  served by the Prism server from .../ui/prism/web/
+  backend.js    (the transport seam — above)
+  prism.js      (the chassis)
+  augment.js    (tool: augmentations)
   engine.js     (the SEAM: PDF import, text layer, fonts, structures, export)
   analysis.js   (tool: overlays, inspect, node tree — imports what it needs from engine.js)
   trace.js      (Analysis' Trace overlay: point at anything, read-only)
+  ocr.js        (dev tool: an OCR layer made visible — the recognized text in vector, word/line/paragraph
+                 boxes, the page's text in reading order; read-only, everything it draws is data-ui)
   redact.js     (tool: the VERDICT — to=audit, run on entry, never persisted — plus pick zone/block/page ·
                  find via to=zones&match · Repair, the one crossing from verdict to work; items persist as
                  ocd/redact.json, previewed opaque at once, applied by the engine on Export or Apply; an
@@ -139,9 +99,6 @@ SHARED (both sides)                      PER ENVIRONMENT
   prism-sw.js   (Service Worker)
   /shared/js/ocd.js  (the grammar: read, create, adopt, build)
   /shared/js/book.js (THE document authority — see below)
-                                            WEB — served by qry-server from public/
-                                            backend.js   ← web seam (gateway → sugarcloud; caps: auth, library)
-                                            qry-api.js   ← imported by the web seam (auth + documents client)
 ```
 
 ## The tool architecture — three layers, one authority
@@ -205,12 +162,12 @@ The displayed DOM is the source of truth; the epub file is transport. Three laye
    | Projection    | `persist · flush` (edited pages only; data-ui chrome stripped) |
 
 3. **Tools** — one `<script>` tag each (`augment.js`, `editor.js`, `analysis.js`,
-   `redact.js`, `pages.js`); remove the tag and the tab is gone. A tool registers
+   `ocr.js`, `redact.js`, `pages.js`); remove the tag and the tab is gone. A tool registers
    itself (`P.registerTool`, `experimental: true` while it is not ready — shipping
    it is deleting one word), declares its commands (`P.ribbon(id, groups)`), keeps
    what it READS in its drawer, subscribes to chassis events (`P.on`: `'tool' ·
    'book' · 'close' · 'page' · 'frame'`, multicast), and may offer PROVIDERS to the
-   chassis (`P.hooks`: `openPdf · highlight · ttsNodes` — singular by design).
+   chassis (`P.hooks`: `openSource · highlight · ttsNodes` — singular by design).
    Anything a tool draws for itself carries `data-ui` (+ `data-z="under|over"`)
    and never reaches the container. The chassis owns exactly one write
    primitive, `P.putMember`; `book.put` is its hub.
@@ -307,23 +264,17 @@ The displayed DOM is the source of truth; the epub file is transport. Three laye
 Layers in pages are full-page strata (`FORMAT.md` §B4b); the engine-imported
 base is the implicit source stratum — never wrapped.
 
-Wiring: drop the shared files plus the matching `backend.js` into each web dir;
-both engines already speak the contract, and the gateway relays it to sugarcloud.
-The two `index.html` differ only in which panels they ship (the desktop
-model-connect form is JS-injected); long-term they can converge to one with
-`[data-cap]` attributes.
 
 ## Validation
 
-`prism.js` / `engine.js` / `analysis.js` and the seams pass `node --check`, but that is syntax only — the
+`prism.js` / `engine.js` / `analysis.js` and the seam pass `node --check`, but that is syntax only — the
 chrome genuinely needs a **browser smoke test against running engines**. Everything the
 client has got wrong so far was invisible to a syntax check and to reading the code: an
 iframe's initial `about:blank` consuming a `{once:true}` load listener, a native `<img>`
 drag hijacking a pointer gesture, a stretched grid column, a cache key that did not say
-what it cached. Run the real chassis in a real browser (a local
-Prism, and qry-server → sugarcloud): open a PDF (`to=ocd`), reconvert with
-options (the `/api/options` round-trip), export (pdf / epub-prism / epub-fl / html / md / doctags), the
-Contents panel + manual structure, Analysis + reading; then desktop-only connect a model +
-refine + the F2 server log + recents, and web-only sign in + the library. The OCD
+what it cached. Run the real chassis in a real browser against a local Prism: open a PDF
+(`to=ocd`), reconvert with options (the `/api/options` round-trip), export (pdf / epub /
+epub-reflow / html / md / doctags), the Contents panel + manual structure, Analysis + reading,
+Redact (verdict, repair), refine with a bound model, and the F2 server log. The OCD
 round-trip fidelity bar (≤ 4e-6 mean channel diff) is unaffected — the chrome
 never touches geometry.

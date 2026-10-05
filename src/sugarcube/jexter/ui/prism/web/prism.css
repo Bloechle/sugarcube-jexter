@@ -277,7 +277,7 @@ body.has-drawer #toggle-drawer { display:inline-flex; }
 /* One heading style for every pane that groups its rows — Forms by page, Redact by list (what is
    still hidden vs what is to remove), Compare by section. A second declaration would be a second
    thing to keep in step. */
-.rd-group, .cmp-group, .fm-group { font-size:.6rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+.rd-group, .cmp-group, .fm-group, .ocr-group { font-size:.6rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
   color:var(--qry-text-muted); padding:.55rem .15rem .1rem; }
 .nav-link mark { background:color-mix(in srgb, var(--qry-blue) 34%, transparent); color:var(--qry-text); border-radius:2px; padding:0 .12em; }
 

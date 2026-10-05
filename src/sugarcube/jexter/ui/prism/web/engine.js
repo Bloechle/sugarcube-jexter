@@ -1,7 +1,7 @@
 // engine.js — the ENGINE SEAM of Prism: what a local jexter makes possible.
 //
 // The chassis (prism.js) reads any fixed-layout EPUB off the original tree and knows nothing about an
-// engine. This module is the seam: it detects one, routes %PDF drops through it, takes the text layer
+// engine. This module is the seam: it detects one, routes PDF and image drops through it, takes the text layer
 // out of an OCD-EPUB's own pages, feeds search and read-aloud from it, shows the fonts the container
 // carries, lists the structures it declares, and exports the bytes back through the engine.
 //
@@ -15,7 +15,7 @@
 
 import { zipSync } from 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm';
 import * as backend from './backend.js';
-import { parseFonts as parseFontsSvg, SVG_NS, inReadingOrder, readingRuns } from '/shared/js/ocd.js';
+import { parseFonts as parseFontsSvg, SVG_NS, inReadingOrder, readingRuns, runBox } from '/shared/js/ocd.js';
 import { book } from '/shared/js/book.js';
 
 const P = window.prism;                       // the chassis seam (state, hooks, API)
@@ -29,7 +29,7 @@ export const jx = { on: false, runs: [], structures: [], defaultId: null };   //
 export let engine = false;
 
 /* -- Engine presence: reveal the jx-only affordances ------------------ */
-// openPdf AWAITS this probe, so a PDF dropped in the first instants never races it.
+// openSource AWAITS this probe, so a PDF or an image dropped in the first instants never races it.
 
 /* -- Conversion options (Settings drawer) ------------------------------
    Defaults come from the engine's registry (/api/options); only the DIFFS from
@@ -45,12 +45,15 @@ async function loadOptions() {
     for (const o of d.options || []) conv.defs[o.key] = o.def;
     const ready = window.customElements?.whenDefined
         ? customElements.whenDefined('sl-switch') : Promise.resolve();
+    // A switch normally drives a BOOLEAN option. One with `data-value` drives a STRING option instead: on
+    // sends that value, off sends nothing (the engine's default) — the OCR preparation is one.
     ready.then(() => $.all('.cv-opt').forEach(sw => {
-        const k = sw.getAttribute('data-opt');
-        sw.checked = k in conv.diffs ? !!conv.diffs[k] : !!conv.defs[k];
+        const k = sw.getAttribute('data-opt'), val = sw.getAttribute('data-value');
+        const isOn = (v) => val ? v === val : !!v;
+        sw.checked = isOn(k in conv.diffs ? conv.diffs[k] : conv.defs[k]);
         sw.addEventListener('sl-change', e => {
-            const v = !!e.target.checked;
-            if (v === !!conv.defs[k]) delete conv.diffs[k]; else conv.diffs[k] = v;
+            const v = val ? (e.target.checked ? val : conv.defs[k]) : !!e.target.checked;
+            if (v === conv.defs[k] || (!val && v === !!conv.defs[k])) delete conv.diffs[k]; else conv.diffs[k] = v;
             localStorage.setItem('prism_conv', JSON.stringify(conv.diffs));
         });
     }));
@@ -78,7 +81,7 @@ const engineReady = (async () => {
     return engine;
 })();
 
-/* -- Hook: %PDF → engine → OCD-EPUB → open in place ------------------ */
+/* -- Hook: PDF or image → engine → OCD-EPUB → open in place ---------- */
 
 // One vocabulary, two sources. The transport reports what only it can see (the bytes going out, the bytes
 // coming back); the engine reports what only it can see (pages opened, imported, analysed, written). Both
@@ -121,10 +124,10 @@ function watchProgress() {
     return () => { try { es.close(); } catch { } };
 }
 
-P.hooks.openPdf = async (buffer, name) => {
-    if (!await engineReady) { P.toast('This is a PDF and no conversion engine is running here.', 'warning'); return; }
-    P.setStatus?.('<sl-spinner></sl-spinner> Converting PDF\u2026');
-    P.toast('Converting PDF…', 'primary');
+P.hooks.openSource = async (buffer, name) => {
+    if (!await engineReady) { P.toast('This is a PDF or an image and no conversion engine is running here.', 'warning'); return; }
+    P.setStatus?.('<sl-spinner></sl-spinner> Converting\u2026');
+    P.toast('Converting…', 'primary');
     const stop = watchProgress();
     try {
         const art = await backend.convert(buffer, 'ocd', convOpts(), showStep);
@@ -132,7 +135,7 @@ P.hooks.openPdf = async (buffer, name) => {
         // the UPLOAD's name is the document's name — the engine only ever saw bytes,
         // its Content-Disposition is a generic fallback
         await book.open(art.bytes, name
-            ? name.replace(/\.pdf$/i, '') + '.ocd.epub'
+            ? name.replace(/\.(pdf|png|jpe?g|tiff?)$/i, '') + '.ocd.epub'
             : art.filename || 'document.ocd.epub');
     } catch (e) { P.toast(`Conversion failed: ${e.message || e}`, 'danger'); P.setStatus?.('<i data-lucide="sparkles"></i> Ready'); }
     finally { stop(); }
@@ -198,7 +201,8 @@ P.hooks.highlight = (doc, q, idx) => {
         if (!P.fold(r.text).includes(nq)) continue;
         const el = doc.getElementById(r.id);
         if (!el) continue;
-        P.markRect(doc, el, 'data-px-hl', 'rgba(51,105,159,.32)');
+        // An OCR word has no ink: its occupied box is what a highlight must cover.
+        P.markRect(doc, el, 'data-px-hl', 'rgba(51,105,159,.32)', runBox(el, book.fonts()));
         if (!first) first = el;
     }
     return first;

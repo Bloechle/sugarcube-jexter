@@ -4,6 +4,7 @@ import sugarcube.jexter.core.JxName;
 import sugarcube.jexter.core.JxRect;
 import sugarcube.jexter.core.JxColor;
 import sugarcube.jexter.core.JxTransform;
+import sugarcube.jexter.ocd.io.OCDVocab;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDFont;
 import sugarcube.jexter.ocd.model.OCDGlyph;
@@ -80,7 +81,7 @@ public final class SvgOcdWriter {
           .append("viewBox=\"").append(f(win.x())).append(' ').append(f(win.y())).append(' ')
           .append(f(w)).append(' ').append(f(h)).append("\" ")
           .append("width=\"").append(f(w)).append("\" height=\"").append(f(h)).append("\" ")
-          .append("data-ocd=\"page\" data-version=\"2\"");
+          .append("data-ocd=\"page\" data-version=\"").append(OCDVocab.VERSION).append('"');
         String lang = pageLang(doc, page);
         if (!lang.isEmpty()) sb.append(" xml:lang=\"").append(esc(lang)).append('"');
         if (page.rotation() != 0) sb.append(" data-rotate=\"").append(page.rotation()).append('"');
@@ -332,6 +333,9 @@ public final class SvgOcdWriter {
         }
         if (b.length() > 0) sb.append(" data-blanks=\"").append(b).append('"');
         if (t.renderMode() != OCDText.FILL) sb.append(" data-render=\"").append(t.renderMode()).append('"');
+        // The recognizer's confidence in this word (§B4), in [0, 1] — only on recognized text, so every
+        // composed run stays byte-identical.
+        if (t.hasConfidence()) sb.append(" data-conf=\"").append(f(t.confidence())).append('"');
         // The mode is stated, so the colour that goes with it must be too: a stroke-only or invisible
         // run gets fill:none, and its fill would otherwise have no home in the page and read back as 0.
         // Emitted ONLY when the CSS drops a real colour, so every ordinary run stays byte-identical.
@@ -375,7 +379,7 @@ public final class SvgOcdWriter {
         var byName = new java.util.TreeMap<String, OCDFont>();
         for (OCDFont f : doc.fonts().values()) byName.put(JxName.safe(f.id()), f);
         var sb = new StringBuilder(128 * 1024);
-        sb.append("<svg xmlns=\"http://www.w3.org/2000/svg\" data-ocd=\"fonts\" data-version=\"2\">\n<defs>\n");
+        sb.append("<svg xmlns=\"http://www.w3.org/2000/svg\" data-ocd=\"fonts\" data-version=\"").append(OCDVocab.VERSION).append("\">\n<defs>\n");
         for (var fe : byName.entrySet()) {
             OCDFont f = fe.getValue();
             sb.append("<g id=\"").append(glyphs.alias.get(fe.getKey()))

@@ -3,6 +3,7 @@ package sugarcube.jexter.write;
 import sugarcube.jexter.ocd.analysis.Analysis;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.core.JxProgress;
+import sugarcube.jexter.imageimport.ImageImporter;
 import sugarcube.jexter.pdfimport.PdfImporter;
 import sugarcube.jexter.core.JxColor;
 import sugarcube.jexter.core.JxLog;
@@ -95,6 +96,11 @@ public final class Conversion {
         out.write(r.toJson().getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
+    private static OCDDocument nonEmpty(OCDDocument doc, String kind) throws IOException {
+        if (doc.pages().isEmpty()) throw new IOException("Document has no pages (" + kind + ")");
+        return doc;
+    }
+
     /** Same, taking the {@code String}-map form used across the {@code /api} boundary. */
     public static Output convert(OCDDocument doc, String target, Map<String, String> options) throws IOException {
         return convert(doc, target, ConvertOptions.fromMap(options));
@@ -116,6 +122,7 @@ public final class Conversion {
         // and the array is referenced for the whole call anyway, so spooling it to disk and reading it
         // back bought nothing but a write and a read. The OCD-EPUB branch still needs a file — reading a
         // zip wants a seekable source — and a container is the smaller of the two.
+        if (ImageImporter.isImage(data)) return convert(nonEmpty(ImageImporter.convert(data, o), "image"), target, o);
         if (!isOcd(data)) {
             OCDDocument doc = PdfImporter.convert(data, o);
             if (doc.pages().isEmpty()) throw new IOException("Document has no pages");
@@ -234,13 +241,13 @@ public final class Conversion {
     }
 
     // ── CLI ──────────────────────────────────────────────────────────────────────
-    // java …Conversion <in.pdf|in.ocd.epub> <out.EXT> [--to=<target>] [--key=value | --flag] …
+    // java …Conversion <in.pdf|in.ocd.epub|image> <out.EXT> [--to=<target>] [--key=value | --flag] …
     //   target is taken from --to, else inferred from the output extension.
     //   no args → the multi-target Swing launcher (WriterCli).
     public static void main(String[] args) throws Exception {
         if (args.length == 0) { WriterCli.launch(); return; }
         if (args.length < 2) {
-            System.err.println("usage: <in.pdf|in.ocd.epub> <out.ext> [--to=" + String.join("|", Target.ids())
+            System.err.println("usage: <in.pdf|in.ocd.epub|in.png|in.jpg|in.tif> <out.ext> [--to=" + String.join("|", Target.ids())
                     + "] [--key=value | --flag] …   (no args → window)");
             System.exit(2);
             return;
@@ -251,7 +258,7 @@ public final class Conversion {
         java.util.List<String> flags = new java.util.ArrayList<>();
         for (String a : args) (a.startsWith("--") ? flags : positional).add(a);
         if (positional.size() != 2) {
-            System.err.println("usage: <in.pdf|in.ocd.epub> <out.ext> [--to=" + String.join("|", Target.ids())
+            System.err.println("usage: <in.pdf|in.ocd.epub|in.png|in.jpg|in.tif> <out.ext> [--to=" + String.join("|", Target.ids())
                     + "] [--key=value | --flag] …   (no args → window)");
             System.exit(2);
             return;
@@ -274,12 +281,16 @@ public final class Conversion {
     }
 
     /** Load a source. The kind is read from the CONTENT, never from the name — `PK\u0003\u0004` is the
-     *  OCD-EPUB container, anything else is imported as a PDF (FORMAT.md §A6, and the same rule the
+     *  OCD-EPUB container, a PNG, JPEG or TIFF signature an image (OCR'd by the bound engine, if any),
+     *  anything else is imported as a PDF (FORMAT.md §A6, and the same rule the
      *  {@code byte[]} entry point already applied). Sniffing the extension made the two paths disagree
      *  and gave a correct container named {@code .ocd} a PDF parse error for a diagnostic; the legacy
      *  {@code .ocd} JSON container is gone, so a zip here can only be this format. */
     public static OCDDocument load(File in, ConvertOptions opt) throws Exception {
-        OCDDocument doc = isOcd(head(in)) ? OCDReader.read(in) : PdfImporter.convert(in, opt);
+        byte[] head = head(in);
+        OCDDocument doc = isOcd(head) ? OCDReader.read(in)
+                : ImageImporter.isImage(head) ? ImageImporter.convert(Files.readAllBytes(in.toPath()), opt)
+                : PdfImporter.convert(in, opt);
         // A pageless document (cyclic or broken page tree, decoy content) has no convertible
         // substance: refuse here — the one load authority — rather than let every writer emit a
         // structurally invalid shell (empty spine, dangling nav).

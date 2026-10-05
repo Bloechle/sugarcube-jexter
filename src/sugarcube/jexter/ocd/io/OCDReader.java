@@ -157,6 +157,11 @@ public final class OCDReader {
         Map<String, Object> meta = json(zf, JX + "meta.json");
         if (meta == null)
             throw new IOException("not an OCD-EPUB: no " + JX + "meta.json member (a foreign EPUB is a book, not a model)");
+        // A version this reader does not know is REFUSED, never guessed at (OCDVocab.readable).
+        Object ver = meta.get("version");
+        if (!OCDVocab.readable(ver == null ? null : ver.toString()))
+            throw new IOException("OCD-EPUB version " + ver + " is newer than this reader, which reads versions 2 to "
+                    + OCDVocab.VERSION + " \u2014 update jexter to open it");
 
         OCDDocument doc = new OCDDocument();
         readMeta(meta, doc);
@@ -526,6 +531,7 @@ public final class OCDReader {
         OCDText t = new OCDText(font != null ? font.id() : el.getAttribute("data-font"), fs);
         t.id(el.getAttribute("id"));
         if (el.hasAttribute("data-render")) t.renderMode((int) dbl(el.getAttribute("data-render"), 0));
+        if (el.hasAttribute("data-conf"))   t.confidence(dbl(el.getAttribute("data-conf"), Double.NaN));
         state(el, t);
 
         // tr = flipInv ∘ T ∘ scale(1/fs)  (T = pageFlip ∘ tr ∘ scale(fs) was written)
@@ -870,7 +876,11 @@ public final class OCDReader {
         }
         for (Object o : arr(m, "layers")) {
             Map<String, Object> l = (Map<String, Object>) o;
-            doc.add(new OCDLayer(s(l, "id"), s(l, "name")).visible(!Boolean.FALSE.equals(l.get("visible"))).order(ii(l, "order", 0)));
+            OCDLayer layer = new OCDLayer(s(l, "id"), s(l, "name")).visible(!Boolean.FALSE.equals(l.get("visible"))).order(ii(l, "order", 0));
+            if (l.get("ocr") instanceof Map<?, ?> ocr && ocr.get("engine") != null)
+                layer.recognition(new OCDLayer.Recognition(ocr.get("engine").toString(),
+                        ocr.get("prep") == null ? null : ocr.get("prep").toString()));
+            doc.add(layer);
         }
         OCDMeta md = doc.meta();
         if (has(m, "title"))    md.title(s(m, "title"));

@@ -9,6 +9,16 @@ public final class OCDVocab {
 
     private OCDVocab() {}
 
+    /** THE format version this engine writes — pages, {@code fonts.svg} and {@code ocd/meta.json} all state it,
+     *  from here. 3 since 2026-10-04: recognized text is native — a recognition LAYER (FORMAT §B4b) whose words carry their
+     *  confidence (§B4 {@code data-conf}). */
+    public static final String VERSION = "3";
+
+    /** Whether this reader understands a container that states {@code v}. A v2 container is v3 minus the
+     *  recognized-text attributes, so it reads as is; anything newer is REFUSED, never guessed at — a reader
+     *  that half-understands a format is how a document is silently misread. No statement reads as v2. */
+    public static boolean readable(String v) { return v == null || v.equals("2") || v.equals(VERSION); }
+
     /** Canonical page id from a 0-based index: {@code 0 → "p1"}. */
     public static String pageId(int index) { return "p" + (index + 1); }
 

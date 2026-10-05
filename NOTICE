@@ -14,6 +14,13 @@ It bundles and depends on the following third-party software:
   Licensed under the Apache License, Version 2.0.
 - Bouncy Castle (optional, runtime — for encrypted PDFs).
   Licensed under the Bouncy Castle license (MIT-style).
+- ZigZag — document image binarization and background removal, vendored as source
+  under src/zigzag/ from github.com/Bloechle/zigzag (the upstream is the authority;
+  this copy differs from ports/ZigZag.java by its package line only).
+  Copyright (c) Jean-Luc Bloechle. Licensed under the GNU Affero General Public
+  License v3.0; published as Bloechle, Hennebert, Gisler, "ZigZag: A Robust
+  Adaptive Approach to Non-Uniformly Illuminated Document Image Binarization",
+  ACM DocEng 2024 (DOI 10.1145/3685650.3685661).
 - JJ2000 — the JPEG 2000 codec vendored as source under src/jj2000/.
   Copyright (c) 1999/2000 JJ2000 Partners: Raphaël Grosbois and Diego Santa Cruz
   (Swiss Federal Institute of Technology — EPFL); Joël Askelöf (Ericsson Radio

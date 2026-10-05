@@ -57,6 +57,30 @@ public final class ConvertOptions {
             "Resolution of the images produced for rasterized composited groups.",
             Type.INT, 300, Group.CONVERSION);
 
+    public static final Opt<Integer> IMAGE_DPI = new Opt<>(
+            "imageDpi",
+            "Image resolution (dpi)",
+            "Resolution an imported image (PNG, JPEG, TIFF) is taken to have: it sets the page size, "
+                    + "pixels \u00d7 72 / dpi points. Only read when the source is an image.",
+            Type.INT, 300, Group.CONVERSION);
+
+    public static final Opt<String> OCR_PREP = new Opt<>(
+            "ocrPrep",
+            "OCR preparation",
+            "What the picture goes through before the OCR engine reads it, when the source is an image: "
+                    + "\"zigzag-gray\" (ZigZag background removal — uneven lighting, shadows and printed "
+                    + "backgrounds flattened, the ink kept in its grey levels, with a window sized from the image). "
+                    + "Empty = the picture as is. Only the engine's input changes: the page keeps the original "
+                    + "picture, and the recognition layer states the preparation.",
+            Type.STRING, "", Group.CONVERSION);
+
+    public static final Opt<String> OCR_LANG = new Opt<>(
+            "ocrLang",
+            "OCR language",
+            "Language hint for the OCR engine when the source is an image, in the engine's own vocabulary "
+                    + "(e.g. \"fra+deu\" for Tesseract). Empty = the engine's default.",
+            Type.STRING, "", Group.CONVERSION);
+
     public static final Opt<Boolean> RENDER_ANNOTATIONS = new Opt<>(
             "renderAnnotations",
             "Render annotation layer",
@@ -249,7 +273,7 @@ public final class ConvertOptions {
 
     /** The single source of truth UIs iterate over, declared in {@link Group} order. */
     public static final List<Opt<?>> ALL = List.<Opt<?>>of(
-            MERGE_GLYPH_CLIPS, RASTERIZE_GROUPS, GROUP_RASTER_DPI, RENDER_ANNOTATIONS,
+            MERGE_GLYPH_CLIPS, RASTERIZE_GROUPS, GROUP_RASTER_DPI, IMAGE_DPI, OCR_PREP, OCR_LANG, RENDER_ANNOTATIONS,
             STRUCTURE, DETECT_HEADERS, IGNORE_TAGS,
             GRAPHICS, GENERATE_OUTLINE, RESTRUCTURE_TEXT, RESTRUCTURE_HIERARCHY, REFINE_STRUCTURE, LLM_MODEL,
             NAV_PER_PAGE, PAGE, PAGES, SELECTABLE, DOCTAGS_GRID, DEFAULT_STRUCTURE, REDACT, REDACT_FILL, REDACT_META, MATCH, ADD_FONT, ADD_FONT_CHARS);

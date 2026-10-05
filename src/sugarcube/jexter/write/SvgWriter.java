@@ -167,7 +167,7 @@ public final class SvgWriter {
 
     private static void text(StringBuilder sb, OCDDocument doc, OCDPage page, OCDText t,
                              Map<String, String> styles, Map<String, String> faces, FontSrc fontSrc) {
-        if (t.isInvisible() || t.glyphs().isEmpty()) return;
+        if (t.glyphs().isEmpty()) return;
 
         OCDFont df = doc.findFont(t.fontId());
         Map<Integer, Integer> rev = df != null ? df.reverseCmap() : Map.of();
@@ -192,10 +192,15 @@ public final class SvgWriter {
         JxTransform flipY = new JxTransform(1, 0, 0, -1, 0, 0);
         JxTransform T = flip.concat(t.transform()).concat(flipY);
 
-        boolean stroked = t.hasStrokePaint();
+        // An INVISIBLE run (a scan's OCR layer) is real text with no ink: selectable and searchable, painted
+        // at zero opacity — fill:none would also hide it, but leaves some viewers nothing to hit-test.
+        boolean invisible = t.isInvisible();
+        boolean stroked = !invisible && t.hasStrokePaint();
         boolean filled  = t.hasFill() || !stroked;     // mode 1 (stroke-only) → fill:none, like the renderer
         var css = new StringBuilder();
-        if (filled) {
+        if (invisible) {
+            css.append("fill:#000000;fill-opacity:0");
+        } else if (filled) {
             css.append("fill:").append(rgb(t.fill()));
             float a = new JxColor(t.fill()).alpha();
             if (a < 1f) css.append(";fill-opacity:").append(f(a));

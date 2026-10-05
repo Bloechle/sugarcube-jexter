@@ -64,6 +64,11 @@ export const SVG_NS   = 'http://www.w3.org/2000/svg';
  *  (`OCDVocab.pageFile`); this is the client's single copy of the same fact, and `book.js` asks for it
  *  rather than spelling the padding a third time. */
 export const pageFile = (n) => 'page-' + String(n).padStart(3, '0');
+
+/** THE format version this client writes — the engine's `OCDVocab.VERSION`, stated once on this side.
+ *  3 since 2026-10-04: recognized text is native — a recognition LAYER (FORMAT §B4b) whose words carry
+ *  their confidence (§B4 `data-conf`). */
+export const OCD_VERSION = '3';
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
 const XMLNS_NS = 'http://www.w3.org/2000/xmlns/';
 
@@ -274,6 +279,45 @@ export function readingRuns(root) {
     return out;
 }
 
+/** The box a run OCCUPIES, in its parent's user space: from its matrix and its font, never from
+ *  `getBBox()`, which measures INK. A run whose glyphs carry no outline — the OCR layer over a scan, in
+ *  render mode 3 — has no ink at all, so `getBBox()` answers 0 × 0 for text that is really there, and
+ *  anything drawn from it (a search highlight, a box) collapses to a point. The horizontal extent runs
+ *  from the first glyph's x to the last one's x plus its advance — painted glyphs are `<use x>`, inkless
+ *  ones `data-blanks` tokens (`at:gid:x`, or `at:x` for a sentinel with no glyph) — and the vertical
+ *  one from the font's descent to its ascent. `fonts` is `parseFonts()` of the book. Returns
+ *  `{x, y, width, height}` (axis-aligned), or null for a run that cannot be measured. */
+export function runBox(el, fonts) {
+    const m = /matrix\(([^)]+)\)/.exec(el.getAttribute('transform') || '');
+    if (!m) return null;
+    const [a, b, c, d, e, f] = m[1].trim().split(/[\s,]+/).map(Number);
+    const use = [...el.children].find(u => u.localName === 'use');
+    const alias = use ? /#(f\d+)-\d+$/.exec(xhref(use))?.[1] : null;
+    const id = el.getAttribute('data-font');
+    const font = (fonts || []).find(x => (alias && x.alias === alias) || x.safe === id || x.id === id);
+    const adv = (gid) => font?.glyphByGid.get(gid)?.adv || font?.space || 0.5;
+    let x0 = Infinity, x1 = -Infinity;
+    const take = (x, gid) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x + (gid == null ? 0 : adv(gid))); };
+    for (const u of el.children) {
+        if (u.localName !== 'use') continue;
+        const href = xhref(u);
+        take(+(u.getAttribute('x') || 0), +href.slice(href.lastIndexOf('-') + 1));
+    }
+    for (const tok of (el.getAttribute('data-blanks') || '').trim().split(/\s+/)) {
+        const p = tok.split(':');
+        if (p.length === 3) take(+p[2], +p[1]);
+        else if (p.length === 2) take(+p[1], null);
+    }
+    if (!(x1 > x0)) return null;
+    const asc = font?.ascent || 0.8, desc = Math.abs(font?.descent || 0.2);
+    let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+    for (const [u, v] of [[x0, -desc], [x1, -desc], [x1, asc], [x0, asc]]) {
+        const X = a * u + c * v + e, Y = b * u + d * v + f;
+        bx0 = Math.min(bx0, X); bx1 = Math.max(bx1, X); by0 = Math.min(by0, Y); by1 = Math.max(by1, Y);
+    }
+    return { x: bx0, y: by0, width: bx1 - bx0, height: by1 - by0 };
+}
+
 export function pageViewport(p) {
     return { vw: p.width || 0, vh: p.height || 0 };
 }
@@ -325,7 +369,7 @@ export class OcdPage {
         } else {
             const W = F(w), H = F(h);
             this.svg = svgel('svg', { xmlns: SVG_NS, viewBox: `0 0 ${W} ${H}`, width: W, height: H,
-                'data-ocd': 'page', 'data-version': '2', 'data-mediabox': `0 0 ${W} ${H}` });
+                'data-ocd': 'page', 'data-version': OCD_VERSION, 'data-mediabox': `0 0 ${W} ${H}` });
             this.svg.setAttributeNS(XMLNS_NS, 'xmlns:xlink', XLINK_NS);
             this.styleEl = null; this.defsEl = null;
         }
@@ -644,7 +688,7 @@ export class OcdDoc {
     /** A blank document. { title, language, format:'A4'|[Wmm,Hmm], pages:1, fonts:[] } */
     static create(opts = {}) {
         const d = new OcdDoc();
-        d.meta = { format: 'ocd-epub', version: '2',
+        d.meta = { format: 'ocd-epub', version: OCD_VERSION,
                    title: opts.title || 'Untitled', language: opts.language || 'en',
                    created: now() };
         const fm = Array.isArray(opts.format) ? opts.format : FORMATS[opts.format || 'A4'];
@@ -812,7 +856,7 @@ export class OcdDoc {
 
         // fonts — ALWAYS emitted: the single representation (empty defs when no text yet)
         const groups = this.fonts.filter(f => this.usedFonts.has(f.alias)).map(f => f.raw).join('\n');
-        out[OPF + 'pages/fonts.svg'] = enc('<svg xmlns="http://www.w3.org/2000/svg" data-ocd="fonts" data-version="2">\n<defs>\n'
+        out[OPF + 'pages/fonts.svg'] = enc('<svg xmlns="http://www.w3.org/2000/svg" data-ocd="fonts" data-version="' + OCD_VERSION + '">\n<defs>\n'
             + (groups ? groups + '\n' : '') + '</defs>\n</svg>\n');
 
         this.images.forEach(([name, bytes]) => {

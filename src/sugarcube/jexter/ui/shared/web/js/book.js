@@ -34,7 +34,7 @@
 //   page.image({ name, …, into: page.layer('my-layer', 'Label') });  // model edit
 //   book.persist(idx);                                               // project
 
-import { OcdPage, pageShell, pageFile, parseFonts } from './ocd.js';
+import { OcdPage, pageShell, pageFile, parseFonts, OCD_VERSION } from './ocd.js';
 import { zipSync } from 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm';
 
 const P = window.prism;
@@ -142,7 +142,7 @@ async function addPage() {
     let k = n; while (files[member(`pages/${pageFile(k)}.xhtml`)]) k++;
     const pf = pageFile(k);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" `
-        + `viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" data-ocd="page" data-version="2" data-mediabox="0 0 ${W} ${H}"></svg>`;
+        + `viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" data-ocd="page" data-version="${OCD_VERSION}" data-mediabox="0 0 ${W} ${H}"></svg>`;
     await put(member(`pages/${pf}.xhtml`), enc(pageShell(svg, W, H, n)));
     await opf(s => s
         .replace('</manifest>', `<item id="page-a${k}" href="pages/${pf}.xhtml" media-type="application/xhtml+xml" properties="svg"/>\n</manifest>`)
@@ -330,6 +330,6 @@ export const book = {
     open, close, reload,
     get, put, onChange, json, opf,
     addImage, addMedia, removeResource, declare, registerLayer,
-    page, eachPage, eachFrame, frameDoc, onFrame, addPage, refreshPage,
+    page, eachPage, eachFrame, frameDoc, onFrame, addPage, refreshPage, fonts,
     persist, flush,
 };

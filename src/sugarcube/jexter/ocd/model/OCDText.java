@@ -40,6 +40,7 @@ public final class OCDText extends OCDNode {
     private int    stroke = 0;         // argb stroke paint (modes 1/2/5/6); alpha 0 = none
     private double strokeWidth = 0;    // text-space stroke width (PDF line width through the CTM)
     private int    renderMode = FILL;
+    private double confidence = Double.NaN; // the recognizer's confidence in this word, [0, 1]; NaN = not recognized text
 
     // stroke style — parity with OCDPath; only meaningful when the run strokes (modes 1/2/5/6)
     private int      cap;              // 0=butt 1=round 2=square
@@ -82,6 +83,12 @@ public final class OCDText extends OCDNode {
     /** A stroke paint is actually present (mode strokes AND the colour isn't transparent). */
     public boolean hasStrokePaint() { return hasStroke() && (stroke >>> 24) != 0; }
 
+    /** The recognizer's confidence in this run, in {@code [0, 1]} — meaningful only on RECOGNIZED text (an OCR
+     *  word); {@link Double#NaN} on composed text, which nothing recognized. FORMAT §B4 {@code data-conf}. */
+    public double  confidence()            { return confidence; }
+    public OCDText confidence(double c)    { this.confidence = c; return this; }
+    public boolean hasConfidence()         { return !Double.isNaN(confidence); }
+
     public boolean isInvisible() { return renderMode == INVISIBLE || renderMode == CLIP; }
     public boolean isClipping()  { return renderMode >= FILL_CLIP; }
     public boolean hasFill()     { int m = renderMode & 3; return m == 0 || m == 2; }
@@ -119,7 +126,7 @@ public final class OCDText extends OCDNode {
      *  clip, alpha, blend, role) but <b>no glyphs</b> — the basis for a split run, so the
      *  rendered output is byte-identical once the chosen glyphs are added back. */
     public OCDText copyState() {
-        OCDText a = new OCDText(fontId, fontSize).fill(fill).renderMode(renderMode);
+        OCDText a = new OCDText(fontId, fontSize).fill(fill).renderMode(renderMode).confidence(confidence);
         if (hasStroke()) a.strokePaint(stroke, strokeWidth);
         a.lineStyle(cap, join, miterLimit, dash, dashPhase);   // stroke style rides along on a split run
         a.transform(transform());
@@ -135,7 +142,7 @@ public final class OCDText extends OCDNode {
      *  entries are shared safely. */
     @Override public OCDText copy() {
         OCDText t = copyInto(new OCDText(fontId, fontSize));
-        t.fill = fill; t.stroke = stroke; t.strokeWidth = strokeWidth; t.renderMode = renderMode;
+        t.fill = fill; t.stroke = stroke; t.strokeWidth = strokeWidth; t.renderMode = renderMode; t.confidence = confidence;
         t.cap = cap; t.join = join; t.miterLimit = miterLimit;
         t.dash = dash == null ? null : dash.clone(); t.dashPhase = dashPhase;
         t.glyphs.addAll(glyphs);

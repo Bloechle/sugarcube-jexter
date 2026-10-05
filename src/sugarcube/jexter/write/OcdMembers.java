@@ -104,7 +104,7 @@ public final class OcdMembers {
         OCDMeta m = doc.meta();
         JxStringer js = new JxStringer(512).obj()
                 .str("format", "ocd-epub")
-                .str("version", "2");
+                .str("version", sugarcube.jexter.ocd.io.OCDVocab.VERSION);
         if (doc.id() != null && !doc.id().isEmpty()) js.str("id", doc.id());
         if (doc.textSegmented() || doc.headingsDetected()) {
             js.obj("analysis");
@@ -115,7 +115,15 @@ public final class OcdMembers {
         if (!doc.layers().isEmpty()) {
             js.arr("layers");
             for (var l : doc.layers().values())
-                js.obj().str("id", l.id()).str("name", l.name()).bool("visible", l.visible()).num("order", (long) l.order()).end();
+            {
+                js.obj().str("id", l.id()).str("name", l.name()).bool("visible", l.visible()).num("order", (long) l.order());
+                if (l.isRecognition()) {                 // FORMAT §B4b: a recognition layer, and how it was read
+                    js.obj("ocr").str("engine", l.recognition().engine());
+                    if (l.recognition().prep() != null) js.str("prep", l.recognition().prep());
+                    js.end();
+                }
+                js.end();
+            }
             js.end();
         }
         var oi = doc.outputIntent();
