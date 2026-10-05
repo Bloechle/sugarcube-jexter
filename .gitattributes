@@ -14,3 +14,5 @@
 # ── GitHub linguist: report the engine, not the assets ───────────────────────
 lib/**   linguist-vendored
 doc/**   linguist-documentation
+*.woff2  binary
+src/sugarcube/jexter/ui/shared/web/vendor/**   linguist-vendored
