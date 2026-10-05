@@ -46,7 +46,7 @@
 // in viewBox space (top-down). Text needs a font: reuse an opened document's
 // (OcdDoc.open reads pages/fonts.svg) or parseFonts() any fonts.svg text.
 
-import { unzip, zipSync } from 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm';
+import { unzip, zipSync } from '../vendor/fflate.js';
 
 /* ══ shared utils ═══════════════════════════════════════════════════════ */
 

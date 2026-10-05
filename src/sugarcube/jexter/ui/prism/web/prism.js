@@ -11,7 +11,7 @@
 // iframe just fetch normal URLs — one render path, no asset rewriting.
 //
 //   initSW     — register + take control (needs https or localhost).
-//   openEpub   — read file -> async fflate unzip -> hand map to SW -> load.
+//   openEpub   — read file -> async fflate unzip (vendored) -> hand map to SW -> load.
 //   loadEpub   — META-INF/container.xml -> OPF -> spine (order) + nav (labels/TOC).
 //   prefetch   — one pass per page: viewBox (layout) + text (search).
 //   rails      — Pages (live thumbnails) · Contents (TOC) · Search.
@@ -29,8 +29,8 @@
 //   export     — bake the model into clean page copies (portable) + ship the
 //                sidecar, so the .epub is portable AND re-editable in PRISM.
 //   console    — F2 log panel capturing console.* + errors.
-import { boot, theme, toast, makeDropZone, copy } from 'https://cdn.jsdelivr.net/gh/Bloechle/qry-js@1.3.0/qry-kit.js';
-import { unzip, zipSync } from 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm';
+import { boot, theme, toast as qryToast, makeDropZone, makeDialog, makeMenu, copy } from '/shared/vendor/qry/qry-web.js';
+import { unzip } from '/shared/vendor/fflate.js';
 
 // The chassis takes NO static /shared import: `book.js` reads `window.prism` at module scope, so the
 // seam has to exist first — every /shared module is pulled in `main()`. One namespace string is not a
@@ -76,12 +76,25 @@ function emit(evt, ...args) {
   for (const cb of subs.get(evt) || []) { try { cb(...args); } catch (e) { console.error(e); } }
 }
 
-// Footer status line (jexter-style): one place sets it, lucide re-renders its icon.
+// Footer status line (jexter-style): one place sets it; its <i data-icon> draws itself (icons.js).
 function setStatus(html) {
   const el = $.opt('#status'); if (!el) return;
   el.innerHTML = html;
-  if (window.lucide) lucide.createIcons();
 }
+
+/** THE toast of the app and of every tool (P.toast): a qry toast, in the words the tools speak —
+ *  success · warning · danger · neutral/info — and an optional duration in ms. */
+const TONE = { success: 'ok', warning: 'warn', danger: 'danger', neutral: 'info', info: 'info', primary: 'info' };
+const toast = (msg, tone = 'info', ms) => qryToast(String(msg), TONE[tone] || tone, ms ? { duration: ms } : undefined);
+
+/** The app's dialogs and sheets (native <dialog>, index.html), each made modal ONCE — backdrop, Escape,
+ *  [data-close], focus back. P.dialog(id).open() / .close() for the tools. */
+const dialogs = new Map();
+function dialog(id) {
+  if (!dialogs.has(id)) { const el = $.opt('#' + id); dialogs.set(id, el ? makeDialog(el) : { open() {}, close() {}, isOpen: false }); }
+  return dialogs.get(id);
+}
+window.prism.dialog = dialog;
 window.prism.setStatus = setStatus;
 
 // Unit preference (Settings drawer) + page-dims readout — Prism's footer dims, here.
@@ -153,9 +166,8 @@ function renderTabs() {
   host.cls((devMode() ? '+' : '-') + 'px-dev');   // the bar states the mode; the amber tabs are what SHOWS it
   host.innerHTML = visibleTools().map(t =>
     `<button class="px-tooltab${t.id === tool ? ' active' : ''}${t.experimental ? ' px-wip' : ''}" data-tool="${t.id}"
-             title="${esc(t.title || t.label)}${t.experimental ? ' — in development' : ''}"><i data-lucide="${t.icon}"></i><span>${esc(t.label)}</span></button>`).join('');
+             title="${esc(t.title || t.label)}${t.experimental ? ' — in development' : ''}"><i data-icon="${t.icon}"></i><span>${esc(t.label)}</span></button>`).join('');
   $.all('.px-tooltab').forEach(b => b.on('click', () => setTool(b.attr('data-tool'))));
-  if (window.lucide) lucide.createIcons();
 }
 
 function setTool(id) {
@@ -205,8 +217,7 @@ function drawer(id) {
 function paneHead() {
   const head = $.opt('#pane-right .px-pane-head'); if (!head) return;
   const t = toolOf(tool);
-  head.innerHTML = `<i data-lucide="${esc(t?.icon || 'panel-right')}"></i> ${esc(t?.drawer || t?.label || tool)}`;
-  if (window.lucide) lucide.createIcons();
+  head.innerHTML = `<i data-icon="${esc(t?.icon || 'panel-right')}"></i> ${esc(t?.drawer || t?.label || tool)}`;
 }
 
 /** One item of a ribbon group that is a CONTROL rather than a command — a search box, a colour, a
@@ -323,7 +334,7 @@ function ribbon(id, groups, help) {
         onclick: () => c.on?.(),
       });
       if (c.disabled) b.setAttribute('disabled', '');
-      $.create('i').attr('data-lucide', c.icon || 'square').mount(b);
+      $.create('i').attr('data-icon', c.icon || 'square').mount(b);
       $.create('span', { text: c.label }).mount(b);
       b.mount(row);
     }
@@ -334,7 +345,6 @@ function ribbon(id, groups, help) {
   // The help line shrinks before any command does and can end up ellipsised or gone entirely, so the
   // sentence stays reachable on the element itself.
   if (help) $.create('span', { class: 'px-rb-help', text: help }).attr('title', help).mount(slot);
-  if (window.lucide) lucide.createIcons();
   // Re-declaring rebuilds the row, which would drop keyboard focus mid-interaction: put it back on the
   // command that had it. Titles are unique within a ribbon, and they are what a screen reader announces.
   // A field also keeps the caret — restoring focus and sending the cursor to 0 is its own small defect.
@@ -361,14 +371,14 @@ window.prism.setDevMode = setDevMode;
 window.prism.setTool = setTool;
 window.prism.tool = () => tool;
 
-boot({ title: 'Prism', ready: main });
+boot({ title: 'Prism', theme: { key: 'prism:theme' }, ready: main });
 
 async function main() {
   ({ book }  = await import('/shared/js/book.js'));     // after the seam exists — see the note on top
   ({ shots } = await import('/shared/js/shot.js'));
   watchMembers();
   installLogCapture();                                              // capture console.* into the footer console
-  if (localStorage.getItem('qry_theme') == null) theme.set('dark'); // dark by default, like Prism
+  if (localStorage.getItem('prism:theme') == null) theme.set('dark'); // dark by default, like Prism
   wireChrome();
   try { await initSW(); }
   catch (e) { toast(e.message, 'danger'); return; }   // no Service Worker → nothing can be served
@@ -446,13 +456,13 @@ async function openEpub(buffer, name) {
     toast('This is a PDF or an image — no conversion engine is available here. Open an .epub / .ocd.epub.', 'warning');
     return;
   }
-  setStatus('<sl-spinner></sl-spinner> Opening\u2026');
+  setStatus('<span class="jx-spin"></span> Opening\u2026');
   // The old book leaves the screen NOW, not when the new one lands — and `is-loading` says a
   // document is coming, so the drop prompt never flashes back between the two.
   clearSurfaces(); $('body').cls('+is-loading');
   let files;
   try { files = await new Promise((res, rej) => unzip(new Uint8Array(buffer), (err, out) => err ? rej(err) : res(out))); }
-  catch { toast('Not a valid ZIP/EPUB archive.', 'danger'); setStatus('<i data-lucide="sparkles"></i> Ready'); return; }
+  catch { toast('Not a valid ZIP/EPUB archive.', 'danger'); setStatus('<i data-icon="sparkles"></i> Ready'); return; }
 
   const prev = state.id;
   const id = 'b' + (++seq);
@@ -461,11 +471,11 @@ async function openEpub(buffer, name) {
     state.files = files;   // book in memory (edit + export); loadEpub reads the sidecar from it
     await loadEpub(id, name);
     if (prev) swSend({ type: 'unload', id: prev }).catch(() => {});
-    setStatus('<i data-lucide="check"></i> Ready');
+    setStatus('<i data-icon="check"></i> Ready');
   } catch (e) {
     toast(`Could not open the EPUB: ${e.message}`, 'danger');
     swSend({ type: 'unload', id }).catch(() => {});
-    setStatus('<i data-lucide="sparkles"></i> Ready');
+    setStatus('<i data-icon="sparkles"></i> Ready');
   }
 }
 
@@ -481,7 +491,7 @@ function closeBook() {
   state.files = null; state.opfPath = ''; state.opfDir = ''; state.root = ''; state.aug = null;
   clearSurfaces();
   $('body').cls('-has-book -is-loading');   // a real close: back to "no document"
-  setStatus('<i data-lucide="sparkles"></i> Ready');
+  setStatus('<i data-icon="sparkles"></i> Ready');
   document.title = TITLE;
 }
 
@@ -1328,33 +1338,25 @@ function wireChrome() {
   // The tool panel folds the same way, from the corner it lives in. Purely visual: the tool stays
   // active, its ribbon stays, only the pane is out of the way — so nothing has to be re-selected.
   $('#toggle-drawer').on('click', () => $('body').cls('~drawer-collapsed'));
-  $('#b-config').on('click', () => $('#config-drawer').show());
+  makeMenu('#app-menu');
+  $('#b-config').on('click', () => dialog('config-drawer').open());
   { const u = $.opt('#unit');
-    if (u) {
-      const setV = () => { u.value = unit; };
-      if (window.customElements?.whenDefined)
-        Promise.all([customElements.whenDefined('sl-select'), customElements.whenDefined('sl-option')]).then(setV);
-      else setV();
-      u.addEventListener('sl-change', e => setUnit(e.target.value));
-    } }
+    if (u) { u.value = unit; u.on('change', () => setUnit(u.value)); } }
   attachTouch($('#epub-scroll'), (x, y) => [x, y]);   // gestures over the gaps between pages
 
   const pick = () => $('#file-input').click();
   $('#m-open').on('click', pick);
   $('#m-close').on('click', closeBook);
-  $('#m-export').on('click', () => $('#export-dialog').show());
-  $('#b-help').on('click', () => $('#help-dialog').show());
-  { const setIc = () => { $('#b-theme').html(`<i data-lucide="${theme.isDark() ? 'sun' : 'moon'}"></i>`); if (window.lucide) lucide.createIcons(); };
+  $('#m-export').on('click', () => dialog('export-dialog').open());
+  $('#b-help').on('click', () => dialog('help-dialog').open());
+  { const setIc = () => { $('#b-theme').html(`<i data-icon="${theme.isDark() ? 'sun' : 'moon'}"></i>`); };
     $('#b-theme').on('click', () => { theme.toggle(); setIc(); });
     setIc(); }
   $('#m-console').on('click', () => toggleLog());
   // (no #m-theme: the header button #b-theme above owns the toggle AND its icon. The menu item it
   // belonged to is gone; the leftover binding warned on every boot and, had the element come back,
   // would have toggled without updating the icon — two authorities for one control.)
-  // The dialog holds <i data-lucide> icons; Shoelace mounts its content lazily, so they are drawn on
-  // first open, not at boot. createIcons is idempotent — a second call costs nothing.
-  $('#m-about').on('click', () => { $('#about-dialog').show(); if (window.lucide) lucide.createIcons(); });
-  $('#about-ok').on('click', () => $('#about-dialog').hide());
+  $('#m-about').on('click', () => dialog('about-dialog').open());
 
   // Console (footer + head controls + level filter)
   $('#log-close').on('click', () => toggleLog(false));
@@ -1427,7 +1429,7 @@ function wireChrome() {
       toast(on ? 'Dev mode on — tabs in development are visible' : 'Dev mode off', on ? 'success' : 'neutral', 2200);
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); $('#export-dialog').show(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); dialog('export-dialog').open(); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); $('#file-input').click(); return; }
     if (e.key === 'Escape' && $.opt('#log-console')?.classList.contains('open')) { toggleLog(false); return; }
     if (/input|textarea/i.test(e.target.tagName) || state.current < 0) return;
@@ -1446,17 +1448,6 @@ function wireChrome() {
     zoomTo(state.zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12), e.clientX, e.clientY);
   }, { passive: false });
 }
-
-/* -- Drawers: a clean slide, no bounce ------------------------------- */
-import('https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/utilities/animation-registry.js')
-  .then(({ setDefaultAnimation }) => {
-    setDefaultAnimation('drawer.showEnd', {
-      keyframes: [{ transform: 'translateX(26px)', opacity: 0 }, { transform: 'translateX(0)', opacity: 1 }],
-      options: { duration: 160, easing: 'ease-out' } });
-    setDefaultAnimation('drawer.hideEnd', {
-      keyframes: [{ transform: 'translateX(0)', opacity: 1 }, { transform: 'translateX(26px)', opacity: 0 }],
-      options: { duration: 130, easing: 'ease-in' } });
-  }).catch(() => {});
 
 /* -- Log console (F2): capture console.* + errors ------------------- */
 

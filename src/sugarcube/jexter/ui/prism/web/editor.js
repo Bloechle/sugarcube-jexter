@@ -85,7 +85,7 @@ function bind(doc, idx) {
       book.persist(idx);                                           // debounced 300 ms, data-ui stripped
       describe(el);
       ribbon();
-      P.setStatus?.('<i data-lucide="pencil"></i> Edited — Ctrl+Z to undo');
+      P.setStatus?.('<i data-icon="pencil"></i> Edited — Ctrl+Z to undo');
     },
   }));
 }

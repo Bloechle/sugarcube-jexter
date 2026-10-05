@@ -12,11 +12,12 @@
  *   POST /api/open?name=…  → meta            GET /api/page?i&dpi[&src] → PNG
  *   GET  /api/tree?root=doc → [node…]         GET /api/content?page · /api/stream?obj · /api/render?obj · /api/text?page
  */
-import { boot, theme, icons, toast, makeTabs, makeRow, sortableTable }
-    from 'https://cdn.jsdelivr.net/gh/Bloechle/qry-js@1.3.0/qry-kit.js';
+import { boot, theme, toast as qryToast, makeTabs, makeMenu, makeDialog, infoRow as makeRow, sortableTable } from '/shared/vendor/qry/qry-web.js';
 import { loadOcd, esc } from '/shared/js/ocd.js';   // the OCD-EPUB carries the fonts (pages/fonts.svg, the single representation)
 
 const R = Math.round;
+const TONE = { success: 'ok', warning: 'warn', danger: 'danger', neutral: 'info' };
+const toast = (msg, tone = 'info', ms) => qryToast(String(msg), TONE[tone] || tone, ms ? { duration: ms } : undefined);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const J = (p, opt) => fetch(p, opt).then(r => r.json());
 
@@ -38,7 +39,7 @@ const RENDER_SOURCES = [
 const isVectorSrc = (s) => RENDER_SOURCES.some(r => r.id === s && r.vector);
 
 // ── status ───────────────────────────────────────────────────────────────────
-function status(text, busy) { $('#status').html(`<i data-lucide="${busy ? 'loader' : 'scan-search'}"></i> ${text}`); icons(); }
+function status(text, busy) { $('#status').html(busy ? `<span class="jx-spin"></span> ${text}` : `<i data-icon="scan-search"></i> ${text}`); }
 
 // ── render stage (iframe) bridge ───────────────────────────────────────────────
 // The page raster + zoom now live in an isolated iframe (stage.html → js/stage.js), exactly like
@@ -139,10 +140,10 @@ function structureJumpTo(i) {
     const row = li.querySelector(':scope > .trow'); row?.classList.add('sel');
     let anc = li.parentElement?.closest('li');
     while (anc) {
-        if (anc.classList.contains('collapsed')) { anc.classList.remove('collapsed'); anc.querySelector(':scope > .trow > .tcaret')?.setAttribute('data-lucide', 'chevron-down'); }
+        if (anc.classList.contains('collapsed')) { anc.classList.remove('collapsed'); anc.querySelector(':scope > .trow > .tcaret')?.setAttribute('data-icon', 'chevron-down'); }
         anc = anc.parentElement?.closest('li');
     }
-    icons(); row?.scrollIntoView({ block: 'center' }); detail.mount(li._node || null);
+    row?.scrollIntoView({ block: 'center' }); detail.mount(li._node || null);
 }
 function buildTree(rootEl, nodes) {
     rootEl.empty(); const rid = rootEl.id;
@@ -152,20 +153,20 @@ function buildTree(rootEl, nodes) {
             if (n.page != null) li.attr('data-page', String(n.page));
             const kids = n.children && n.children.length;
             const row = $.create('div', { class: 'trow' });
-            const caret = $.create('i', { class: `tcaret${kids ? '' : ' leaf'}`, 'data-lucide': kids ? 'chevron-right' : 'dot' });
+            const caret = $.create('i', { class: `tcaret${kids ? '' : ' leaf'}`, 'data-icon': kids ? 'chevron-right' : 'dot' });
             row.add(caret);
             row.add($.create('span', { class: `tcos tcos-${n.type || 'x'}`, text: n.label || n.type || 'node' }));
             row.on('click', () => {
                 $.all(`#${rid} .trow`).forEach(r => r.cls('-sel')); row.cls('+sel');
                 onNodeSelect(n);
-                if (kids) { const c = li.cls('?collapsed'); li.cls(c ? '-collapsed' : '+collapsed'); caret.attr('data-lucide', c ? 'chevron-down' : 'chevron-right'); icons(); }
+                if (kids) { const c = li.cls('?collapsed'); li.cls(c ? '-collapsed' : '+collapsed'); caret.attr('data-icon', c ? 'chevron-down' : 'chevron-right'); }
             });
             li.add(row);
             if (kids) { li.cls('+collapsed'); const ul = $.create('ul'); rec(n.children, ul); li.add(ul); }
             parent.add(li);
         }
     };
-    rec(Array.isArray(nodes) ? nodes : [], rootEl); icons();
+    rec(Array.isArray(nodes) ? nodes : [], rootEl);
 }
 
 // ── detail panel: Info · Decoded · Image · Operators · Text ──────────────────
@@ -190,11 +191,10 @@ function makeDetail(host) {
     const btns = {};
     DEFS.forEach(d => {
         const b = $.create('button', { class: 'srcbtn', 'data-view': d.id, type: 'button', title: d.label });
-        b.html(`<i data-lucide="${d.icon}"></i><span>${d.label}</span>`);
+        b.html(`<i data-icon="${d.icon}"></i><span>${d.label}</span>`);
         b.on('click', () => { if (!b.hasAttribute('disabled')) setView(d.id); });
         views.add(b); btns[d.id] = b;
     });
-    icons();
     const showPre = () => { rend.remove(); if (!pre.parentNode) body.add(pre); };
     const showImg = () => { pre.remove(); if (!rend.parentNode) body.add(rend); };
     const enable = (id, on) => { const b = btns[id]; if (b) b.attr('disabled', on ? null : ''); };
@@ -257,7 +257,7 @@ async function savePageImage() {
 function buildRenderSrc() {
     const host = $.opt('#render-src'); if (!host) return;
     let activeId = 'pdfbox';
-    RENDER_SOURCES.forEach(s => { const b = $.create('button', { class: 'srcbtn' + (s.id === activeId ? ' is-on' : ''), 'data-src': s.id, title: s.tip, type: 'button' }); b.html(`<i data-lucide="${s.icon}"></i><span>${s.label}</span>`); host.add(b); });
+    RENDER_SOURCES.forEach(s => { const b = $.create('button', { class: 'srcbtn' + (s.id === activeId ? ' is-on' : ''), 'data-src': s.id, title: s.tip, type: 'button' }); b.html(`<i data-icon="${s.icon}"></i><span>${s.label}</span>`); host.add(b); });
     host.delegate('.srcbtn', 'click', function () {
         const id = this.attr('data-src'); if (id === activeId) return; activeId = id;
         $.all('#render-src .srcbtn').forEach(x => x.cls(x.attr('data-src') === id ? '+is-on' : '-is-on'));
@@ -397,7 +397,7 @@ function drawResources(list) {
         const img = $.create('img', { alt: `object ${im.obj}` }); img.attr('loading', 'lazy'); img.attr('src', url);
         img.on('click', () => openLightbox(url, im));
         fig.add(img);
-        const dl = $.create('button', { class: 'res-dl qry-btn', title: 'Download PNG', type: 'button' }); dl.html('<i data-lucide="download"></i>');
+        const dl = $.create('button', { class: 'res-dl qry-btn', title: 'Download PNG', type: 'button' }); dl.html('<i data-icon="download"></i>');
         dl.on('click', (e) => { e.stopPropagation(); downloadImage(im); });
         fig.add(dl);
         card.add(fig);
@@ -422,7 +422,6 @@ function drawResources(list) {
         grid.add(card);
     }
     wrap.add(grid);
-    icons();
 }
 // ── lightbox: a zoomable / pannable viewer for an image resource ───────────────
 const lb = { scale: 1, natW: 1, natH: 1, drag: null };
@@ -470,7 +469,7 @@ async function downloadImage(im) {
 }
 
 // ── boot ──────────────────────────────────────────────────────────────────────
-function syncThemeIcon() { $('#btn-theme').html(`<i data-lucide="${theme.isDark() ? 'sun' : 'moon'}"></i>`); icons(); }
+function syncThemeIcon() { $('#btn-theme').html(`<i data-icon="${theme.isDark() ? 'sun' : 'moon'}"></i>`); }
 
 // ── render-stage callbacks (the iframe calls these on the parent) ──────────────
 window.shell = {
@@ -502,21 +501,21 @@ function init() {
     $('#zoom-out').on('click', () => stageApi()?.zoomBy(1 / 1.25));
     $('#zoom-pct').text('100%');
 
-    tabsCtrl = makeTabs({ tabSel: '.jx-tab', panelSel: '.pi-panel', attr: 'data-tab', activeClass: 'active',
+    tabsCtrl = makeTabs({ tabs: '.jx-tab', panels: '.pi-panel', attr: 'data-tab',
         onChange: name => { tab = name;
             if (name === 'struct') ensureStructure().then(() => structureJumpTo(cur));
             else if (name === 'fonts') ensureFonts();
             else if (name === 'resources') ensureResources();
             else stageApi()?.relayout(); } });
 
-    const drawer = $.opt('#doc-drawer');
-    $.opt('#main-menu')?.on('sl-select', e => {
-        switch (e.detail.item.value) {
+    const drawer = makeDialog('#doc-drawer');
+    makeMenu('#main-menu', { onSelect: (value) => {
+        switch (value) {
             case 'open': $('#file').click(); break;
             case 'save-image': savePageImage(); break;
-            case 'doc': if (!docMeta) toast('Open a document first.', 'warning'); else drawer?.show?.(); break;
+            case 'doc': if (!docMeta) toast('Open a document first.', 'warning'); else drawer.open(); break;
         }
-    });
+    } });
     $('#btn-theme').on('click', () => { theme.toggle(); syncThemeIcon(); stageApi()?.setTheme(theme.isDark()); });
 
     // lightbox controls — close paths first (these must always attach), then the stage pan/zoom.
@@ -535,6 +534,6 @@ function init() {
         lbst.addEventListener('pointerup', () => { lb.drag = null; });
     }
 
-    icons(); status('Ready'); openWelcome();
+    status('Ready'); openWelcome();
 }
-boot({ title: 'PDF Inspector', ready: () => { init(); syncThemeIcon(); } });
+boot({ title: 'PDF Inspector', theme: { key: 'pdfinspector:theme' }, ready: () => { init(); syncThemeIcon(); } });

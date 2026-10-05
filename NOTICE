@@ -40,5 +40,10 @@ redistribution; the JJ2000 license sits at the repository root as LICENSE-JJ2000
 and applies to src/jj2000/ whichever license this project is taken under. A copy of the Apache License 2.0 is available at
 https://www.apache.org/licenses/LICENSE-2.0
 
-The web front-end loads the qry stack, Shoelace, and Lucide from their CDNs;
-these are not redistributed as part of this repository.
+The web front-ends (Prism, Jexter, PDF Inspector) load nothing from the network. Vendored under
+src/sugarcube/jexter/ui/shared/web/vendor/, each with its licence beside it:
+  - the qry stack (qry.js, qry-web.js, qry-ui.css) — MIT, (c) Jean-Luc Bloechle (vendor/qry/LICENSE.txt);
+  - fflate 0.8.2 — MIT, (c) 2023 Arjun Barrett (vendor/LICENSE-fflate.txt);
+  - Poppins 600/700 (latin, latin-ext) — SIL Open Font License 1.1 (vendor/fonts/OFL.txt).
+The line icons in shared/web/js/icons.js are drawings from Lucide 1.17.0 — ISC licence,
+(c) Lucide Icons and Contributors (vendor/LICENSE-lucide.txt).

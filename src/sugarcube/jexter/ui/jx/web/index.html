@@ -6,39 +6,22 @@
   <title>Jexter — PDF normalizer</title>
   <link rel="icon" type="image/svg+xml" href="/shared/sugarcube-mark.svg">
 
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/light.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css">
-  <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Bloechle/qry-js@1.3.0/qry-ui.css">
-  <script src="https://cdn.jsdelivr.net/npm/lucide@1.17.0/dist/umd/lucide.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/Bloechle/qry-js@1.3.0/qry.js"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/poppins@5/600.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/poppins@5/700.css">
+  <!-- qry 2, vendored under /shared (nothing is fetched): qry-ui → the Sugarcube look → qry.js → icons -->
+  <link rel="stylesheet" href="/shared/vendor/qry/qry-ui.css">
+  <link rel="stylesheet" href="/shared/sugarcube.css">
+  <script src="/shared/vendor/qry/qry.js"></script>
+  <script>try { const t = JSON.parse(localStorage.getItem('jexter:theme')); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}</script>
+  <script type="module" src="/shared/js/icons.js"></script>
 
   <style>
     /* ── Jexter — one fixed normalization. Clean light-first chrome on qry-ui tokens,
        canonical Sugarcube blue (#33699f) as the single accent. Token-driven → dark mode
        follows for free. App-specific styling only. */
-    :root{
-      --jx-brand:#33699f; --jx-brand-bright:#5e9bd6; --jx-brand-deep:#2b567f;
-      --qry-blue:var(--jx-brand); --qry-cyan:var(--jx-brand-bright);
-      --qry-accent:var(--jx-brand); --qry-accent-rgb:51,105,159;
-      --sl-color-primary-50:#eef5fc;  --sl-color-primary-100:#d7e7f7; --sl-color-primary-200:#b6d3ef;
-      --sl-color-primary-300:#8dbae4; --sl-color-primary-400:#5e9bd6; --sl-color-primary-500:#4185c4;
-      --sl-color-primary-600:#33699f; --sl-color-primary-700:#2b567f; --sl-color-primary-800:#264867;
-      --sl-color-primary-900:#1f3a52; --sl-color-primary-950:#12222f;
-    }
-    html,body{ height:100%; }
-    body.qry-app{ display:flex; flex-direction:column; height:100vh; overflow:hidden;
-      background:
-              radial-gradient(1100px 520px at 100% -8%, rgba(var(--qry-accent-rgb),.10), transparent 60%),
-              radial-gradient(900px 520px at -8% 108%, rgba(var(--qry-accent-rgb),.07), transparent 58%),
-              var(--qry-bg); }
-
+    :root{ --jx-glow:10%; }
     /* header — soft glass, gradient wordmark, bordered subtitle pill */
     .jx-head{ display:flex; align-items:center; gap:.6rem; flex:0 0 auto; padding:.5rem .9rem;
-      background:linear-gradient(180deg, transparent 30%, color-mix(in srgb, var(--qry-blue) 7%, transparent)), var(--qry-glass-strong, var(--qry-glass));
-      -webkit-backdrop-filter:var(--qry-blur); backdrop-filter:var(--qry-blur);
+      background:linear-gradient(180deg, transparent 30%, color-mix(in srgb, var(--qry-accent) 7%, transparent)), var(--qry-glass);
+      -webkit-backdrop-filter:var(--jx-blur); backdrop-filter:var(--jx-blur);
       border-bottom:1px solid color-mix(in srgb, var(--qry-text) 10%, transparent);
       box-shadow:0 6px 20px -16px rgba(0,0,0,.35); }
     .jx-head .sp{ flex:1; }
@@ -46,9 +29,9 @@
        mark belongs on the about card and the favicon, not repeated in every chrome. */
     .jx-menu-btn{ display:inline-flex; align-items:center; justify-content:center; padding:.22rem .4rem; }
     .jx-menu-btn i,.jx-menu-btn svg{ width:1.1rem; height:1.1rem; }
-    .jx-icon-btn{ appearance:none; border:1px solid var(--qry-glass-border); background:var(--qry-glass); color:var(--qry-text);
-      width:2rem; height:2rem; border-radius:var(--qry-radius-xs,8px); cursor:pointer; display:grid; place-items:center; transition:background .15s,border-color .15s,color .15s; }
-    .jx-icon-btn:hover{ background:var(--qry-tint-soft); border-color:color-mix(in srgb,var(--jx-brand) 35%,var(--qry-glass-border)); color:var(--jx-brand); }
+    .jx-icon-btn{ appearance:none; border:1px solid var(--qry-line); background:var(--qry-glass); color:var(--qry-text);
+      width:2rem; height:2rem; border-radius:var(--qry-radius-sm); cursor:pointer; display:grid; place-items:center; transition:background .15s,border-color .15s,color .15s; }
+    .jx-icon-btn:hover{ background:var(--qry-tint); border-color:color-mix(in srgb,var(--jx-brand) 35%,var(--qry-line)); color:var(--jx-brand); }
     .jx-icon-btn i,.jx-icon-btn svg{ width:1.05rem; height:1.05rem; }
 
     /* single centred column — one operation, no options */
@@ -57,16 +40,15 @@
 
     /* toolbar */
     .jx-actions{ display:flex; gap:.5rem; flex:0 0 auto; margin-bottom:1rem; }
-    .jx-actions sl-button{ flex:1 1 0; min-width:0; }
-    .jx-actions sl-button::part(base){ width:100%; }
+    .jx-actions .qry-btn{ flex:1 1 0; min-width:0; }
     .jx-controls{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; flex:0 0 auto; margin-bottom:1rem; }
     .jx-controls .sp{ flex:1; }
     .jx-count{ font-size:.8rem; color:var(--qry-text-muted); }
 
     /* hot folder — live watch bar */
     .jx-hot{ display:flex; align-items:center; gap:.6rem; flex:0 0 auto; margin:-.2rem 0 1rem; padding:.5rem .8rem;
-      border:1px solid color-mix(in srgb,var(--jx-brand) 32%,var(--qry-glass-border)); border-radius:var(--qry-radius-md,11px);
-      background:rgba(var(--qry-accent-rgb),.07); font-size:.82rem; color:var(--qry-text); }
+      border:1px solid color-mix(in srgb,var(--jx-brand) 32%,var(--qry-line)); border-radius:var(--qry-radius);
+      background:color-mix(in srgb, var(--qry-accent) 7%, transparent); font-size:.82rem; color:var(--qry-text); }
     .jx-hot .sp{ flex:1; }
     .jx-hot .lbl b{ color:var(--jx-brand-deep); }
     .jx-hot .pulse{ width:.6rem; height:.6rem; border-radius:999px; background:var(--jx-brand); position:relative; flex:none; }
@@ -78,11 +60,11 @@
 
     /* hero — inviting drop target with a tinted orb */
     .jx-hero{ min-height:min(38vh, 300px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.55rem; text-align:center;
-      border:1.5px dashed var(--qry-glass-border); border-radius:var(--qry-radius-md,16px); color:var(--qry-text-muted); cursor:pointer;
+      border:1.5px dashed var(--qry-line); border-radius:var(--qry-radius); color:var(--qry-text-muted); cursor:pointer;
       background:var(--qry-glass); transition:border-color .15s, background .15s; }
-    .jx-hero:hover{ border-color:var(--jx-brand-bright); background:rgba(var(--qry-accent-rgb),.06); }
+    .jx-hero:hover{ border-color:var(--jx-brand-bright); background:color-mix(in srgb, var(--qry-accent) 6%, transparent); }
     .jx-hero .orb{ width:4.8rem; height:4.8rem; border-radius:999px; display:grid; place-items:center; margin-bottom:.25rem;
-      background:rgba(var(--qry-accent-rgb),.12); color:var(--jx-brand); box-shadow:0 10px 26px -16px rgba(var(--qry-accent-rgb),.7); }
+      background:color-mix(in srgb, var(--qry-accent) 12%, transparent); color:var(--jx-brand); box-shadow:0 10px 26px -16px color-mix(in srgb, var(--qry-accent) 70%, transparent); }
     .jx-hero .orb i,.jx-hero .orb svg{ width:2.3rem; height:2.3rem; }
     .jx-hero h2{ margin:0; color:var(--qry-text); font-size:1.25rem; }
     .jx-hero p{ margin:0; font-size:.85rem; max-width:30rem; }
@@ -93,13 +75,13 @@
     .jx-promise{ list-style:none; margin:.9rem 0 0; padding:0; display:grid; gap:.5rem;
       grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); }
     .jx-promise li{ display:grid; grid-template-columns:auto 1fr; gap:.15rem .55rem; align-items:start;
-      padding:.6rem .7rem; border:1px solid var(--qry-glass-border); border-radius:var(--qry-radius-md,12px);
+      padding:.6rem .7rem; border:1px solid var(--qry-line); border-radius:var(--qry-radius);
       background:var(--qry-glass); }
     .jx-promise i,.jx-promise svg{ width:1rem; height:1rem; color:var(--jx-brand); grid-row:span 2; margin-top:.15rem; }
     .jx-promise b{ font-size:.82rem; font-weight:650; color:var(--qry-text); }
     .jx-promise span{ font-size:.74rem; line-height:1.35; color:var(--qry-text-muted); }
 
-    .jx-row{ display:flex; align-items:center; gap:.75rem; padding:.65rem .85rem; border:1px solid var(--qry-glass-border); border-radius:var(--qry-radius-md,12px); background:var(--qry-glass); transition:border-color .15s; }
+    .jx-row{ display:flex; align-items:center; gap:.75rem; padding:.65rem .85rem; border:1px solid var(--qry-line); border-radius:var(--qry-radius); background:var(--qry-glass); transition:border-color .15s; }
     .jx-row.done{ border-color:rgba(63,174,106,.45); } .jx-row.error{ border-color:rgba(214,83,58,.45); }
     .jx-row .ic{ width:1.2rem; height:1.2rem; color:var(--qry-text-muted); flex:none; }
     .jx-row.done .ic{ color:var(--jx-brand-bright); } .jx-row.error .ic{ color:#d6533a; }
@@ -108,7 +90,7 @@
     .jx-row .sub{ font-size:.74rem; color:var(--qry-text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .jx-row.done .sub{ color:#3fae6a; } .jx-row.error .sub{ color:#d6533a; }
     .jx-badge{ font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:.16rem .5rem; border-radius:999px;
-      border:1px solid var(--qry-glass-border); color:var(--qry-text-muted); white-space:nowrap; }
+      border:1px solid var(--qry-line); color:var(--qry-text-muted); white-space:nowrap; }
     .jx-row.done .jx-badge{ color:#3fae6a; border-color:rgba(63,174,106,.4); }
     .jx-row.error .jx-badge{ color:#d6533a; border-color:rgba(214,83,58,.4); }
     .jx-x{ appearance:none; border:0; background:transparent; color:var(--qry-text-muted); cursor:pointer; display:grid; place-items:center; width:1.9rem; height:1.9rem; border-radius:8px; }
@@ -119,23 +101,21 @@
 
     /* per-file Open button */
     .jx-open{ appearance:none; border:0; background:transparent; color:var(--jx-brand); cursor:pointer; display:grid; place-items:center; width:1.9rem; height:1.9rem; border-radius:8px; }
-    .jx-open:hover{ background:rgba(var(--qry-accent-rgb),.12); }
+    .jx-open:hover{ background:color-mix(in srgb, var(--qry-accent) 12%, transparent); }
     .jx-open i,.jx-open svg{ width:1rem; height:1rem; }
 
     /* where results go — one line under the actions, opens Settings */
     .jx-dest{ display:flex; align-items:center; gap:.5rem; flex:0 0 auto; margin:-.35rem 0 1rem; padding:.4rem .7rem;
-      font-size:.8rem; color:var(--qry-text-muted); border:1px solid var(--qry-glass-border); border-radius:var(--qry-radius-md,11px);
+      font-size:.8rem; color:var(--qry-text-muted); border:1px solid var(--qry-line); border-radius:var(--qry-radius);
       background:var(--qry-glass); cursor:pointer; transition:border-color .15s, background .15s; }
-    .jx-dest:hover,.jx-dest:focus-visible{ border-color:color-mix(in srgb,var(--jx-brand) 40%,var(--qry-glass-border)); background:rgba(var(--qry-accent-rgb),.05); outline:none; }
+    .jx-dest:hover,.jx-dest:focus-visible{ border-color:color-mix(in srgb,var(--jx-brand) 40%,var(--qry-line)); background:color-mix(in srgb, var(--qry-accent) 5%, transparent); outline:none; }
     .jx-dest i,.jx-dest svg{ width:1rem; height:1rem; color:var(--jx-brand); flex:none; }
     .jx-dest b{ color:var(--qry-text); font-weight:600; }
     .jx-dest .sp{ flex:1; }
     .jx-dest .lnk{ color:var(--jx-brand); font-weight:600; }
 
     /* ── settings drawer — Prism "Conversion options" look ── */
-    .opt-drawer::part(panel){ width: min(480px, 94vw); }
-    .opt-drawer::part(body){ padding-top:.2rem; }
-    .opt-drawer::part(footer){ padding-top:.5rem; }
+    .opt-drawer{ --qry-sheet-w: min(480px, 94vw); }
     .opt-lead{ margin:.1rem .15rem 1.1rem; font-size:.8rem; color:var(--qry-text-muted); }
     .opt-section{ display:flex; flex-direction:column; gap:.6rem; }
     .opt-section + .opt-section{ margin-top:1.9rem; }
@@ -149,55 +129,51 @@
     .opt-main .opt-value{ flex-basis:100%; }
     .opt-q{ appearance:none; border:0; background:transparent; padding:0; width:1.3rem; height:1.3rem; display:inline-grid; place-items:center;
       border-radius:999px; color:var(--qry-text-muted); cursor:pointer; opacity:.7; transition:color .12s, background .12s, opacity .12s; }
-    .opt-q:hover,.opt-q:focus-visible{ opacity:1; color:var(--jx-brand); background:rgba(var(--qry-accent-rgb),.1); outline:none; }
+    .opt-q:hover,.opt-q:focus-visible{ opacity:1; color:var(--jx-brand); background:color-mix(in srgb, var(--qry-accent) 10%, transparent); outline:none; }
     .opt-q[aria-expanded="true"]{ opacity:1; color:#fff; background:var(--jx-brand); }
     .opt-q i,.opt-q svg{ width:.9rem; height:.9rem; color:inherit; background:none; padding:0; }
     .opt-lead svg{ display:inline-block; width:.85rem; height:.85rem; vertical-align:-.14rem; margin:0 .1rem; color:var(--jx-brand); }
     .opt-value code{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.72rem; color:var(--jx-brand-deep); }
     [data-theme="dark"] .opt-value code{ color:var(--jx-brand-bright); }
-    .opt-help:not(.opt-help-free){ background:color-mix(in srgb, var(--qry-blue) 5%, transparent); padding-top:.1rem; }
+    .opt-help:not(.opt-help-free){ background:color-mix(in srgb, var(--qry-accent) 5%, transparent); padding-top:.1rem; }
     .opt-help[hidden]{ display:none; }
-    .opt-help-free{ padding:.55rem .85rem; border-radius:var(--qry-radius-md,12px); background:color-mix(in srgb, var(--qry-blue) 6%, transparent); }
+    .opt-help-free{ padding:.55rem .85rem; border-radius:var(--qry-radius); background:color-mix(in srgb, var(--qry-accent) 6%, transparent); }
     .opt-help{ margin:0; padding:0 .85rem .6rem; font-size:.74rem; line-height:1.45; color:var(--qry-text-muted); }
     .opt-help code{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.74rem; color:var(--jx-brand-deep);
-      background:rgba(var(--qry-accent-rgb),.08); padding:.05rem .3rem; border-radius:5px; white-space:nowrap; }
+      background:color-mix(in srgb, var(--qry-accent) 8%, transparent); padding:.05rem .3rem; border-radius:5px; white-space:nowrap; }
     .opt-warn{ display:flex; gap:.5rem; margin:0 .85rem .7rem; padding:.5rem .6rem; border-radius:8px; font-size:.74rem; line-height:1.45;
       color:#9a4a12; background:color-mix(in srgb,#e8913a 14%,transparent); border:1px solid color-mix(in srgb,#e8913a 40%,transparent); }
     .opt-warn[hidden]{ display:none; }
     .opt-warn i,.opt-warn svg{ width:.95rem; height:.95rem; flex:none; margin-top:.1rem; }
     [data-theme="dark"] .opt-warn{ color:#f0b27a; }
-    [data-theme="dark"] .opt-help code, [data-theme="dark"] .jx-doc code{ color:var(--jx-brand-bright); background:rgba(var(--qry-accent-rgb),.18); }
+    [data-theme="dark"] .opt-help code, [data-theme="dark"] .jx-doc code{ color:var(--jx-brand-bright); background:color-mix(in srgb, var(--qry-accent) 18%, transparent); }
     /* A section opens with a title that reads as one: the icon in a tinted badge, the name in text colour,
        and a rule running to the right edge — where one section ends the next one's rule starts. */
     .opt-sec-head{ display:flex; align-items:center; gap:.55rem; padding:0 .1rem; }
     .opt-sec-head::after{ content:''; flex:1; height:1px; margin-left:.35rem;
       background:linear-gradient(90deg, color-mix(in srgb, var(--jx-brand) 45%, transparent), transparent); }
     .opt-sec-head > i,.opt-sec-head > svg{ box-sizing:content-box; width:.9rem; height:.9rem; padding:.3rem; border-radius:7px; flex:0 0 auto;
-      color:var(--jx-brand); background:rgba(var(--qry-accent-rgb),.12); }
-    [data-theme="dark"] .opt-sec-head > i,[data-theme="dark"] .opt-sec-head > svg{ color:var(--jx-brand-bright); background:rgba(var(--qry-accent-rgb),.25); }
+      color:var(--jx-brand); background:color-mix(in srgb, var(--qry-accent) 12%, transparent); }
+    [data-theme="dark"] .opt-sec-head > i,[data-theme="dark"] .opt-sec-head > svg{ color:var(--jx-brand-bright); background:color-mix(in srgb, var(--qry-accent) 25%, transparent); }
     .opt-sec-head span{ font-size:.74rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--qry-text); }
-    .opt-card{ border:1px solid var(--qry-glass-border); border-radius:var(--qry-radius-md,12px); background:color-mix(in srgb, var(--qry-text) 2.5%, transparent); overflow:hidden; }
+    .opt-card{ border:1px solid var(--qry-line); border-radius:var(--qry-radius); background:color-mix(in srgb, var(--qry-text) 2.5%, transparent); overflow:hidden; }
     .opt-row{ display:flex; align-items:center; gap:1rem; min-height:2.7rem; padding:.35rem .85rem; transition:background .12s; }
     .opt-card > * + .opt-row{ border-top:1px solid color-mix(in srgb, var(--qry-text) 7%, transparent); }
-    .opt-row:hover, .opt-row:has(+ .opt-help:not([hidden])){ background:color-mix(in srgb, var(--qry-blue) 5%, transparent); }
+    .opt-row:hover, .opt-row:has(+ .opt-help:not([hidden])){ background:color-mix(in srgb, var(--qry-accent) 5%, transparent); }
     .opt-main{ flex:1 1 auto; min-width:0; }
     .opt-row:has(+ .opt-help:not([hidden])){ padding-bottom:.15rem; }
     .opt-name{ font-size:.84rem; font-weight:550; color:var(--qry-text); }
     .opt-value{ display:block; margin-top:.1rem; font-size:.74rem; color:var(--qry-text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .opt-ctl{ flex:0 0 auto; display:flex; align-items:center; gap:.45rem; }
-    .opt-ctl sl-select{ width:12.5rem; }
+    .opt-ctl select{ width:12.5rem; }
+    .opt-ctl .qry-input{ min-height:2rem; padding-block:.2rem; font-size:.84rem; }
     .opt-ctl .opt-suffix{ width:9rem; }
     .opt-ctl .opt-num{ width:4.6rem; }
-    .opt-ctl .opt-num::part(input){ text-align:right; }
+    .opt-ctl .opt-num{ text-align:right; }
     .opt-unit{ font-size:.72rem; color:var(--qry-text-muted); white-space:nowrap; max-width:8rem; overflow:hidden; text-overflow:ellipsis; }
 
-    /* drawer header — Poppins title + restrained blue hairline (Prism signature; both drawers) */
-    sl-drawer::part(title){ font-family:"Poppins", system-ui, sans-serif; font-weight:600; font-size:1.05rem; }
-    sl-drawer::part(header){ border-bottom:2px solid color-mix(in srgb, var(--jx-brand) 35%, transparent); }
-
     /* ── Java API dialog ── */
-    #api-dialog{ --size: min(94vw, 820px); }            /* right drawer, wide enough for a full command line */
-    #api-dialog::part(body){ padding-top:.3rem; }
+    #api-dialog{ --qry-sheet-w: min(94vw, 820px); }    /* a sheet wide enough for a full command line */
     .jx-doc{ font-size:.86rem; line-height:1.6; color:var(--qry-text); }
     .jx-doc p{ margin:.2rem 0 .9rem; color:var(--qry-text-muted); }
     .jx-doc h3{ display:flex; align-items:center; gap:.45rem; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
@@ -205,11 +181,11 @@
     .jx-doc h3::after{ content:''; flex:1; height:1px; background:var(--qry-line); }
     .jx-doc h3 i,.jx-doc h3 svg{ width:.9rem; height:.9rem; color:var(--jx-brand); }
     .jx-codewrap{ position:relative; }
-    .jx-doc pre{ margin:.1rem 0; background:var(--qry-glass); border:1px solid var(--qry-glass-border); border-radius:10px;
+    .jx-doc pre{ margin:.1rem 0; background:var(--qry-glass); border:1px solid var(--qry-line); border-radius:10px;
       padding:.75rem .85rem; overflow:auto; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.78rem; line-height:1.6; color:var(--qry-text); }
     .jx-copy{ position:absolute; top:.45rem; right:.45rem; appearance:none; cursor:pointer; display:inline-flex; align-items:center; gap:.3rem;
-      border:1px solid var(--qry-glass-border); background:var(--qry-bg); color:var(--qry-text-muted); border-radius:7px; padding:.2rem .45rem; font-size:.7rem; }
-    .jx-copy:hover{ color:var(--jx-brand); border-color:color-mix(in srgb,var(--jx-brand) 40%,var(--qry-glass-border)); }
+      border:1px solid var(--qry-line); background:var(--qry-bg); color:var(--qry-text-muted); border-radius:7px; padding:.2rem .45rem; font-size:.7rem; }
+    .jx-copy:hover{ color:var(--jx-brand); border-color:color-mix(in srgb,var(--jx-brand) 40%,var(--qry-line)); }
     .jx-copy i,.jx-copy svg{ width:.85rem; height:.85rem; }
     .jx-opts{ width:100%; border-collapse:collapse; font-size:.78rem; }
     .jx-opts td{ padding:.45rem .4rem; vertical-align:top; border-top:1px solid var(--qry-line); color:var(--qry-text-muted); line-height:1.45; }
@@ -218,46 +194,42 @@
     .jx-doc .tip + .tip{ margin-top:.55rem; }
     .jx-doc .tip{ margin-top:1rem; font-size:.78rem; color:var(--qry-text-muted); display:flex; gap:.5rem; align-items:flex-start; }
     .jx-doc .tip i,.jx-doc .tip svg{ width:.95rem; height:.95rem; color:var(--jx-brand); flex:none; margin-top:.12rem; }
-    .jx-doc code{ white-space:nowrap; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.82rem; color:var(--jx-brand-deep); background:rgba(var(--qry-accent-rgb),.08); padding:.05rem .3rem; border-radius:5px; }
+    .jx-doc code{ white-space:nowrap; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.82rem; color:var(--jx-brand-deep); background:color-mix(in srgb, var(--qry-accent) 8%, transparent); padding:.05rem .3rem; border-radius:5px; }
   </style>
 </head>
 
-<body class="qry-app">
+<body class="jx-app">
 
 <header class="jx-head">
-  <sl-dropdown id="app-menu" placement="bottom-start" distance="6" hoist>
-    <button slot="trigger" class="jx-icon-btn jx-menu-btn" aria-label="Menu" title="Menu">
-      <i data-lucide="menu"></i>
-    </button>
-    <sl-menu>
-      <sl-menu-item id="m-files"><span slot="prefix"><i data-lucide="file-plus-2"></i></span> Add files…</sl-menu-item>
-      <sl-menu-item id="m-folder"><span slot="prefix"><i data-lucide="folder-plus"></i></span> Add folder…</sl-menu-item>
-      <sl-divider></sl-divider>
-      <sl-menu-item id="m-api"><span slot="prefix"><i data-lucide="code-2"></i></span> Java API &amp; command line</sl-menu-item>
-      <sl-menu-item id="m-cfg"><span slot="prefix"><i data-lucide="settings"></i></span> Settings</sl-menu-item>
-    </sl-menu>
-  </sl-dropdown>
+  <button class="jx-icon-btn jx-menu-btn" popovertarget="app-menu" aria-label="Menu" title="Menu"><i data-icon="menu"></i></button>
+  <div id="app-menu" popover class="qry-menu">
+    <button id="m-files"><i data-icon="file-plus-2"></i> Add files…</button>
+    <button id="m-folder"><i data-icon="folder-plus"></i> Add folder…</button>
+    <hr>
+    <button id="m-api"><i data-icon="code-2"></i> Java API &amp; command line</button>
+    <button id="m-cfg"><i data-icon="settings"></i> Settings</button>
+  </div>
   <span class="sp"></span>
-  <button id="btn-cfg" class="jx-icon-btn" aria-label="Settings" title="Settings"><i data-lucide="settings"></i></button>
-  <button id="btn-theme" class="jx-icon-btn" aria-label="Toggle theme" title="Light / dark"><i data-lucide="moon"></i></button>
+  <button id="btn-cfg" class="jx-icon-btn" aria-label="Settings" title="Settings"><i data-icon="settings"></i></button>
+  <button id="btn-theme" class="jx-icon-btn" aria-label="Toggle theme" title="Light / dark"><i data-icon="moon"></i></button>
 </header>
 
 <main class="jx-main">
   <div class="jx-stage">
     <div class="jx-actions">
-      <sl-button id="add-files" variant="primary"><i data-lucide="file" slot="prefix"></i> Choose files…</sl-button>
-      <sl-button id="add-folder"><i data-lucide="folder" slot="prefix"></i> Choose a folder…</sl-button>
-      <sl-button id="hot"><i data-lucide="flame" slot="prefix"></i> Hot folder…</sl-button>
+      <button type="button" class="qry-btn primary" id="add-files"><i data-icon="file"></i> Choose files…</button>
+      <button type="button" class="qry-btn" id="add-folder"><i data-icon="folder"></i> Choose a folder…</button>
+      <button type="button" class="qry-btn" id="hot"><i data-icon="flame"></i> Hot folder…</button>
     </div>
     <div class="jx-dest" id="dest" role="button" tabindex="0" title="Change in Settings">
-      <i data-lucide="folder-output"></i><span id="dest-text"></span><span class="sp"></span><span class="lnk">Change</span>
+      <i data-icon="folder-output"></i><span id="dest-text"></span><span class="sp"></span><span class="lnk">Change</span>
     </div>
     <div class="jx-controls" style="display:none">
       <span class="jx-count" id="count"></span>
       <span class="sp"></span>
-      <sl-button id="clear" size="small">Clear</sl-button>
-      <sl-button id="saveall" size="small" style="display:none"><i data-lucide="download" slot="prefix"></i> Save all…</sl-button>
-      <sl-button id="run" variant="primary"><i data-lucide="wand-sparkles" slot="prefix"></i> Normalize all</sl-button>
+      <button type="button" class="qry-btn sm" id="clear">Clear</button>
+      <button type="button" class="qry-btn sm" id="saveall" style="display:none"><i data-icon="download"></i> Save all…</button>
+      <button type="button" class="qry-btn primary" id="run"><i data-icon="wand-sparkles"></i> Normalize all</button>
     </div>
 
     <div class="jx-hot" id="hotbar" style="display:none">
@@ -265,7 +237,7 @@
       <span class="lbl">Watching <b id="hot-name"></b></span>
       <span class="jx-count" id="hot-stat"></span>
       <span class="sp"></span>
-      <sl-button size="small" id="hot-stop"><i data-lucide="square" slot="prefix"></i> Stop</sl-button>
+      <button type="button" class="qry-btn sm" id="hot-stop"><i data-icon="square"></i> Stop</button>
     </div>
 
     <div class="jx-area" id="area"></div>
@@ -274,35 +246,36 @@
 
 
 <!-- ── Java API & command line ── -->
-<sl-drawer id="api-dialog" label="Java API &amp; command line" placement="end">
+<dialog id="api-dialog" class="qry-dialog sheet" aria-labelledby="api-dialog-title">
+  <header class="qry-dialog-head"><h2 class="qry-dialog-title" id="api-dialog-title">Java API &amp; command line</h2><button type="button" class="jx-icon-btn" data-close aria-label="Close" title="Close"><i data-icon="x"></i></button></header>
   <div class="jx-doc">
     <p>Everything this window does also works without it: from your own Java program, or from a command
        line — the way to run Jexter unattended. You need the Jexter jar (here <code>sugarcube-jexter.jar</code>;
        use the name of the file you received) and Java&nbsp;21 or newer.</p>
 
-    <h3><i data-lucide="zap"></i> In your Java code</h3>
+    <h3><i data-icon="zap"></i> In your Java code</h3>
     <div class="jx-codewrap">
-      <button class="jx-copy" data-copy="java"><i data-lucide="copy"></i> Copy</button>
+      <button class="jx-copy" data-copy="java"><i data-icon="copy"></i> Copy</button>
       <pre id="ex-java"></pre>
     </div>
     <p style="margin-top:.6rem">One call: it writes the normalized PDF to the second file and returns the
        <code>OCDDocument</code> (page count, etc.). It throws an <code>IOException</code> when the PDF cannot be read.</p>
 
-    <h3><i data-lucide="terminal"></i> Command line — a file or a folder</h3>
+    <h3><i data-icon="terminal"></i> Command line — a file or a folder</h3>
     <div class="jx-codewrap">
-      <button class="jx-copy" data-copy="cli"><i data-lucide="copy"></i> Copy</button>
+      <button class="jx-copy" data-copy="cli"><i data-icon="copy"></i> Copy</button>
       <pre id="ex-cli"></pre>
     </div>
 
-    <h3><i data-lucide="flame"></i> Command line — hot folder</h3>
+    <h3><i data-icon="flame"></i> Command line — hot folder</h3>
     <p>Watches a folder and normalizes every PDF placed in it, until stopped with <code>Ctrl-C</code>. No window,
        no browser permission: the right choice for production, e.g. as a scheduled task that starts with the machine.</p>
     <div class="jx-codewrap">
-      <button class="jx-copy" data-copy="hot"><i data-lucide="copy"></i> Copy</button>
+      <button class="jx-copy" data-copy="hot"><i data-icon="copy"></i> Copy</button>
       <pre id="ex-hot"></pre>
     </div>
 
-    <h3><i data-lucide="sliders-horizontal"></i> Options</h3>
+    <h3><i data-icon="sliders-horizontal"></i> Options</h3>
     <table class="jx-opts">
       <tr><td><code>--suffix=&lt;s&gt;</code></td><td>Name ending of the results: <code>report.pdf</code> → <code>report&lt;s&gt;.pdf</code>. Default <code>-normalized</code>. Empty (<code>--suffix=</code>) keeps the name — only allowed with a separate output folder.</td></tr>
       <tr><td><code>--done[=&lt;dir&gt;]</code></td><td>After each result is written, move the original: a name is a sub-folder of the input folder (default <code>Done</code>); a full path (<code>--done=D:\Archive</code>) is that folder. Sub-folders are reproduced there.</td></tr>
@@ -312,58 +285,59 @@
       <tr><td><code>--outline</code></td><td>Draw the text as shapes instead of a selectable text layer.</td></tr>
     </table>
 
-    <div class="tip"><i data-lucide="info"></i><span>The command line does not read this window's Settings: pass
+    <div class="tip"><i data-icon="info"></i><span>The command line does not read this window's Settings: pass
       the options you need. A PDF that is re-delivered under the same name is normalized again, in the window and on the command line.</span></div>
-    <div class="tip"><i data-lucide="shield-check"></i><span>The normalization itself is fixed — nothing to configure:
+    <div class="tip"><i data-icon="shield-check"></i><span>The normalization itself is fixed — nothing to configure:
       the text layer is rebuilt, bookmarks are added only when the PDF has none, links and annotations are kept,
       running headers and footers are left as they are.</span></div>
   </div>
-  <sl-button slot="footer" variant="primary" id="api-close">Close</sl-button>
-</sl-drawer>
+  <div class="qry-dialog-actions"><button type="button" class="qry-btn primary" data-close>Close</button></div>
+</dialog>
 
 <!-- ── Settings — every option of the window; a ? beside an option shows what it does ── -->
-<sl-drawer id="cfg-drawer" label="Settings" placement="end" class="opt-drawer">
+<dialog id="cfg-drawer" class="qry-dialog sheet opt-drawer" aria-labelledby="cfg-drawer-title">
+  <header class="qry-dialog-head"><h2 class="qry-dialog-title" id="cfg-drawer-title">Settings</h2><button type="button" class="jx-icon-btn" data-close aria-label="Close" title="Close"><i data-icon="x"></i></button></header>
   <p class="opt-lead">Changes apply at once and are remembered when Jexter restarts. Click
-    <i data-lucide="circle-help"></i> for what an option does.</p>
+    <i data-icon="circle-help"></i> for what an option does.</p>
 
   <section class="opt-section">
-    <div class="opt-sec-head"><i data-lucide="folder-output"></i><span>Where normalized PDFs go</span></div>
+    <div class="opt-sec-head"><i data-icon="folder-output"></i><span>Where normalized PDFs go</span></div>
     <div class="opt-card">
       <div class="opt-row">
-        <div class="opt-main"><span class="opt-name">Save to</span><button class="opt-q" data-help="cfg-mode-help" aria-controls="cfg-mode-help" aria-expanded="false" title="What is this?"><i data-lucide="circle-help"></i></button></div>
+        <div class="opt-main"><span class="opt-name">Save to</span><button class="opt-q" data-help="cfg-mode-help" aria-controls="cfg-mode-help" aria-expanded="false" title="What is this?"><i data-icon="circle-help"></i></button></div>
         <div class="opt-ctl">
-          <sl-select id="cfg-mode" size="small" value="source" hoist>
-            <sl-option value="source">Next to the original</sl-option>
-            <sl-option value="folder">A folder I choose</sl-option>
-            <sl-option value="manual">Ask me each time</sl-option>
-          </sl-select>
+          <select id="cfg-mode" class="qry-input" aria-label="Save to">
+            <option value="source">Next to the original</option>
+            <option value="folder">A folder I choose</option>
+            <option value="manual">Ask me each time</option>
+          </select>
         </div>
       </div>
       <p class="opt-help" id="cfg-mode-help" hidden></p>
       <div class="opt-row" id="cfg-folder-row">
         <div class="opt-main"><span class="opt-name">Output folder</span><span class="opt-value" id="cfg-outdir">none</span></div>
-        <div class="opt-ctl"><sl-button size="small" id="cfg-pick"><i data-lucide="folder-open" slot="prefix"></i> Choose…</sl-button></div>
+        <div class="opt-ctl"><button type="button" class="qry-btn sm" id="cfg-pick"><i data-icon="folder-open"></i> Choose…</button></div>
       </div>
       <div class="opt-row">
-        <div class="opt-main"><span class="opt-name">Name ending</span><button class="opt-q" data-help="h-suffix" aria-controls="h-suffix" aria-expanded="false" title="What is this?"><i data-lucide="circle-help"></i></button><span class="opt-value"><code id="cfg-example"></code></span></div>
-        <div class="opt-ctl"><sl-input id="cfg-suffix" class="opt-suffix" size="small" value="-normalized" placeholder="-normalized" maxlength="40"></sl-input></div>
+        <div class="opt-main"><span class="opt-name">Name ending</span><button class="opt-q" data-help="h-suffix" aria-controls="h-suffix" aria-expanded="false" title="What is this?"><i data-icon="circle-help"></i></button><span class="opt-value"><code id="cfg-example"></code></span></div>
+        <div class="opt-ctl"><input id="cfg-suffix" class="qry-input opt-suffix" value="-normalized" placeholder="-normalized" maxlength="40" aria-label="Name ending"></div>
       </div>
       <p class="opt-help" id="h-suffix" hidden>Added to the original name to form the result's name. A PDF whose name
         already ends this way is taken for a result and never normalized again.</p>
-      <p class="opt-warn" id="cfg-suffix-warn" hidden><i data-lucide="triangle-alert"></i><span>With no ending, the result
+      <p class="opt-warn" id="cfg-suffix-warn" hidden><i data-icon="triangle-alert"></i><span>With no ending, the result
         has the original's name — it would replace it. Normalized PDFs are then only saved to a folder you choose, or where you save them yourself.</span></p>
     </div>
   </section>
 
   <section class="opt-section">
-    <div class="opt-sec-head"><i data-lucide="gauge"></i><span>Speed</span></div>
+    <div class="opt-sec-head"><i data-icon="gauge"></i><span>Speed</span></div>
     <div class="opt-card">
       <div class="opt-row">
-        <div class="opt-main"><span class="opt-name">PDFs converted at once</span><button class="opt-q" data-help="h-lanes" aria-controls="h-lanes" aria-expanded="false" title="What is this?"><i data-lucide="circle-help"></i></button></div>
+        <div class="opt-main"><span class="opt-name">PDFs converted at once</span><button class="opt-q" data-help="h-lanes" aria-controls="h-lanes" aria-expanded="false" title="What is this?"><i data-icon="circle-help"></i></button></div>
         <div class="opt-ctl">
-          <sl-radio-group id="cfg-lanes" size="small" value="2">
-            <sl-radio-button value="1">1</sl-radio-button><sl-radio-button value="2">2</sl-radio-button><sl-radio-button value="3">3</sl-radio-button>
-          </sl-radio-group>
+          <div id="cfg-lanes" class="qry-seg" role="radiogroup" aria-label="PDFs converted at once">
+            <label><input type="radio" name="lanes" value="1"> 1</label><label><input type="radio" name="lanes" value="2"> 2</label><label><input type="radio" name="lanes" value="3"> 3</label>
+          </div>
         </div>
       </div>
       <p class="opt-help" id="h-lanes" hidden>More is faster on a large batch but uses more memory — each PDF in progress is
@@ -372,24 +346,24 @@
   </section>
 
   <section class="opt-section">
-    <div class="opt-sec-head"><i data-lucide="flame"></i><span>Hot folder</span><button class="opt-q" data-help="h-hot" aria-controls="h-hot" aria-expanded="false" title="What is this?"><i data-lucide="circle-help"></i></button></div>
+    <div class="opt-sec-head"><i data-icon="flame"></i><span>Hot folder</span><button class="opt-q" data-help="h-hot" aria-controls="h-hot" aria-expanded="false" title="What is this?"><i data-icon="circle-help"></i></button></div>
     <p class="opt-help opt-help-free" id="h-hot" hidden>Click <b>Hot folder…</b> on the main screen and pick a folder:
       every PDF placed in it is normalized automatically, as long as this window stays open. Results are saved as set
       above. A PDF delivered again under the same name is normalized again.</p>
     <div class="opt-card">
       <div class="opt-row">
         <div class="opt-main"><span class="opt-name">Look for new PDFs every</span></div>
-        <div class="opt-ctl"><sl-input id="cfg-interval" class="opt-num" type="number" min="1" max="60" size="small" value="3"></sl-input><span class="opt-unit">seconds</span></div>
+        <div class="opt-ctl"><input id="cfg-interval" class="qry-input opt-num" type="number" min="1" max="60" value="3" aria-label="Seconds"><span class="opt-unit">seconds</span></div>
       </div>
       <div class="opt-row">
-        <div class="opt-main"><span class="opt-name">Include sub-folders</span><button class="opt-q" data-help="h-recursive" aria-controls="h-recursive" aria-expanded="false" title="What is this?"><i data-lucide="circle-help"></i></button></div>
-        <div class="opt-ctl"><sl-switch id="cfg-recursive"></sl-switch></div>
+        <div class="opt-main"><span class="opt-name">Include sub-folders</span><button class="opt-q" data-help="h-recursive" aria-controls="h-recursive" aria-expanded="false" title="What is this?"><i data-icon="circle-help"></i></button></div>
+        <div class="opt-ctl"><input type="checkbox" role="switch" class="qry-switch" id="cfg-recursive" aria-label="Include sub-folders"></div>
       </div>
       <p class="opt-help" id="h-recursive" hidden>PDFs in sub-folders are normalized too; with <i>Next to the original</i>,
         each result stays in its own sub-folder.</p>
       <div class="opt-row">
-        <div class="opt-main"><span class="opt-name">Move originals to</span><button class="opt-q" data-help="h-done" aria-controls="h-done" aria-expanded="false" title="What is this?"><i data-lucide="circle-help"></i></button></div>
-        <div class="opt-ctl"><sl-switch id="cfg-done"></sl-switch><sl-input id="cfg-done-name" class="opt-suffix" size="small" value="Done" placeholder="Done" maxlength="40" title="Name of the sub-folder — change it freely"></sl-input></div>
+        <div class="opt-main"><span class="opt-name">Move originals to</span><button class="opt-q" data-help="h-done" aria-controls="h-done" aria-expanded="false" title="What is this?"><i data-icon="circle-help"></i></button></div>
+        <div class="opt-ctl"><input type="checkbox" role="switch" class="qry-switch" id="cfg-done" aria-label="Move originals"><input id="cfg-done-name" class="qry-input opt-suffix" value="Done" placeholder="Done" maxlength="40" title="Name of the sub-folder — change it freely" aria-label="Sub-folder name"></div>
       </div>
       <p class="opt-help" id="h-done" hidden>Once its normalized PDF is saved, the original moves into this sub-folder of the
         watched folder — type any name — so what remains is what is still to do. To move originals to a folder
@@ -397,18 +371,20 @@
     </div>
   </section>
 
-  <p class="opt-intro opt-note opt-foot"><i data-lucide="terminal"></i><span>For unattended production — no window, starts with the
+  <p class="opt-intro opt-note opt-foot"><i data-icon="terminal"></i><span>For unattended production — no window, starts with the
     machine — use the command line: menu › <b>Java API &amp; command line</b>. It has the same options.</span></p>
 
-  <sl-button slot="footer" variant="primary" id="cfg-close">Close</sl-button>
-</sl-drawer>
+  <div class="qry-dialog-actions"><button type="button" class="qry-btn primary" data-close>Close</button></div>
+</dialog>
 
 <input type="file" id="file" accept="application/pdf,.pdf" multiple hidden>
 <input type="file" id="dir" webkitdirectory hidden>
 
 <script type="module">
-  import { boot, theme, icons, toast, bindAll, makeDropZone, format, copy }
-    from 'https://cdn.jsdelivr.net/gh/Bloechle/qry-js@1.3.0/qry-kit.js';
+  import { boot, theme, toast as qryToast, makeDropZone, makeDialog, makeMenu, format, copy } from '/shared/vendor/qry/qry-web.js';
+
+  const TONE = { success: 'ok', warning: 'warn', danger: 'danger', neutral: 'info' };
+  const toast = (msg, tone = 'info', ms) => qryToast(String(msg), TONE[tone] || tone, ms ? { duration: ms } : undefined);
 
   const FSA = ('showOpenFilePicker' in window);   // File System Access API (Chromium → the window WebApp opens)
 
@@ -492,29 +468,28 @@
     vis('#saveall', savable >= 2);
 
     if (!any){
-      $('#area').html(`<div class="jx-hero" id="hero"><div class="orb"><i data-lucide="wand-sparkles"></i></div><h2>Drop PDFs here</h2>
+      $('#area').html(`<div class="jx-hero" id="hero"><div class="orb"><i data-icon="wand-sparkles"></i></div><h2>Drop PDFs here</h2>
       <p>or use the buttons above — individual files or a whole folder. Drag a batch right in.</p></div>
       <ul class="jx-promise">
-        <li><i data-lucide="type"></i><b>Real selectable text</b><span>Glyphs are re-encoded with a proper text layer — search, copy and screen readers work.</span></li>
-        <li><i data-lucide="scan-eye"></i><b>Same pixels</b><span>Every page is rebuilt through the OCD model and repainted to match the source.</span></li>
-        <li><i data-lucide="shield-check"></i><b>Nothing leaves the machine</b><span>The engine runs locally; files are never uploaded anywhere.</span></li>
+        <li><i data-icon="type"></i><b>Real selectable text</b><span>Glyphs are re-encoded with a proper text layer — search, copy and screen readers work.</span></li>
+        <li><i data-icon="scan-eye"></i><b>Same pixels</b><span>Every page is rebuilt through the OCD model and repainted to match the source.</span></li>
+        <li><i data-icon="shield-check"></i><b>Nothing leaves the machine</b><span>The engine runs locally; files are never uploaded anywhere.</span></li>
       </ul>`);
-      $('#hero').on('click', chooseFiles); icons(); return;
+      $('#hero').on('click', chooseFiles); return;
     }
     const rows = files.map(f => {
       const badge = f.status==='working'
-              ? '<sl-spinner style="font-size:1.1rem;--track-width:2px;"></sl-spinner>'
+              ? '<span class="jx-spin" style="font-size:1.1rem"></span>'
               : `<span class="jx-badge">${f.status==='done' ? (f.saved?'saved':'ready') : f.status==='error' ? 'failed' : 'queued'}</span>`;
-      const open = (f.status==='done' && f.blob) ? `<button class="jx-open" data-open="${f.id}" title="Open &amp; read"><i data-lucide="external-link"></i></button>` : '';
-      const action = (f.status==='done' && !f.saved) ? `<sl-button size="small" variant="primary" data-save="${f.id}">Save</sl-button>`
-              : (f.status==='error' ? `<sl-button size="small" data-retry="${f.id}">Retry</sl-button>` : '');
+      const open = (f.status==='done' && f.blob) ? `<button class="jx-open" data-open="${f.id}" title="Open &amp; read"><i data-icon="external-link"></i></button>` : '';
+      const action = (f.status==='done' && !f.saved) ? `<button type="button" class="qry-btn primary sm" data-save="${f.id}">Save</button>`
+              : (f.status==='error' ? `<button type="button" class="qry-btn sm" data-retry="${f.id}">Retry</button>` : '');
       const sub = f.msg ? f.msg : (f.dir ? `from folder “${f.dir.name}”` : format.bytes(f.file.size));
-      return `<div class="jx-row ${f.status}"><i class="ic" data-lucide="file-text"></i>
+      return `<div class="jx-row ${f.status}"><i class="ic" data-icon="file-text"></i>
       <span class="meta"><div class="nm">${escapeHtml(f.file.name)}</div><div class="sub">${escapeHtml(sub)}</div></span>
-      ${badge}${open}${action}<button class="jx-x" data-del="${f.id}" title="Remove"><i data-lucide="x"></i></button></div>`;
+      ${badge}${open}${action}<button class="jx-x" data-del="${f.id}" title="Remove"><i data-icon="x"></i></button></div>`;
     }).join('');
     $('#area').html(`<div class="jx-list">${rows}</div>`);
-    icons();
   }
   function escapeHtml(s){ return String(s==null?'':s).split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;'); }
 
@@ -783,24 +758,24 @@ java -cp sugarcube-jexter.jar sugarcube.jexter.ui.jx.Jexter --hotfolder ./inbox 
   function fillApiDoc(){ $('#ex-java').text(EX.java); $('#ex-cli').text(EX.cli); $('#ex-hot').text(EX.hot); }
 
   // ── boot + wiring ──
-  boot({ title:'Jexter', ready(){
+  const api = makeDialog('#api-dialog'), settings = makeDialog('#cfg-drawer');
+  boot({ title:'Jexter', theme: { key: 'jexter:theme' }, ready(){
       syncThemeIcon();
       render(); fillApiDoc(); initCfgUI();
       if (!(FSA && window.showDirectoryPicker)) $('#hot').css('display','none');
 
-      bindAll({
+      makeMenu('#app-menu');
+      const on = {
         '#btn-theme': () => { theme.toggle(); syncThemeIcon(); },
         // The menu entries call the SAME handlers the header buttons did — one path per action,
         // so nothing drifts the day one of them changes.
         '#m-files':  chooseFiles,
         '#m-folder': chooseFolder,
-        '#m-api':    () => { $('#api-dialog').open = true; },
+        '#m-api':    () => api.open(),
         '#m-cfg':    openCfg,
         '#btn-cfg':  openCfg,
         '#dest':     openCfg,
-        '#cfg-close':() => { $('#cfg-drawer').open = false; },
         '#cfg-pick':  pickOutDir,
-        '#api-close':() => { $('#api-dialog').open = false; },
         '#add-files': chooseFiles,
         '#add-folder': chooseFolder,
         '#hot': startHot,
@@ -808,7 +783,8 @@ java -cp sugarcube-jexter.jar sugarcube.jexter.ui.jx.Jexter --hotfolder ./inbox 
         '#run': runAll,
         '#saveall': saveAll,
         '#clear': () => { files = []; render(); },
-      });
+      };
+      for (const [sel, fn] of Object.entries(on)) $(sel).on('click', fn);
       $('#cfg-drawer').on('click', e => { const q = e.target.closest('.opt-q'); if (q) toggleHelp(q); });
       $('#dest').on('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openCfg(); } });
       $('#file').on('change', e => { addFiles(e.target.files, null); e.target.value=''; });
@@ -820,7 +796,7 @@ java -cp sugarcube-jexter.jar sugarcube.jexter.ui.jx.Jexter --hotfolder ./inbox 
         copy(EX[b.dataset.copy] || ''); toast('Copied', 'success', 1200);
       });
 
-      // row actions (delegated; works for <sl-button> clicks too)
+      // row actions (delegated)
       $('#area').on('click', e => {
         const b = e.target.closest('[data-save],[data-del],[data-retry],[data-open]'); if (!b) return;
         const id = +(b.dataset.save || b.dataset.del || b.dataset.retry || b.dataset.open), f = files.find(x => x.id===id); if (!f) return;
@@ -838,27 +814,28 @@ java -cp sugarcube-jexter.jar sugarcube.jexter.ui.jx.Jexter --hotfolder ./inbox 
       try { new EventSource('/api/alive'); } catch {}
     }});
 
-  function openCfg(){ $('#cfg-drawer').open = true; }
-  function syncThemeIcon(){ $('#btn-theme').html(`<i data-lucide="${theme.isDark() ? 'sun':'moon'}"></i>`); icons(); }
+  function openCfg(){ settings.open(); }
+  function syncThemeIcon(){ $('#btn-theme').html(`<i data-icon="${theme.isDark() ? 'sun':'moon'}"></i>`); }
 
   // ── settings drawer wiring ──
   function initCfgUI(){
-    $('#cfg-mode').attr('value', cfg.mode);
-    $('#cfg-suffix').attr('value', cfg.suffix);
-    $('#cfg-interval').attr('value', cfg.interval);
-    $('#cfg-recursive').attr('checked', cfg.recursive ? '' : null);
-    $('#cfg-done').attr('checked', cfg.moveDone ? '' : null);
-    $('#cfg-lanes').attr('value', String(Math.max(1, Math.min(MAX_LANES, cfg.lanes || defaultLanes()))));
-    $('#cfg-done-name').attr('value', cfg.doneName);
+    $('#cfg-mode').value = cfg.mode;
+    $('#cfg-suffix').value = cfg.suffix;
+    $('#cfg-interval').value = cfg.interval;
+    $('#cfg-recursive').checked = !!cfg.recursive;
+    $('#cfg-done').checked = !!cfg.moveDone;
+    const lanes = String(Math.max(1, Math.min(MAX_LANES, cfg.lanes || defaultLanes())));
+    for (const r of document.querySelectorAll('#cfg-lanes input')) r.checked = r.value === lanes;
+    $('#cfg-done-name').value = cfg.doneName;
     applyCfgUI(); cfgExample();
-    $('#cfg-mode').on('sl-change', e => { cfg.mode = e.target.value; applyCfgUI(); saveCfg(); render(); });
-    $('#cfg-suffix').on('sl-input', e => { cfg.suffix = sanitizeSuffix(e.target.value); cfgExample(); applyCfgUI(); saveCfg(); render(); });
-    $('#cfg-interval').on('sl-input', e => { cfg.interval = Math.max(1, Math.min(60, parseInt(e.target.value) || 3)); saveCfg();
+    $('#cfg-mode').on('change', e => { cfg.mode = e.target.value; applyCfgUI(); saveCfg(); render(); });
+    $('#cfg-suffix').on('input', e => { cfg.suffix = sanitizeSuffix(e.target.value); cfgExample(); applyCfgUI(); saveCfg(); render(); });
+    $('#cfg-interval').on('input', e => { cfg.interval = Math.max(1, Math.min(60, parseInt(e.target.value) || 3)); saveCfg();
       if (hot.timer){ clearInterval(hot.timer); hot.timer = setInterval(pollHot, cfg.interval * 1000); } });
-    $('#cfg-recursive').on('sl-change', e => { cfg.recursive = !!e.target.checked; saveCfg(); });
-    $('#cfg-done').on('sl-change', e => { cfg.moveDone = !!e.target.checked; applyCfgUI(); saveCfg(); });
-    $('#cfg-lanes').on('sl-change', e => { cfg.lanes = Math.max(1, Math.min(MAX_LANES, parseInt(e.target.value) || defaultLanes())); saveCfg(); });
-    $('#cfg-done-name').on('sl-input', e => { cfg.doneName = sanitizeSuffix(e.target.value) || 'Done'; saveCfg(); });
+    $('#cfg-recursive').on('change', e => { cfg.recursive = !!e.target.checked; saveCfg(); });
+    $('#cfg-done').on('change', e => { cfg.moveDone = !!e.target.checked; applyCfgUI(); saveCfg(); });
+    $('#cfg-lanes').on('change', e => { cfg.lanes = Math.max(1, Math.min(MAX_LANES, parseInt(e.target.value) || defaultLanes())); saveCfg(); });
+    $('#cfg-done-name').on('input', e => { cfg.doneName = sanitizeSuffix(e.target.value) || 'Done'; saveCfg(); });
     restoreOutDir();
   }
   function applyCfgUI(){

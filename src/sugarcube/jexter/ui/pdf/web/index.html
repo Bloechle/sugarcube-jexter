@@ -6,46 +6,40 @@
     <title>PDF Inspector</title>
     <link rel="icon" type="image/svg+xml" href="/shared/sugarcube-mark.svg">
 
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/light.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/themes/dark.css">
-    <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.20.1/cdn/shoelace-autoloader.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Bloechle/qry-js@1.3.0/qry-ui.css">
-    <script src="https://cdn.jsdelivr.net/npm/lucide@1.17.0/dist/umd/lucide.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/Bloechle/qry-js@1.3.0/qry.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/poppins@5/600.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/poppins@5/700.css">
+    <!-- qry 2, vendored under /shared (nothing is fetched): qry-ui → the Sugarcube look → qry.js → icons -->
+    <link rel="stylesheet" href="/shared/vendor/qry/qry-ui.css">
+    <link rel="stylesheet" href="/shared/sugarcube.css">
+    <script src="/shared/vendor/qry/qry.js"></script>
+    <script>try { const t = JSON.parse(localStorage.getItem('pdfinspector:theme')); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}</script>
+    <script type="module" src="/shared/js/icons.js"></script>
     <link rel="stylesheet" href="pdfinspector.css">
 </head>
 
-<body class="qry-app">
+<body class="jx-app">
 
 <div id="dropzone" class="dropzone">
-    <div class="dropzone-card"><i data-lucide="upload-cloud"></i><p><strong>Drop a PDF</strong> to open it</p></div>
+    <div class="dropzone-card"><i data-icon="upload-cloud"></i><p><strong>Drop a PDF</strong> to open it</p></div>
 </div>
 
 <!-- ── Header: menu · tabs · spacer · theme ── -->
 <header class="jx-head">
-    <sl-dropdown id="brand-menu" placement="bottom-start" distance="6" hoist>
-        <button slot="trigger" class="qry-btn jx-menu-btn" aria-label="Menu" title="Menu">
-            <i data-lucide="menu"></i>
-        </button>
-        <sl-menu id="main-menu">
-            <sl-menu-item value="open"><i data-lucide="folder-open" slot="prefix"></i> Open…</sl-menu-item>
-            <sl-menu-item value="save-image"><i data-lucide="image-down" slot="prefix"></i> Save page image…</sl-menu-item>
-            <sl-divider></sl-divider>
-            <sl-menu-item value="doc"><i data-lucide="file-text" slot="prefix"></i> Document info</sl-menu-item>
-        </sl-menu>
-    </sl-dropdown>
+    <button class="qry-btn jx-menu-btn" popovertarget="main-menu" aria-label="Menu" title="Menu"><i data-icon="menu"></i></button>
+    <div id="main-menu" popover class="qry-menu">
+        <button data-value="open"><i data-icon="folder-open"></i> Open…</button>
+        <button data-value="save-image"><i data-icon="image-down"></i> Save page image…</button>
+        <hr>
+        <button data-value="doc"><i data-icon="file-text"></i> Document info</button>
+    </div>
 
-    <nav class="jx-tabs" role="tablist">
-        <button class="jx-tab active" data-tab="page" role="tab"><i data-lucide="image"></i><span class="lbl">Viewer</span></button>
-        <button class="jx-tab" data-tab="struct" role="tab"><i data-lucide="list-tree"></i><span class="lbl">Structure</span></button>
-        <button class="jx-tab" data-tab="fonts" role="tab"><i data-lucide="type"></i><span class="lbl">Fonts</span></button>
-        <button class="jx-tab" data-tab="resources" role="tab"><i data-lucide="images"></i><span class="lbl">Resources</span></button>
+    <nav class="jx-tabs">
+        <button class="jx-tab" data-tab="page" aria-selected="true"><i data-icon="image"></i><span class="lbl">Viewer</span></button>
+        <button class="jx-tab" data-tab="struct"><i data-icon="list-tree"></i><span class="lbl">Structure</span></button>
+        <button class="jx-tab" data-tab="fonts"><i data-icon="type"></i><span class="lbl">Fonts</span></button>
+        <button class="jx-tab" data-tab="resources"><i data-icon="images"></i><span class="lbl">Resources</span></button>
     </nav>
 
     <span class="sp"></span>
-    <button id="btn-theme" class="qry-btn" title="Toggle light / dark"><i data-lucide="moon"></i></button>
+    <button id="btn-theme" class="qry-btn" title="Toggle light / dark"><i data-icon="moon"></i></button>
     <input id="file" type="file" accept=".pdf,application/pdf" hidden>
 </header>
 
@@ -60,12 +54,12 @@
 
     <main class="viewer" id="viewer">
         <!-- Viewer — the page raster + zoom live in an isolated iframe (stage.html), like Jexter Lab -->
-        <section class="pi-panel active" data-tab="page">
+        <section class="pi-panel" data-tab="page">
             <iframe id="stage-frame" src="stage.html" title="Page render"></iframe>
         </section>
 
         <!-- Structure — the one document COS tree (trailer → catalog → pages → page → …) -->
-        <section class="pi-panel" data-tab="struct">
+        <section class="pi-panel" data-tab="struct" hidden>
             <div class="pi-md">
                 <div class="pi-tree-col scroll"><ul id="tree" class="jx-tree"></ul></div>
                 <aside class="pi-detail" id="detail"></aside>
@@ -73,14 +67,14 @@
         </section>
 
         <!-- Fonts — the document's fonts with glyph specimens (rendered from the OCD model) -->
-        <section class="pi-panel" data-tab="fonts">
+        <section class="pi-panel" data-tab="fonts" hidden>
             <div class="fonts-wrap scroll" id="fonts-wrap">
                 <div class="pi-empty">Open a document to inspect its fonts.</div>
             </div>
         </section>
 
         <!-- Resources — the document's image XObjects (thumbnail + metadata, click to enlarge) -->
-        <section class="pi-panel" data-tab="resources">
+        <section class="pi-panel" data-tab="resources" hidden>
             <div class="res-wrap scroll" id="res-wrap">
                 <div class="pi-empty">Open a document to list its images.</div>
             </div>
@@ -90,11 +84,11 @@
 
 <!-- ── Footer: toggle · status · render source · dims · zoom ── -->
 <footer class="jx-foot">
-    <button id="toggle-left" class="qry-btn" title="Toggle pages panel"><i data-lucide="panel-left"></i></button>
-    <span id="status"><i data-lucide="scan-search"></i> Ready</span>
+    <button id="toggle-left" class="qry-btn" title="Toggle pages panel"><i data-icon="panel-left"></i></button>
+    <span id="status"><i data-icon="scan-search"></i> Ready</span>
     <span class="sp"></span>
     <div id="render-src" class="render-src" role="group" aria-label="Render source"></div>
-    <button id="cmp-toggle" class="srcbtn cmp-toggle" type="button" title="Compare PDFBox vs OCD — difference / fade / wipe"><i data-lucide="git-compare"></i><span>Compare</span></button>
+    <button id="cmp-toggle" class="srcbtn cmp-toggle" type="button" title="Compare PDFBox vs OCD — difference / fade / wipe"><i data-icon="git-compare"></i><span>Compare</span></button>
     <div id="cmp-ctl" class="cmp-ctl" role="group" aria-label="Compare controls">
         <button data-mode="diff" class="cmp-mode is-on" type="button" title="Difference — identical pixels go black (Fid2 made visible)">Diff</button>
         <button data-mode="fade" class="cmp-mode" type="button" title="Opacity fade between the two renders">Fade</button>
@@ -104,14 +98,15 @@
     <span id="page-dims" class="mono"></span>
     <div class="zoom">
         <button id="zoom-fit" class="qry-btn" title="Fit">Fit</button>
-        <button id="zoom-out" class="qry-btn" title="Zoom out"><i data-lucide="minus"></i></button>
+        <button id="zoom-out" class="qry-btn" title="Zoom out"><i data-icon="minus"></i></button>
         <span id="zoom-pct" class="mono">100%</span>
-        <button id="zoom-in" class="qry-btn" title="Zoom in"><i data-lucide="plus"></i></button>
+        <button id="zoom-in" class="qry-btn" title="Zoom in"><i data-icon="plus"></i></button>
     </div>
 </footer>
 
 <!-- ── Document drawer (metadata · pages · fonts) ── -->
-<sl-drawer id="doc-drawer" label="Document" placement="end" class="doc-drawer">
+<dialog id="doc-drawer" class="qry-dialog sheet doc-drawer" aria-labelledby="doc-drawer-title">
+    <header class="qry-dialog-head"><h2 class="qry-dialog-title" id="doc-drawer-title">Document</h2><button type="button" class="qry-btn" data-close aria-label="Close" title="Close"><i data-icon="x"></i></button></header>
     <div class="jx-section">Summary</div>
     <div id="doc-meta" class="jx-meta"><div class="jx-empty">No document.</div></div>
     <div class="jx-section">Metadata</div>
@@ -120,18 +115,18 @@
     <div id="pages-table" class="jx-table-wrap"></div>
     <div class="jx-section">Fonts</div>
     <div id="fonts-table" class="jx-table-wrap"></div>
-</sl-drawer>
+</dialog>
 
 <!-- ── Lightbox (zoom/pan an image resource) ── -->
 <div id="lightbox" class="lightbox">
     <div class="lb-toolbar">
         <span id="lb-info" class="mono"></span>
         <span class="sp"></span>
-        <button id="lb-out" class="qry-btn" title="Zoom out"><i data-lucide="minus"></i></button>
+        <button id="lb-out" class="qry-btn" title="Zoom out"><i data-icon="minus"></i></button>
         <span id="lb-pct" class="mono">100%</span>
-        <button id="lb-in" class="qry-btn" title="Zoom in"><i data-lucide="plus"></i></button>
+        <button id="lb-in" class="qry-btn" title="Zoom in"><i data-icon="plus"></i></button>
         <button id="lb-fit" class="qry-btn" title="Fit">Fit</button>
-        <button id="lb-close" class="qry-btn" title="Close (Esc)"><i data-lucide="x"></i></button>
+        <button id="lb-close" class="qry-btn" title="Close (Esc)"><i data-icon="x"></i></button>
     </div>
     <div class="lb-stage" id="lb-stage"><img id="lightbox-img" alt=""></div>
 </div>

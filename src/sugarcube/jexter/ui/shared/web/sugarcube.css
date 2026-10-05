@@ -1,0 +1,75 @@
+/*
+ * sugarcube.css — the one look of Prism, Jexter and PDF Inspector, on qry 2 (vendor/qry/qry-ui.css,
+ * loaded first). The Sugarcube identity is a handful of qry knobs plus what qry does not have an
+ * opinion on: Poppins for titles, the brand blues, the glass of the bars, the ambient glow behind
+ * the app, and the header signature of every dialog (a fading blue hairline). Each app's own sheet
+ * (prism.css, pdfinspector.css, Jexter's <style>) lays out its screen on top of these tokens and
+ * never restates them.
+ *
+ * Every page: <html data-theme="dark|light"> · <body class="jx-app"> · icons from /shared/js/icons.js.
+ */
+
+/* Poppins 600/700, vendored (SIL OFL — vendor/fonts/OFL.txt): titles, wordmarks, the about card */
+@font-face { font-family: Poppins; font-style: normal; font-weight: 600; font-display: swap;
+    src: url(vendor/fonts/poppins-latin-ext-600-normal.woff2) format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: Poppins; font-style: normal; font-weight: 600; font-display: swap;
+    src: url(vendor/fonts/poppins-latin-600-normal.woff2) format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: Poppins; font-style: normal; font-weight: 700; font-display: swap;
+    src: url(vendor/fonts/poppins-latin-ext-700-normal.woff2) format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: Poppins; font-style: normal; font-weight: 700; font-display: swap;
+    src: url(vendor/fonts/poppins-latin-700-normal.woff2) format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+:root {
+    --qry-theme-accent: #33699f;          /* Sugarcube blue — the cube's front face */
+    --qry-font-display: Poppins, var(--qry-font);
+    --jx-brand: #33699f;
+    --jx-brand-bright: #5e9bd6;           /* the cube's top: hover, sheen, hairlines */
+    --jx-brand-deep: #2b567f;             /* pressed */
+    --jx-blur: saturate(1.35) blur(14px); /* the glass of the bars */
+    --jx-glow: 20%;                       /* strength of the ambient light behind the app */
+    --qry-sheet-w: 20rem;
+}
+
+/* ── the app: one column, the screen exactly, lit from two corners ─────────── */
+html, body { height: 100%; }
+body.jx-app {
+    display: flex; flex-direction: column; height: 100dvh; overflow: hidden; line-height: 1.45;
+    background:
+        radial-gradient(1200px 560px at 100% -10%, color-mix(in srgb, var(--qry-accent) var(--jx-glow), transparent), transparent 60%),
+        radial-gradient(1000px 560px at -10% 110%, color-mix(in srgb, var(--qry-accent) calc(var(--jx-glow) * .6), transparent), transparent 58%),
+        var(--qry-bg);
+}
+
+/* ── icons (icons.js): 1.15em by default, sized by context ── */
+svg.lucide { flex: none; width: 1.15em; height: 1.15em; max-width: none; }
+
+/* ── a busy line (the status bar while the engine works) ─────────────────── */
+.jx-spin { display: inline-block; width: .85em; height: .85em; border-radius: 50%; flex: none;
+    border: 2px solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: var(--jx-brand-bright);
+    animation: jx-spin .8s linear infinite; }
+@keyframes jx-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .jx-spin { animation-duration: 2.4s; } }
+
+/* ── every dialog and sheet: the header signature, Poppins over a fading blue hairline ── */
+.qry-dialog { --qry-radius-lg: 12px; }
+.qry-dialog-head { margin: -1.3rem -1.4rem 1rem; padding: .55rem .6rem .55rem 1.1rem; min-height: 46px;
+    border-bottom: 2px solid transparent;
+    border-image: linear-gradient(90deg, var(--jx-brand-bright), transparent 75%) 1; }
+.qry-dialog-head > .qry-dialog-title { font-weight: 600; font-size: 1rem; }
+.qry-dialog.sheet .qry-dialog-head { position: sticky; top: -1.3rem; z-index: 1; background: var(--qry-surface); }
+.qry-dialog.sheet { padding-bottom: 1.4rem; }
+
+/* ── menus: a shortcut sits at the end of its item ───────────────────────── */
+.qry-menu > :is(button, a) > .jx-kbd { margin-inline-start: auto; }
+.jx-kbd { font-family: var(--qry-font-mono); font-size: .66rem; color: var(--qry-text-muted);
+    border: 1px solid var(--qry-line); border-radius: 5px; padding: .02rem .3rem; white-space: nowrap; }
+.qry-menu svg.lucide { width: 1rem; height: 1rem; color: var(--qry-text-muted); }
+
+/* ── toasts: the tone as a band on the leading edge ──────────────────────── */
+.qry-toast { box-shadow: 0 8px 26px -14px rgba(0, 0, 0, .55); }
+/* the apps keep a footer bar: toasts stand just above it rather than over its controls */
+.jx-app .qry-toasts { bottom: calc(2.9rem + env(safe-area-inset-bottom, 0px)); }

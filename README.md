@@ -62,8 +62,8 @@ PDF ─[convert.PdfImporter]→ OCDDocument ─[write.*]→ PDF · EPUB · HTML 
 - **Font repair** — corrupt embedded TrueType `post` tables are patched so the
   real glyphs render instead of falling back to Arial.
 - **Three web apps** (zero-dependency, JDK HTTP server, no JavaFX) sharing one
-  front-end look — glass chrome, gradient wordmark, shared `/shared/` logo + icon,
-  on the qry stack + Shoelace + Lucide (all from CDN):
+  front-end look — glass chrome, Poppins titles, the Sugarcube blue — on the qry 2 stack, vendored
+  under `/shared/` with Poppins and the line icons: nothing is fetched, they work offline:
   - `Prism` — the jexter document workbench: open a PDF (the engine lifts it) or an
     OCD-EPUB (served as-is), pages render **natively** — the book is unzipped in the
     browser and served to iframes by a Service Worker; nothing is uploaded. Reader
@@ -197,7 +197,7 @@ it with `node nimbus-jexter.cjs`. Everything else is the engine, all under
 | `write` | `Conversion` — the one entry point + target registry (PDF · EPUB · EPUB-reflow · HTML · Markdown · SVG · DocTags) and CLI; every writer shares one contract (`write(doc, OutputStream, ConvertOptions)`). `PdfWriter`, `EpubWriter` (fixed-layout) + `ReflowEpubWriter` (reflowable) over shared `EpubPackage`, `HtmlWriter` (reflowable), `SvgWriter`, `MarkdownWriter` + `DocTagsWriter` (LLM/RAG), `OCDIndex`, `WriterCli` (the drop-a-file launcher). |
 | `redact` | `RedactionAudit` — what is still under the boxes (the `audit` target); `Redactor` — remove it, then prove it with the audit (the `redact` option, applied before any projection). |
 | `tool` | `PdfNormalizer` — runnable PDF → OCD → PDF normalizer (CLI; the GUI for this job is the `Jexter` web app); `Redact` — the audit/apply CLI with exit codes; `HttpLlmClient` — the LLM client for AI structure refinement (OpenAI / Anthropic wires, thinking minimized so the structure JSON isn't truncated). |
-| `ui` | `WebApp` — shared zero-dep HTTP-server base (single-instance, sidecar MIME, CDN proxy); `ui.shared/web` — shared assets served at `/shared/`: the jexter logo + icon SVGs and the client OCD accessor (`js/ocd.js`, used by Prism and PDFInspector). Pages render natively — there is no client renderer. The qry stack, Shoelace and Lucide load from CDN. |
+| `ui` | `WebApp` — shared zero-dep HTTP-server base (single-instance, sidecar MIME, the `/shared/` root); `ui.shared/web` — what the three apps share, served at `/shared/`: the Sugarcube mark, `sugarcube.css` (the one look: qry knobs, Poppins, dialog signature), `js/icons.js` (the line icons, inlined), the client OCD grammar and document authority (`js/ocd.js`, `js/book.js`, `js/shot.js`), and `vendor/` (qry 2, fflate, Poppins). Pages render natively — there is no client renderer. |
 | `ui.prism` | `Prism` — the document workbench: fixed-layout reader (Service-Worker-served pages), editor (media augmentations), Pages (light table: order, insert, duplicate, delete; crop as the page window, rotation as page metadata), Redact, Analysis mode (bounds/flow overlays, page DOM tree, Inspect), search, TTS, exports. |
 | `ui.pdf` | `PDFInspector` — the raw PDFBox web inspector (standalone, same look as Prism). |
 | `ui.jx` | `Jexter` — a standalone **PDF normalizer** (crude PDF in, clean selectable PDF out): drag-and-drop `WebApp` **and** headless — single file, folder batch, and a `--hotfolder` daemon (`--recursive` mirrors the sub-tree, `--threads` runs in parallel, `--done` moves each processed source into a `Done` sub-folder (or any folder: `--done=<path>`), `--suffix=` names the outputs as the window's Settings do, outputs written atomically; a source delivered again under the same name is normalized again). The window's Settings (gear, top right; a **?** beside an option explains it) hold where results go, the name ending, how many PDFs convert at once and the hot folder; the command line does not read them. `Jexter` is the engine + server; `JexterCli` owns the headless orchestration. |
@@ -240,7 +240,8 @@ The Typst source of the technical overview lives in
   [LICENSE-JJ2000](LICENSE-JJ2000). Its notice must be reproduced in every copy
   and derivative work, and its grant covers JPEG 2000 conforming products.
 - **BouncyCastle** (optional, runtime) — MIT-style Bouncy Castle license.
-- Web front-end uses the qry stack, Shoelace, and Lucide via CDN.
+- **qry 2** (MIT), **fflate** (MIT), **Poppins** (OFL) and **Lucide** drawings (ISC) — vendored in
+  `src/sugarcube/jexter/ui/shared/web/vendor/` with their licences; the web front-ends fetch nothing.
 
 ## License
 

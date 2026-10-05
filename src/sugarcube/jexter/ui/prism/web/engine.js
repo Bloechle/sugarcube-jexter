@@ -13,7 +13,7 @@
 // Exported for that tool, and for it alone: `jx` (what the open container carries), `engine` (is one
 // there), `bookBytes` (the container as it stands) and `pageIndexOf`.
 
-import { zipSync } from 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm';
+import { zipSync } from '/shared/vendor/fflate.js';
 import * as backend from './backend.js';
 import { parseFonts as parseFontsSvg, SVG_NS, inReadingOrder, readingRuns, runBox } from '/shared/js/ocd.js';
 import { book } from '/shared/js/book.js';
@@ -43,20 +43,18 @@ const convOpts = () => Object.fromEntries(Object.entries(conv.diffs).map(([k, v]
 async function loadOptions() {
     let d; try { d = await backend.options(); } catch { return; }
     for (const o of d.options || []) conv.defs[o.key] = o.def;
-    const ready = window.customElements?.whenDefined
-        ? customElements.whenDefined('sl-switch') : Promise.resolve();
     // A switch normally drives a BOOLEAN option. One with `data-value` drives a STRING option instead: on
     // sends that value, off sends nothing (the engine's default) — the OCR preparation is one.
-    ready.then(() => $.all('.cv-opt').forEach(sw => {
+    $.all('.cv-opt').forEach(sw => {
         const k = sw.getAttribute('data-opt'), val = sw.getAttribute('data-value');
         const isOn = (v) => val ? v === val : !!v;
         sw.checked = isOn(k in conv.diffs ? conv.diffs[k] : conv.defs[k]);
-        sw.addEventListener('sl-change', e => {
+        sw.addEventListener('change', e => {
             const v = val ? (e.target.checked ? val : conv.defs[k]) : !!e.target.checked;
             if (v === conv.defs[k] || (!val && v === !!conv.defs[k])) delete conv.diffs[k]; else conv.diffs[k] = v;
             localStorage.setItem('prism_conv', JSON.stringify(conv.diffs));
         });
-    }));
+    });
     const st = $.opt('#ai-status'), sw = $.opt('#ai-refine');
     if (d.aiBound) {
         if (st) st.textContent = `Model: ${d.aiModel}${d.aiProvider ? ' (' + d.aiProvider + ')' : ''}`;
@@ -111,7 +109,7 @@ function showStep(p) {
     let of = '';
     if (p.total && s.unit === 'bytes') of = ` ${mb(p.done)} / ${mb(p.total)}`;
     else if (p.total)                 of = ` ${Math.max(1, p.done)}/${p.total}`;
-    P.setStatus?.(`<sl-spinner></sl-spinner> ${s.label}${of}\u2026`);
+    P.setStatus?.(`<span class="jx-spin"></span> ${s.label}${of}\u2026`);
 }
 
 /** Subscribe to the engine's side for the duration of one conversion. Returns a stop function. */
@@ -126,7 +124,7 @@ function watchProgress() {
 
 P.hooks.openSource = async (buffer, name) => {
     if (!await engineReady) { P.toast('This is a PDF or an image and no conversion engine is running here.', 'warning'); return; }
-    P.setStatus?.('<sl-spinner></sl-spinner> Converting\u2026');
+    P.setStatus?.('<span class="jx-spin"></span> Converting\u2026');
     P.toast('Converting…', 'primary');
     const stop = watchProgress();
     try {
@@ -137,7 +135,7 @@ P.hooks.openSource = async (buffer, name) => {
         await book.open(art.bytes, name
             ? name.replace(/\.(pdf|png|jpe?g|tiff?)$/i, '') + '.ocd.epub'
             : art.filename || 'document.ocd.epub');
-    } catch (e) { P.toast(`Conversion failed: ${e.message || e}`, 'danger'); P.setStatus?.('<i data-lucide="sparkles"></i> Ready'); }
+    } catch (e) { P.toast(`Conversion failed: ${e.message || e}`, 'danger'); P.setStatus?.('<i data-icon="sparkles"></i> Ready'); }
     finally { stop(); }
 };
 
@@ -238,7 +236,7 @@ function buildFontsDrawer() {
     }
     const esc = P.esc;
     body.innerHTML = `
-      <sl-select id="fx-pick" size="small" value="0" hoist>
+      <select id="fx-pick" class="qry-input" aria-label="Font">
         ${fxFonts.map((f, i) => {
             // Same name several times = several font OBJECTS in the PDF. Show the writer's
             // disambiguating suffix (Arial-BoldMT-2) so the rows can be told apart, and the one
@@ -247,13 +245,13 @@ function buildFontsDrawer() {
             const tag = dup && f.safe && f.safe !== f.name ? ` · ${esc(f.safe)}` : '';
             const only = f.glyphs.length === 1 && f.glyphs[0].u && f.glyphs[0].u.trim()
                 ? ` ‘${esc(f.glyphs[0].u)}’` : '';
-            return `<sl-option value="${i}">${esc(f.name)}${f.weight === 'bold' ? ' — bold' : ''}${f.style === 'italic' ? ' italic' : ''}${tag} (${f.glyphs.length}${only})</sl-option>`;
+            return `<option value="${i}">${esc(f.name)}${f.weight === 'bold' ? ' — bold' : ''}${f.style === 'italic' ? ' italic' : ''}${tag} (${f.glyphs.length}${only})</option>`;
         }).join('')}
-      </sl-select>
+      </select>
       <div id="fx-inspect"></div>
       <div id="fx-meta" class="fx-metrics"></div>
       <div id="fx-grid" class="fx-grid"></div>`;
-    document.getElementById('fx-pick').addEventListener('sl-change', e => {
+    document.getElementById('fx-pick').addEventListener('change', e => {
         fxCur = +e.target.value; fxSel = -1; renderFont();
     });
     renderFont();
@@ -299,20 +297,20 @@ function renderInspector() {
     const hline = (y, color, width, dash) =>
         `<line x1="${-padL}" y1="${-y}" x2="${W + padR}" y2="${-y}" stroke="${color}" stroke-width="${width}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
     const vline = (x) =>
-        `<line x1="${x}" y1="${top + .03}" x2="${x}" y2="${f.desc + .07}" stroke="var(--sl-color-neutral-400)" stroke-width=".009"/>`;
+        `<line x1="${x}" y1="${top + .03}" x2="${x}" y2="${f.desc + .07}" stroke="var(--qry-text-subtle)" stroke-width=".009"/>`;
     let s = `<svg class="fx-big" viewBox="${-padL} ${top} ${W + padL + padR} ${H}">`;
-    s += hline(f.asc, 'var(--sl-color-neutral-300)', .009);
-    if (f.cap) s += hline(f.cap, 'var(--sl-color-neutral-300)', .007, '.025 .02');
-    if (f.xh) s += hline(f.xh, 'var(--sl-color-neutral-300)', .007, '.025 .02');
+    s += hline(f.asc, 'var(--qry-line-strong)', .009);
+    if (f.cap) s += hline(f.cap, 'var(--qry-line-strong)', .007, '.025 .02');
+    if (f.xh) s += hline(f.xh, 'var(--qry-line-strong)', .007, '.025 .02');
     s += hline(0, 'var(--jx-brand)', .014);                              // the baseline
-    s += hline(-f.desc, 'var(--sl-color-neutral-300)', .009);
+    s += hline(-f.desc, 'var(--qry-line-strong)', .009);
     s += vline(0) + vline(g.adv);                                        // the advance box
     if (g.d) s += `<g transform="scale(1 -1)"><path d="${esc(g.d)}" fill="currentColor"/></g>`;
     else s += `<rect x=".05" y="${-f.asc + .05}" width="${Math.max(g.adv - .1, .1)}" height="${f.asc + f.desc - .1}" fill="none" stroke="currentColor" stroke-width=".014" stroke-dasharray=".05 .05" opacity=".45"/>`;
     // the pen: ORIGIN (filled) → ADVANCE = the next glyph's origin (hollow), on the baseline
     s += `<circle cx="0" cy="0" r=".026" fill="var(--jx-brand)"><title>origin (0, 0)</title></circle>`;
     s += `<path d="M${g.adv - .045} -.03 L${g.adv - .008} 0 L${g.adv - .045} .03" fill="none" stroke="var(--jx-brand)" stroke-width=".013" stroke-linecap="round" stroke-linejoin="round"/>`;
-    s += `<circle cx="${g.adv}" cy="0" r=".026" fill="var(--sl-color-neutral-0, #fff)" stroke="var(--jx-brand)" stroke-width=".013"><title>advance ${g.adv} — the next glyph's origin</title></circle>`;
+    s += `<circle cx="${g.adv}" cy="0" r=".026" fill="var(--qry-surface)" stroke="var(--jx-brand)" stroke-width=".013"><title>advance ${g.adv} — the next glyph's origin</title></circle>`;
     s += '</svg>';
     const info = [
         ['char', g.u ? g.u : '—'],
@@ -515,7 +513,7 @@ async function exportAs(to, opts = {}) {
 }
 
 function wire() {
-    $.opt('#m-fonts')?.addEventListener('click', () => { buildFontsDrawer(); document.getElementById('fonts-drawer').show(); });
+    $.opt('#m-fonts')?.addEventListener('click', () => { buildFontsDrawer(); P.dialog('fonts-drawer').open(); });
     // F2 console, server pane: live JxLog events over SSE (EventSource reconnects itself)
     if (engine && backend.logStreamUrl) {
         const es = new EventSource(backend.logStreamUrl);
@@ -527,7 +525,7 @@ function wire() {
         };
     }
     $.all('#export-dialog .export-opt[data-to]').forEach(b => b.addEventListener('click', () => {
-        $.opt('#export-dialog')?.hide();
+        P.dialog('export-dialog').close();
         const opts = convOpts();
         if (b.hasAttribute('data-selectable')) opts.selectable = 'true';
         if (b.getAttribute('data-page') === 'cur') opts.page = String(Math.max(0, P.state.current));

@@ -52,7 +52,7 @@
  * effective box (data-mediabox, else a legacy page's data-crop) Y-flipped — svg (sx, sy) ↔ page (sx + bx, by + bh − sy);
  * items are kept in PAGE space, what the engine reads.
  */
-import { unzipSync } from 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm';
+import { unzipSync } from '/shared/vendor/fflate.js';
 import { SVG_NS } from '/shared/js/ocd.js';   // ONE spelling, ONE declaration: the grammar's
 import { book } from '/shared/js/book.js';
 import { createGizmo, boxOf, setBox, outerBox, clampTo, normBox, svgPointOf } from './gizmo.js';

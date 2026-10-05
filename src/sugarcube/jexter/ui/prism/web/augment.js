@@ -9,6 +9,7 @@
 // edits panel, and the transient overlay renderer (never exported).
 
 import { book } from '/shared/js/book.js';
+import { ask, prompt, labels } from '/shared/vendor/qry/qry-web.js';
 import { SVG_NS } from '/shared/js/ocd.js';   // ONE spelling, ONE declaration: the grammar's
 
 const P = window.prism;
@@ -292,45 +293,40 @@ function selectEls(doc, idx, zone) {
   return out;
 }
 
-/* -- Modal inputs: promise-based Shoelace dialogs -------------------- */
+/* -- Modal inputs: qry's native dialogs, built when asked --------------- */
 
-// Show a dialog; resolve with read() on OK, null on cancel/escape/overlay.
-function askDialog(dlg, okBtn, read) {
-  return new Promise(resolve => {
-    let settled = false;
-    const done = v => { settled = true; cleanup(); resolve(v); dlg.hide(); };
-    const onOk = () => done(read());
-    const onKey = e => { if (e.key === 'Enter' && e.target.tagName === 'SL-INPUT') { e.preventDefault(); onOk(); } };
-    const onHide = () => { if (!settled) { settled = true; cleanup(); resolve(null); } };
-    const cleanup = () => { okBtn.removeEventListener('click', onOk); dlg.removeEventListener('keydown', onKey); dlg.removeEventListener('sl-after-hide', onHide); };
-    okBtn.addEventListener('click', onOk);
-    dlg.addEventListener('keydown', onKey);
-    dlg.addEventListener('sl-after-hide', onHide);
-    dlg.show();
-  });
-}
+// One-line text input (replaces window.prompt) → the trimmed text, or null when cancelled.
+const askText = ({ title, label = '', value = '', placeholder = '' }) => prompt(label, { title, value, placeholder });
 
-// One-line text input (replaces window.prompt).
-function askText({ title, label = '', value = '', placeholder = '' }) {
-  const dlg = $('#ask-dialog'), input = $('#ask-input');
-  dlg.setAttribute('label', title);
-  input.label = label; input.value = value; input.placeholder = placeholder;
-  setTimeout(() => input.focus(), 60);
-  return askDialog(dlg, $('#ask-ok'), () => input.value.trim());
-}
+// A choice of a few, as one segmented row of native radios (qry's .qry-seg) — a form reads it.
+const seg = (name, label, opts, value) => $.html`<div class="px-dlg-field"><span>${label}</span>
+  <div class="qry-seg" role="radiogroup" aria-label="${label}">${opts.map(([v, t]) => $.html`<label><input type="radio" name="${name}" value="${v}" ${String(v) === String(value) && 'checked'}> ${t}</label>`)}</div></div>`;
+const select = (name, label, opts, value) => $.html`<label class="qry-field">${label}
+  <select class="qry-input" name="${name}">${opts.map(([v, t]) => $.html`<option value="${v}" ${String(v) === String(value) && 'selected'}>${t}</option>`)}</select></label>`;
 
-// Animation settings (effect · apply-to · duration · per-element delay · note).
+// Animation settings (effect · apply-to · duration · per-element delay · note) → the settings, or null.
 function askAnim(init = {}) {
-  const effect = $('#anim-effect'), mode = $('#anim-mode'), dur = $('#anim-dur'), stag = $('#anim-stagger'), note = $('#anim-note');
-  effect.value = init.effect || 'rise';
-  mode.value = init.mode || 'each';
-  dur.value = String(init.dur ?? 0.7);
-  stag.value = String(init.stagger ?? 120);
-  note.value = init.note || '';
-  stag.cls(mode.value === 'each' ? '-px-hide' : '+px-hide');
-  return askDialog($('#anim-dialog'), $('#anim-ok'), () => ({
-    effect: effect.value, mode: mode.value, dur: +dur.value, stagger: +stag.value, note: note.value.trim(),
-  }));
+  const form = $.create('form', { class: 'px-dlg-form' });
+  form.html($.html`
+    ${seg('effect', 'Effect', [['fade', 'Fade'], ['rise', 'Rise'], ['slide', 'Slide'], ['zoom', 'Zoom']], init.effect || 'rise')}
+    ${seg('mode', 'Apply to', [['each', 'Each element'], ['together', 'All together']], init.mode || 'each')}
+    <div class="px-dlg-grid">
+      ${select('dur', 'Duration', [[0.3, '0.3 s'], [0.5, '0.5 s'], [0.7, '0.7 s'], [1, '1 s'], [1.5, '1.5 s'], [2, '2 s']], init.dur ?? 0.7)}
+      ${select('stagger', 'Per-element delay', [[60, '60 ms'], [120, '120 ms'], [200, '200 ms'], [300, '300 ms']], init.stagger ?? 120)}
+    </div>
+    <label class="qry-field">Note (optional) <input class="qry-input" name="note" autocomplete="off" value="${init.note || ''}"></label>`);
+  // the per-element delay means something only when each element enters on its own
+  const stagger = form.querySelector('[name="stagger"]').closest('.qry-field');
+  const sync = () => stagger.show(form.serialize().mode === 'each');
+  form.on('change', sync); sync();
+  form.on('submit', (e) => e.preventDefault());
+  return ask({ title: 'Animate selection', body: form, dismiss: null, buttons: [
+    { label: labels.cancel, value: null },
+    { label: labels.ok, tone: 'primary', value: () => {
+      const d = form.serialize();
+      return { effect: d.effect, mode: d.mode, dur: +d.dur, stagger: +d.stagger, note: (d.note || '').trim() };
+    } },
+  ] });
 }
 
 
@@ -345,7 +341,7 @@ function augRowLabel(e) {
   return e.type.charAt(0).toUpperCase() + e.type.slice(1);
 }
 function mkBtn(into, icon, title, fn) {
-  const b = $.create('button', { class: 'er-btn', title, html: `<i data-lucide="${icon}"></i>` });
+  const b = $.create('button', { class: 'er-btn', title, html: `<i data-icon="${icon}"></i>` });
   b.on('click', e => { e.stopPropagation(); fn(); });
   b.mount(into);
 }
@@ -358,7 +354,7 @@ function renderEditList() {
   info?.text(list.length ? `${list.length} on this page` : 'None on this page — drag a zone.');
   list.forEach((e, i) => {
     const li = $.create('li');
-    const row = $.create('a', { class: 'nav-link edit-row', html: `<i data-lucide="${TYPE_ICON[e.type] || 'square'}"></i><span class="er-lbl">${esc(augRowLabel(e))}</span>` });
+    const row = $.create('a', { class: 'nav-link edit-row', html: `<i data-icon="${TYPE_ICON[e.type] || 'square'}"></i><span class="er-lbl">${esc(augRowLabel(e))}</span>` });
     row.on('click', () => { goTo(state.current); flashAug(state.current, e.id); });
     const acts = $.create('span', { class: 'er-acts' });
     mkBtn(acts, 'chevron-up', 'Send backward', () => reorderAug(state.current, i, -1));
@@ -368,7 +364,6 @@ function renderEditList() {
     mkBtn(acts, 'trash-2', 'Remove', () => deleteAug(state.current, e.id));
     acts.mount(row); row.mount(li); li.mount(out);
   });
-  window.lucide?.createIcons();
 }
 
 function reorderAug(idx, i, dir) {
@@ -694,9 +689,6 @@ P.on('frame', (f, idx) => bindEditor(f, idx));
 P.on('page', () => { if (state.aug) renderEditList(); });
 P.on('close', () => { undoStack.length = 0; dirty = false; pendingZone = null; editing = false; });
 
-$('#ask-cancel').on('click', () => $('#ask-dialog').hide());
-$('#anim-cancel').on('click', () => $('#anim-dialog').hide());
-$('#anim-mode').on('sl-change', () => $('#anim-stagger').cls($('#anim-mode').value === 'each' ? '-px-hide' : '+px-hide'));
 $('#media-input').on('change', async e => {
   const file = e.target.files[0];
   if (file) await onMediaPicked(file);

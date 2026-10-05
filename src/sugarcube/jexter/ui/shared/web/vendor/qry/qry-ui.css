@@ -1,0 +1,618 @@
+/**
+ * qry-ui.css — the design system of the qry stack (no widget library)
+ *
+ * THE THEME IS A HANDFUL OF KNOBS. Set any of them (on :root, or on any element with the
+ * class .qry-theme for a scoped theme) and the whole stack follows — buttons, links, focus,
+ * surfaces, text, tones, dialogs, toasts, menus, charts, Web Awesome — in light AND dark:
+ *
+ *   --qry-theme-accent    the brand, ONE colour (default: the University of Fribourg's blue)
+ *   --qry-theme-neutral   the hue of the greys (default: the accent's — greys lean to the brand)
+ *   --qry-theme-chroma      how much the greys lean (oklch chroma, 0 = pure grey, default .012)
+ *   --qry-theme-chroma-dark the same in dark mode (optional; default: --qry-theme-chroma)
+ *   --qry-theme-ok / -warn / -danger / -purple    the status tones, one colour each
+ *   --qry-theme-highlight a second brand colour used as a FILL (a yellow that fails as text):
+ *                         .highlight buttons, badges, callouts, metrics; its ink is derived
+ *   --qry-font · --qry-font-mono · --qry-font-display (headings; default --qry-font)
+ *   --qry-radius · --qry-gap · --qry-control (height of buttons and fields; taller on touch)
+ *   --qry-btn-radius (optional; default --qry-radius-sm — 999px: pill buttons, app-wide)
+ *
+ * Every other token is DERIVED (oklch relative colours + light-dark()): the dark variants, the
+ * readable text on the accent and on the highlight, the greys, lines, shadows (tinted by the
+ * greys' hue), backdrops. The mode is the native
+ * `color-scheme`, through ONE hook — data-theme="dark|light" (on <html>, qry-web theme.set, or
+ * on any element), else the OS.
+ *
+ * Cascade layers qry.tokens < qry.base < qry.components < qry.utilities: your own CSS
+ * (unlayered) always wins, with no specificity games and no !important.
+ * Targets Chromium 133+ and Safari 26+ (relative colours, light-dark, anchor positioning).
+ *
+ * @version 2.0.0
+ * @author  Jean-Luc Bloechle with Claude.ai
+ * @license MIT
+ */
+@layer qry.tokens, qry.base, qry.components, qry.utilities;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOKENS
+   ═══════════════════════════════════════════════════════════════════════════ */
+@layer qry.tokens {
+:root {
+    /* ── the knobs ───────────────────────────────────────────────────────── */
+    --qry-theme-accent: #005395;
+    --qry-theme-chroma: .012;
+    --qry-theme-ok: #1a7f4b;
+    --qry-theme-warn: #b25e09;
+    --qry-theme-danger: #c42b2b;
+    --qry-theme-purple: #7044c4;
+    --qry-theme-highlight: #f4b740;
+
+
+    --qry-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --qry-font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+    --qry-radius: 10px;
+    --qry-gap: 1rem;
+    --qry-control: 2.4rem;                          /* min height of buttons, inputs, selects */
+    --qry-control-sm: calc(var(--qry-control) * .84);   /* derived: small buttons, chips, tabs */
+    /* --qry-font-display: unset — headings use it when set, else --qry-font */
+    --qry-container: 72rem;
+    /* motion, ONE signature (qry-web's viewer, slideshow and reveal read the same tokens) */
+    --qry-ease: cubic-bezier(.2, .7, .2, 1);       /* arriving: a soft deceleration, no bounce */
+    --qry-ease-move: cubic-bezier(.4, 0, .2, 1);   /* crossing the screen: eases in AND out */
+    --qry-speed-fast: .12s;                         /* leaving: a close, a fade out */
+    --qry-speed: .2s;                               /* arriving: a dialog, a photo, a page */
+    --qry-speed-slow: .5s;                          /* revealing: content on scroll; ×2 a slideshow fade */
+
+    color-scheme: light dark;                       /* follow the OS… */
+}
+[data-theme="light"] { color-scheme: light; }   /* …unless the page chose */
+[data-theme="dark"] { color-scheme: dark; }
+@media (pointer: coarse) { :root { --qry-control: 2.75rem; --qry-control-sm: max(2.5rem, calc(var(--qry-control) * .84)); } }   /* a finger: 44 px targets, 40 px for the small ones */
+
+/* ── derived — computed where the knobs are set: <html>, or any .qry-theme ──
+   Light keeps a colour's lightness inside a band where white text reads on it; dark lifts it
+   into a band where it reads on the dark surfaces. Greys: the neutral hue at a fixed lightness
+   ladder. Nothing below is meant to be overridden — set a knob instead. */
+:root, .qry-theme {
+    accent-color: var(--qry-accent);                /* checkboxes, radios, ranges, progress */
+    --qry-accent: light-dark(oklch(from var(--qry-theme-accent) clamp(.32, l, .5) c h), oklch(from var(--qry-theme-accent) clamp(.74, l + .3, .84) min(c, .15) h));
+    --qry-accent-strong: color-mix(in oklab, var(--qry-accent) 82%, light-dark(#000, #fff));
+    --qry-on-accent: light-dark(#fff, oklch(from var(--qry-theme-accent) .2 .03 h));   /* text on the accent, or on any tone */
+    --qry-tint: color-mix(in oklab, var(--qry-accent) 14%, transparent);
+
+    --qry-bg:          light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .975 var(--qry-theme-chroma) h), oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .17 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));
+    --qry-surface:     light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) 1 0 h),                        oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .21 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));
+    --qry-surface-2:   light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .955 var(--qry-theme-chroma) h), oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .245 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));
+    --qry-glass: color-mix(in oklab, var(--qry-surface) 84%, transparent);
+    --qry-surface-grey: light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) 1 0 h), oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .21 0 h));   /* the surface without its hue: soft fills mix into it */
+    --qry-line:        light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .915 var(--qry-theme-chroma) h), oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .3 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));
+    --qry-line-strong: light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .86 var(--qry-theme-chroma) h),  oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .37 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));
+    --qry-text:        light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .25 var(--qry-theme-chroma) h),  oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .92 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));
+    --qry-text-strong: light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .16 var(--qry-theme-chroma) h),  oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .985 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));
+    --qry-text-muted:  light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .47 var(--qry-theme-chroma) h),  oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .76 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));   /* ≥ 4.5:1 on bg + surfaces */
+    --qry-text-subtle: light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .55 var(--qry-theme-chroma) h),  oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .66 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));
+    --qry-scrim: oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .14 var(--qry-theme-chroma) h / .5);   /* behind dialogs, overlays */
+    --qry-ink: oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .19 var(--qry-theme-chroma) h);         /* always dark: code blocks, the viewer */
+    --qry-ink-text: oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .93 var(--qry-theme-chroma) h);
+
+    --qry-ok:     light-dark(oklch(from var(--qry-theme-ok) clamp(.38, l, .52) c h),     oklch(from var(--qry-theme-ok) clamp(.74, l + .25, .84) c h));
+    --qry-warn:   light-dark(oklch(from var(--qry-theme-warn) clamp(.38, l, .52) c h),   oklch(from var(--qry-theme-warn) clamp(.74, l + .25, .84) c h));
+    --qry-danger: light-dark(oklch(from var(--qry-theme-danger) clamp(.38, l, .52) c h), oklch(from var(--qry-theme-danger) clamp(.74, l + .25, .84) c h));
+    --qry-purple: light-dark(oklch(from var(--qry-theme-purple) clamp(.38, l, .52) c h), oklch(from var(--qry-theme-purple) clamp(.74, l + .25, .84) c h));
+
+    /* the highlight is a FILL: a light one (oklch l > .58) carries dark ink, a dark one white ink.
+       Its lightness leaves the band where neither ink reaches 4.5:1 (pushed to ≥ .66 or ≤ .5);
+       dark mode tones a light one down (≤ .8). s = clamp(0, (l - .58) * 1000, 1): 1 light, 0 dark */
+    --qry-highlight: light-dark(
+        oklch(from var(--qry-theme-highlight) calc(clamp(0, (l - .58) * 1000, 1) * max(l, .66) + (1 - clamp(0, (l - .58) * 1000, 1)) * min(l, .5)) c h),
+        oklch(from var(--qry-theme-highlight) calc(clamp(0, (l - .58) * 1000, 1) * clamp(.66, l, .8) + (1 - clamp(0, (l - .58) * 1000, 1)) * min(l, .5)) c h));
+    --qry-on-highlight: oklch(from var(--qry-theme-highlight) calc(1 - clamp(0, (l - .58) * 1000, 1) * .8) calc(clamp(0, (l - .58) * 1000, 1) * .04) h);
+    --qry-highlight-text: light-dark(oklch(from var(--qry-theme-highlight) clamp(.3, l, .44) c h), oklch(from var(--qry-theme-highlight) clamp(.78, l, .88) c h));   /* its hue, readable as text */
+
+    --qry-radius-sm: calc(var(--qry-radius) * .6);
+    --qry-radius-lg: min(calc(var(--qry-radius) * 1.6), max(var(--qry-radius), 1.5rem));   /* never rounder than 24 px (or the radius itself) */
+    /* shadows: a deep shade of the greys' hue, never pure black */
+    --qry-shade: light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .22 calc(var(--qry-theme-chroma) * 3) h), oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .08 calc(var(--qry-theme-chroma) * 2) h));
+    --qry-shadow: 0 1px 2px light-dark(color-mix(in oklab, var(--qry-shade) 7%, transparent), color-mix(in oklab, var(--qry-shade) 45%, transparent)),
+                  0 2px 8px light-dark(color-mix(in oklab, var(--qry-shade) 7%, transparent), color-mix(in oklab, var(--qry-shade) 25%, transparent));
+    --qry-shadow-lg: 0 8px 30px light-dark(color-mix(in oklab, var(--qry-shade) 15%, transparent), color-mix(in oklab, var(--qry-shade) 55%, transparent));
+}
+/* a scoped theme, or a nested light / dark part, repaints its own ground (the derived tokens
+   resolve where they are used, so its children follow on their own) */
+.qry-theme, [data-theme]:not(:root) { color: var(--qry-text); background: var(--qry-bg); accent-color: var(--qry-accent); }
+}
+
+@layer qry.base {
+/* ── State: ARIA when ARIA has a word for it (aria-pressed, aria-selected, aria-current,
+   aria-expanded, aria-busy, aria-sort, aria-invalid); otherwise ONE convention, .is-*
+   (is-active, is-open, is-visible, is-collapsed, is-hidden, is-in, is-current…).
+   ── Tones: ONE way to colour a component — add .ok .warn .danger .purple .accent .highlight ──
+   Buttons, badges, toasts, metrics, icon boxes, callouts, dots, info values and menu items read
+   var(--qry-tone); without a tone class it is the accent. --qry-tone does NOT inherit: a tone
+   colours its own element, never a .primary button or a badge nested inside it. .highlight is a
+   FILL tone: where a component would write the tone as text, it takes --qry-on-highlight on a
+   --qry-highlight ground (or --qry-highlight-text) instead. */
+@property --qry-tone { syntax: '*'; inherits: false; }
+.ok { --qry-tone: var(--qry-ok); } .warn { --qry-tone: var(--qry-warn); } .danger { --qry-tone: var(--qry-danger); }
+.purple { --qry-tone: var(--qry-purple); } .accent { --qry-tone: var(--qry-accent); } .highlight { --qry-tone: var(--qry-highlight); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BASE
+   ═══════════════════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; font: 400 1rem/1.6 var(--qry-font); color: var(--qry-text); background: var(--qry-bg); }
+h1, h2, h3, h4 { color: var(--qry-text-strong); font-family: var(--qry-font-display, var(--qry-font)); line-height: 1.2; margin: 0 0 .5em; }
+p { margin: 0 0 1em; }
+a { color: var(--qry-accent); }
+img, svg, video { max-width: 100%; height: auto; }
+code, kbd, pre, .qry-mono { font-family: var(--qry-font-mono); font-size: .92em; }
+pre { overflow-x: auto; padding: .8rem 1rem; background: var(--qry-surface-2); border-radius: var(--qry-radius); }
+kbd { padding: .05em .4em; border: 1px solid var(--qry-line-strong); border-bottom-width: 2px; border-radius: 4px; background: var(--qry-surface); }
+:focus-visible { outline: 2px solid var(--qry-accent); outline-offset: 2px; }
+::selection { background: var(--qry-tint); }
+mark { padding: 0 .15em; border-radius: 3px; color: inherit; background: color-mix(in oklab, var(--qry-highlight) 40%, var(--qry-surface-grey)); }   /* $.md ==marked== */
+[hidden] { display: none !important; }
+/* page to page: a cross-fade (cross-document view transitions; a browser without them just
+   changes page). Identical parts — the header — stay still. */
+@media (prefers-reduced-motion: no-preference) { @view-transition { navigation: auto; } }
+::view-transition-group(root) { animation-duration: var(--qry-speed); animation-timing-function: var(--qry-ease); }
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+/* progress and meter: a rounded bar in the accent, or a tone (<progress class="ok" value="3" max="5">).
+   A meter's low / high / optimum: the good part is the accent (or tone), then warn, then danger. */
+progress, meter {
+    --qry-stripe: var(--qry-tone, var(--qry-accent));   /* inherited by the bar's pseudo-elements */
+    appearance: none; display: inline-block; vertical-align: middle; inline-size: 100%; block-size: .6rem;
+    border: 0; border-radius: 999px; overflow: hidden; background: var(--qry-line); color: var(--qry-stripe);
+}
+progress::-webkit-progress-bar { background: transparent; }
+progress::-webkit-progress-value { background: var(--qry-stripe); border-radius: 999px; transition: inline-size var(--qry-speed) var(--qry-ease); }
+progress:indeterminate { background: linear-gradient(90deg, transparent, var(--qry-stripe), transparent) -70% 0 / 40% 100% no-repeat, var(--qry-line); animation: qry-indeterminate 1.4s ease-in-out infinite; }
+@keyframes qry-indeterminate { to { background-position: 170% 0, 0 0; } }
+meter::-webkit-meter-inner-element { display: block; block-size: 100%; }   /* the UA centres a thinner bar: fill the box */
+meter::-webkit-meter-bar { position: static; block-size: 100%; border: 0; border-radius: inherit; background: transparent; }
+meter::-webkit-meter-optimum-value { background: var(--qry-stripe); border-radius: 999px; }
+meter::-webkit-meter-suboptimum-value { background: var(--qry-warn); border-radius: 999px; }
+meter::-webkit-meter-even-less-good-value { background: var(--qry-danger); border-radius: 999px; }
+@media (prefers-reduced-motion: reduce) {   /* a still, soft glow instead of a sweep */
+    progress:indeterminate { animation: none; background-position: 50% 0, 0 0; background-size: 100% 100%, auto; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LAYOUT PRIMITIVES
+   ═══════════════════════════════════════════════════════════════════════════ */
+.qry-container { width: min(100% - 2 * var(--qry-gap), var(--qry-container)); margin-inline: auto; }
+.qry-stack { display: flex; flex-direction: column; gap: var(--qry-gap); }
+.qry-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.qry-grid { display: grid; gap: var(--qry-gap); grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--qry-min, 16rem)), 1fr)); }
+.qry-spacer { flex: 1 1 auto; }
+.qry-grid-2, .qry-grid-3, .qry-grid-4 { display: grid; gap: var(--qry-gap); grid-template-columns: repeat(var(--qry-cols), minmax(0, 1fr)); }
+.qry-grid-2 { --qry-cols: 2; } .qry-grid-3 { --qry-cols: 3; } .qry-grid-4 { --qry-cols: 4; }
+@media (max-width: 720px) { .qry-grid-2, .qry-grid-3, .qry-grid-4 { --qry-cols: 1; } }
+@media (min-width: 721px) and (max-width: 1024px) { .qry-grid-3, .qry-grid-4 { --qry-cols: 2; } }
+.qry-span-all { grid-column: 1 / -1; }
+.qry-sr-only { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.qry-skip { position: absolute; left: 1rem; top: -4rem; z-index: 100; padding: .5rem 1rem; background: var(--qry-surface); border-radius: var(--qry-radius-sm); box-shadow: var(--qry-shadow); }
+.qry-skip:focus { top: 1rem; }
+
+}
+
+@layer qry.components {
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONTROLS
+   ═══════════════════════════════════════════════════════════════════════════ */
+.qry-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: .45rem;
+    min-height: var(--qry-control); padding: .45rem 1rem; border: 1px solid var(--qry-line-strong); border-radius: var(--qry-btn-radius, var(--qry-radius-sm));
+    background: var(--qry-surface); color: var(--qry-text); font: 600 .94rem/1.2 var(--qry-font); cursor: pointer; text-decoration: none;
+    transition: background var(--qry-speed), border-color var(--qry-speed), color var(--qry-speed);
+}
+.qry-btn:hover { border-color: var(--qry-tone, var(--qry-accent)); }
+/* filled: .primary (the accent) or any tone — <button class="qry-btn danger">Delete</button> */
+.qry-btn:is(.primary, .ok, .warn, .danger, .purple, .accent, .highlight) { background: var(--qry-tone, var(--qry-accent)); border-color: transparent; color: var(--qry-on-accent); }
+.qry-btn:is(.primary, .ok, .warn, .danger, .purple, .accent, .highlight):hover { background: color-mix(in oklab, var(--qry-tone, var(--qry-accent)) 82%, light-dark(#000, #fff)); }
+.qry-btn.highlight { color: var(--qry-on-highlight); }
+.qry-btn.highlight:hover { background: color-mix(in oklab, var(--qry-highlight) 88%, var(--qry-on-highlight)); }
+.qry-btn.ghost { background: transparent; border-color: transparent; color: var(--qry-tone, var(--qry-text)); }
+.qry-btn.ghost:hover { background: var(--qry-tint); }
+.qry-btn.ghost.highlight { color: var(--qry-highlight-text); }
+.qry-btn.sm { min-height: var(--qry-control-sm); padding: .25rem .7rem; font-size: .86rem; }
+.qry-btn.lg { min-height: calc(var(--qry-control) * 1.25); padding: .6rem 1.4rem; font-size: 1.06rem; }
+.qry-btn.block { display: flex; width: 100%; }
+.qry-btn.icon { width: var(--qry-control); padding: 0; }
+.qry-btn.icon.sm { width: var(--qry-control-sm); }                  /* square too */
+.qry-btn:disabled { opacity: .5; cursor: not-allowed; }
+.qry-btn[aria-busy="true"]::before { content: ''; width: 1em; height: 1em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: qry-spin .7s linear infinite; }
+.qry-btn svg { width: 1.1em; height: 1.1em; }
+/* segmented control: <div class="qry-btn-group" role="group"><button class="qry-btn" aria-pressed="true">…</div> */
+.qry-btn-group { display: inline-flex; }
+.qry-btn-group > .qry-btn { border-radius: 0; margin-left: -1px; }
+.qry-btn-group > .qry-btn:first-child { border-radius: var(--qry-btn-radius, var(--qry-radius-sm)) 0 0 var(--qry-btn-radius, var(--qry-radius-sm)); margin-left: 0; }
+.qry-btn-group > .qry-btn:last-child { border-radius: 0 var(--qry-btn-radius, var(--qry-radius-sm)) var(--qry-btn-radius, var(--qry-radius-sm)) 0; }
+.qry-btn-group > .qry-btn[aria-pressed="true"] { background: var(--qry-tint); border-color: var(--qry-accent); color: var(--qry-accent-strong); position: relative; }
+
+.qry-field { display: grid; gap: .35rem; font-weight: 600; font-size: .92rem; }
+.qry-input, .qry-field :where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea) {
+    width: 100%; min-height: var(--qry-control); padding: .45rem .7rem; font: 400 1rem var(--qry-font); color: var(--qry-text);
+    background: var(--qry-surface); border: 1px solid var(--qry-line-strong); border-radius: var(--qry-radius-sm);
+}
+.qry-input:focus, .qry-field :is(input, select, textarea):focus { border-color: var(--qry-accent); outline: 2px solid var(--qry-tint); }
+/* dates and times: the native picker (keyboard, locale, phone wheels; its popup follows color-scheme) */
+:is(.qry-input, .qry-field input)::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .7; }
+:is(.qry-input, .qry-field input)::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+/* a switch: <label class="qry-cluster"><input type="checkbox" class="qry-switch" role="switch"> Dark</label> */
+.qry-switch { appearance: none; position: relative; flex: none; width: 2.2rem; height: 1.3rem; margin: 0; border-radius: 999px; background: var(--qry-line-strong); cursor: pointer; transition: background var(--qry-speed); }
+.qry-switch::after { content: ''; position: absolute; top: .15rem; left: .15rem; width: 1rem; height: 1rem; border-radius: 50%; background: var(--qry-surface); box-shadow: var(--qry-shadow); transition: translate var(--qry-speed) var(--qry-ease); }
+.qry-switch:checked { background: var(--qry-accent); }
+.qry-switch:checked::after { translate: .9rem 0; }
+/* a CHOICE of a few, as one segmented row — native radios, so a form reads it (serialize, FormData) and the
+   keyboard is the browser's: <div class="qry-seg" role="radiogroup" aria-label="Effect">
+   <label><input type="radio" name="effect" value="fade"> Fade</label><label><input type="radio" name="effect" value="rise" checked> Rise</label></div> */
+.qry-seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border: 1px solid var(--qry-line); border-radius: var(--qry-btn-radius, var(--qry-radius-sm)); background: var(--qry-surface-2); }
+.qry-seg > label { position: relative; display: inline-flex; align-items: center; gap: .35rem; min-height: var(--qry-control-sm); padding: .2rem .8rem; border-radius: var(--qry-btn-radius, var(--qry-radius-sm)); font-size: .9rem; color: var(--qry-text-muted); cursor: pointer; }
+.qry-seg > label > input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.qry-seg > label:hover { color: var(--qry-text); }
+.qry-seg > label:has(:checked) { background: var(--qry-surface); color: var(--qry-accent); font-weight: 600; box-shadow: var(--qry-shadow); }
+.qry-seg > label:has(:focus-visible) { outline: 2px solid var(--qry-accent); outline-offset: 1px; }
+.qry-seg > label:has(:disabled) { opacity: .5; cursor: not-allowed; }
+@media (pointer: coarse) {   /* a finger: a bigger switch (its label is the rest of the target) */
+    .qry-switch { width: 2.8rem; height: 1.65rem; }
+    .qry-switch::after { top: .175rem; left: .175rem; width: 1.3rem; height: 1.3rem; }
+    .qry-switch:checked::after { translate: 1.15rem 0; }
+}
+/* a spinner: <span class="qry-spinner" role="status" aria-label="Loading"></span> — or aria-busy on a .qry-btn */
+.qry-spinner { display: inline-block; width: 1.2em; height: 1.2em; border: 2px solid var(--qry-line-strong); border-top-color: var(--qry-accent); border-radius: 50%; animation: qry-spin .7s linear infinite; vertical-align: middle; }
+@keyframes qry-spin { to { rotate: 1turn; } }
+.qry-field-error { color: var(--qry-danger); font-size: .82rem; font-weight: 500; }
+.qry-field-error:empty { display: none; }
+.qry-form-error { padding: .6rem .8rem; border-radius: var(--qry-radius-sm); color: var(--qry-danger); background: color-mix(in srgb, var(--qry-danger) 8%, transparent); }
+form[aria-busy="true"] { cursor: progress; }
+.qry-field:has([aria-invalid="true"]) :is(input, select, textarea) { border-color: var(--qry-danger); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONTENT — cards (with header / title / desc / footer), badges, chips, info rows, tables, code
+   ═══════════════════════════════════════════════════════════════════════════ */
+.qry-card { background: var(--qry-surface); border: 1px solid var(--qry-line); border-radius: var(--qry-radius); padding: 1.1rem 1.2rem; box-shadow: var(--qry-shadow); }
+.qry-card-header { display: flex; align-items: center; gap: .6rem; margin: -1.1rem -1.2rem 1rem; padding: .8rem 1.2rem; border-bottom: 1px solid var(--qry-line); }
+.qry-card-title { margin: 0; font: 700 1rem/1.3 var(--qry-font-display, var(--qry-font)); color: var(--qry-text-strong); display: flex; align-items: center; gap: .5rem; }
+.qry-card-desc { margin: 0 0 1rem; font-size: .9rem; color: var(--qry-text-muted); }
+.qry-card-footer { display: flex; justify-content: flex-end; gap: .5rem; margin: 1rem -1.2rem -1.1rem; padding: .7rem 1.2rem; border-top: 1px solid var(--qry-line); }
+/* an interactive card: <a class="qry-card" href="…"> or <button class="qry-card"> — a block card
+   (content at the top, text at the start) that lifts on hover; aria-pressed / aria-current mark it */
+:is(a, button).qry-card {
+    display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; gap: .35rem;
+    font: inherit; color: inherit; text-align: start; text-decoration: none; cursor: pointer;
+    transition: border-color var(--qry-speed), box-shadow var(--qry-speed), translate var(--qry-speed) var(--qry-ease);
+}
+button.qry-card { width: 100%; }
+@media (hover: hover) {
+    :is(a, button).qry-card:not(:disabled):hover { border-color: color-mix(in oklab, var(--qry-accent) 45%, var(--qry-line)); box-shadow: var(--qry-shadow-lg); translate: 0 -2px; }
+}
+:is(a, button).qry-card:not(:disabled):active { translate: 0 0; box-shadow: var(--qry-shadow); }
+:is(a, button).qry-card:is([aria-pressed="true"], [aria-current]:not([aria-current="false"])) { border-color: var(--qry-accent); box-shadow: 0 0 0 1px var(--qry-accent), var(--qry-shadow); }
+button.qry-card:disabled { opacity: .55; cursor: not-allowed; }
+/* a soft fill: the element's tone mixed into the surface — OPAQUE (it reads the same on any ground),
+   11 % light / 18 % dark. Mixed in oklab into the surface WITHOUT its hue: a red stays red on a blue
+   theme (oklch would sweep the hue through violet; even oklab drifts toward a tinted grey).
+   Callouts, badges and icon boxes use it; .qry-soft gives it to anything. */
+:is(.qry-callout, .qry-badge, .qry-icon-box, .qry-soft) {
+    --qry-soft: light-dark(color-mix(in oklab, var(--qry-tone, var(--qry-accent)) 11%, var(--qry-surface-grey)), color-mix(in oklab, var(--qry-tone, var(--qry-accent)) 18%, var(--qry-surface-grey)));
+}
+.qry-soft { background: var(--qry-soft); }
+.qry-badge { display: inline-block; padding: .1rem .55rem; border-radius: 999px; font-size: .78rem; font-weight: 700; color: color-mix(in oklab, var(--qry-tone, var(--qry-accent)) 78%, light-dark(#000, #fff)); background: var(--qry-soft); }
+:is(.qry-badge, .qry-icon-box).highlight { color: var(--qry-on-highlight); background: var(--qry-highlight); }
+.qry-muted { color: var(--qry-text-muted); }
+.qry-code { display: block; padding: .9rem 1rem; border-radius: var(--qry-radius); background: var(--qry-ink); color: var(--qry-ink-text); font: .86rem/1.55 var(--qry-font-mono); overflow-x: auto; white-space: pre; }
+.qry-code-inline { padding: .1em .35em; border-radius: 4px; background: var(--qry-surface-2); font: .9em var(--qry-font-mono); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DATA DISPLAY — dashboards and status (toned: .ok .warn .danger .purple)
+   ═══════════════════════════════════════════════════════════════════════════ */
+/* a key figure: <div class="qry-metric ok"><div class="qry-metric-value">98 %</div><div class="qry-metric-label">uptime</div></div> */
+.qry-metric { position: relative; padding: 1rem 1.1rem; border-radius: var(--qry-radius); background: var(--qry-surface); border: 1px solid var(--qry-line); box-shadow: var(--qry-shadow); overflow: hidden; }
+.qry-metric { --qry-stripe: var(--qry-tone, var(--qry-accent)); }   /* inherited by its ::before */
+.qry-metric::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--qry-stripe); }
+.qry-metric-value { font-family: var(--qry-font-display, var(--qry-font)); font-size: 1.6rem; font-weight: 700; letter-spacing: -.02em; color: var(--qry-text-strong); font-variant-numeric: tabular-nums; }
+.qry-metric-label { font-size: .78rem; font-weight: 600; letter-spacing: .02em; color: var(--qry-text-muted); }   /* no uppercase: a label may be maths (θ, a₀) */
+/* a compact label + value pair, for lists of figures */
+.qry-stat-value { font-size: 1.15rem; font-weight: 700; color: var(--qry-text-strong); font-variant-numeric: tabular-nums; }
+.qry-stat-label { font-size: .8rem; color: var(--qry-text-muted); }
+/* an icon in a soft square: <span class="qry-icon-box ok"><svg…></span> */
+.qry-icon-box { display: inline-grid; place-items: center; width: 2rem; height: 2rem; border-radius: var(--qry-radius-sm); color: var(--qry-tone, var(--qry-accent)); background: var(--qry-soft); }
+.qry-icon-box.lg { width: 2.75rem; height: 2.75rem; }
+.qry-icon-box svg { width: 55%; height: 55%; }
+/* a message in the flow of the page: <div class="qry-callout warn">…</div> */
+.qry-callout { padding: .8rem 1rem; border-left: 4px solid var(--qry-tone, var(--qry-accent)); border-radius: var(--qry-radius-sm); background: var(--qry-soft); }
+/* a dot before a status word */
+.qry-dot { --qry-stripe: var(--qry-tone, var(--qry-accent)); }
+.qry-dot::before { content: ''; display: inline-block; width: .55em; height: .55em; margin-right: .4em; border-radius: 50%; background: var(--qry-stripe); vertical-align: .08em; }
+
+/* charts (qry-web makeChart): plain SVG painted with the tokens — a theme change needs no redraw.
+   A mark takes the element's tone (.ok .warn .danger .purple .accent .highlight), or .muted for background data. */
+.qry-chart { display: block; overflow: visible; font: 500 11px/1 var(--qry-font); }
+.qry-chart-grid line { stroke: var(--qry-line); }
+.qry-chart-axis { stroke: var(--qry-line-strong); }
+.qry-chart-tick { fill: var(--qry-text-muted); font-variant-numeric: tabular-nums; }
+.qry-chart-label, .qry-chart-empty { fill: var(--qry-text-muted); font-weight: 600; }
+.qry-chart .muted { --qry-tone: var(--qry-line-strong); }
+.qry-chart-dot, .qry-chart-bar { fill: var(--qry-tone, var(--qry-accent)); }
+.qry-chart-bar { fill-opacity: .85; }
+.qry-chart-dot:hover, .qry-chart-bar:hover { fill-opacity: 1; stroke: var(--qry-text-strong); stroke-width: 1.5; }
+.qry-chart-line { fill: none; stroke: var(--qry-tone, var(--qry-accent)); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.qry-chart-rule { stroke: var(--qry-tone, var(--qry-text-muted)); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.qry-chart-rule-label { fill: var(--qry-tone, var(--qry-text-muted)); font-weight: 600; }
+.qry-chart .highlight:is(.qry-chart-line, .qry-chart-rule) { stroke: var(--qry-highlight-text); }
+.qry-chart-rule-label.highlight { fill: var(--qry-highlight-text); }
+
+/* a disclosure: <details class="qry-details"><summary>Timing</summary>…</details> — native (keyboard,
+   find-in-page, open state); the summary gets a chevron that turns when it opens */
+.qry-details > summary { display: flex; align-items: center; gap: .55rem; padding: .45rem .1rem; list-style: none; cursor: pointer; font-weight: 600; color: var(--qry-text-strong); border-radius: var(--qry-radius-sm); }
+.qry-details > summary::-webkit-details-marker { display: none; }
+.qry-details > summary::before { content: ''; flex: none; width: .42em; height: .42em; margin-inline: .15em; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; rotate: -45deg; transition: rotate var(--qry-speed) var(--qry-ease); }
+.qry-details[open] > summary::before { rotate: 45deg; }
+.qry-details > summary:hover { color: var(--qry-accent); }
+
+.qry-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.qry-chip { min-height: var(--qry-control-sm); padding: .25rem .7rem; border: 1px solid var(--qry-line-strong); border-radius: 999px; background: var(--qry-surface); color: var(--qry-text); font: 400 .86rem var(--qry-font); cursor: pointer; user-select: none; }
+.qry-chip:hover { border-color: var(--qry-accent); }
+.qry-chip[aria-pressed="true"] { background: var(--qry-accent); border-color: var(--qry-accent); color: var(--qry-on-accent); }
+
+.qry-info-row { display: flex; justify-content: space-between; gap: 1rem; padding: .35rem 0; border-bottom: 1px solid var(--qry-line); font-size: .92rem; }
+.qry-info-label { color: var(--qry-text-muted); }
+.qry-info-value { font-weight: 600; text-align: right; color: var(--qry-tone, currentColor); }
+.qry-info-value.highlight { color: var(--qry-highlight-text); }
+
+.qry-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.qry-table th, .qry-table td { padding: .5rem .7rem; border-bottom: 1px solid var(--qry-line); text-align: left; }
+.qry-table th { position: sticky; top: 0; background: var(--qry-surface-2); font-weight: 700; color: var(--qry-text-strong); white-space: nowrap; }
+.qry-table th > button { all: inherit; display: inline; padding: 0; cursor: pointer; }   /* sortableTable: a real button per header */
+.qry-table th > button:focus-visible { outline: 2px solid var(--qry-accent); outline-offset: 2px; }
+.qry-table th[aria-sort="ascending"], .qry-table th[aria-sort="descending"] { color: var(--qry-accent); }
+.qry-table .qry-num { text-align: right; font-variant-numeric: tabular-nums; }
+.qry-table td.qry-idx { color: var(--qry-text-subtle); }
+.qry-table tbody tr:hover { background: var(--qry-tint); }
+.qry-table tbody tr[tabindex] { cursor: pointer; }   /* sortableTable with onRow */
+.qry-table-empty td { text-align: center; color: var(--qry-text-muted); padding: 1.5rem; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   POPOVERS & MENUS — the native popover, placed by CSS anchor positioning
+   <button popovertarget="m">⋯</button>
+   <div id="m" popover class="qry-menu"><button>Copy</button><hr><button class="danger">Delete</button></div>
+   <div id="h" popover class="qry-popover">Any content…</div>      (makeMenu adds keys + ARIA)
+   Placed under its button, aligned to its start; flips above / to the other side near an edge.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:is(.qry-menu, .qry-popover)[popover] {
+    position: fixed; inset: auto; margin: .3rem 0;                   /* the UA centres popovers: undo it */
+    position-area: block-end span-inline-end;
+    position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+    min-width: anchor-size(width); max-width: min(92vw, 22rem); max-height: min(70vh, 30rem); overflow: auto;
+    padding: .3rem; border: 1px solid var(--qry-line); border-radius: var(--qry-radius);
+    background: var(--qry-surface); color: var(--qry-text); box-shadow: var(--qry-shadow-lg);
+}
+.qry-popover[popover] { padding: .8rem 1rem; }
+:is(.qry-menu, .qry-popover):popover-open { animation: qry-pop var(--qry-speed) var(--qry-ease); }
+.qry-menu:popover-open { display: grid; gap: 1px; min-width: max(10rem, anchor-size(width)); }
+.qry-menu > :is(button, a, [role="menuitem"]) {
+    display: flex; align-items: center; gap: .6rem; width: 100%; padding: .45rem .7rem; border: 0; border-radius: var(--qry-radius-sm);
+    background: none; color: var(--qry-tone, var(--qry-text)); font: 500 .92rem var(--qry-font); text-align: start; text-decoration: none; white-space: nowrap; cursor: pointer;
+}
+.qry-menu > :is(button, a, [role="menuitem"]):is(:hover, :focus-visible) { background: var(--qry-tint); outline: none; }
+.qry-menu > .highlight { color: var(--qry-highlight-text); }
+.qry-menu > :disabled { opacity: .5; cursor: not-allowed; }
+.qry-menu > hr { width: 100%; margin: .25rem 0; border: 0; border-top: 1px solid var(--qry-line); }
+.qry-menu > .qry-label, .qry-menu > small { padding: .35rem .7rem .15rem; font-size: .72rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--qry-text-subtle); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DIALOGS & TOASTS — qry-web alert / confirm / prompt / toast (native <dialog>)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.qry-dialog {
+    width: min(92vw, 30rem); padding: 1.3rem 1.4rem 1.1rem; border: 1px solid var(--qry-line); border-radius: var(--qry-radius-lg);
+    background: var(--qry-surface); color: var(--qry-text); box-shadow: var(--qry-shadow-lg);
+}
+.qry-dialog::backdrop { background: var(--qry-scrim); }
+.qry-dialog-title { font-family: var(--qry-font-display, var(--qry-font)); font-size: 1.1rem; margin-bottom: .6rem; }
+.qry-dialog-body p { margin: 0 0 .6rem; }
+.qry-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
+/* centred actions of equal width: .qry-dialog.center — and every dialog on a narrow screen */
+.qry-dialog.center .qry-dialog-actions { justify-content: center; }
+.qry-dialog.center .qry-dialog-actions > * { flex: 1 1 8rem; max-width: 16rem; }
+@media (max-width: 36rem) {
+    .qry-dialog-actions { justify-content: center; }
+    .qry-dialog-actions > * { flex: 1 1 8rem; max-width: 16rem; }
+}
+.qry-dialog[open] { animation: qry-pop var(--qry-speed) var(--qry-ease); }
+@keyframes qry-pop { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+/* the head of a dialog that closes from its corner: the title, then its × — <header class="qry-dialog-head">
+   <h2 class="qry-dialog-title">Settings</h2><button class="qry-btn ghost sm icon" data-close aria-label="Close">×</button></header> */
+.qry-dialog-head { display: flex; align-items: center; gap: .5rem; margin: -.35rem -.4rem .8rem 0; }
+.qry-dialog-head > .qry-dialog-title { flex: 1; margin: 0; }
+/* A SHEET: the dialog as a side panel (settings, an inspector) — <dialog class="qry-dialog sheet">, on the
+   end side; `.start` puts it on the other. Same makeDialog, [data-close], Escape and backdrop as any dialog;
+   --qry-sheet-w sizes it. It scrolls its own content; the page behind stays where it was. */
+.qry-dialog.sheet {
+    width: min(92vw, var(--qry-sheet-w, 22rem)); height: 100dvh; max-height: none; margin: 0 0 0 auto;
+    border-width: 0 0 0 1px; border-radius: 0; overflow: auto; overscroll-behavior: contain;
+}
+.qry-dialog.sheet.start { margin: 0 auto 0 0; border-width: 0 1px 0 0; }
+.qry-dialog.sheet[open] { animation: qry-sheet var(--qry-speed) var(--qry-ease); }
+.qry-dialog.sheet.start[open] { animation-name: qry-sheet-start; }
+@keyframes qry-sheet { from { opacity: 0; transform: translateX(1.5rem); } }
+@keyframes qry-sheet-start { from { opacity: 0; transform: translateX(-1.5rem); } }
+
+.qry-toasts { position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); z-index: 1000; display: grid; gap: .5rem; max-width: min(92vw, 24rem); }
+.qry-toast {
+    padding: .7rem 1rem; border-radius: var(--qry-radius); border-left: 4px solid var(--qry-tone, var(--qry-accent));
+    background: var(--qry-surface); color: var(--qry-text); box-shadow: var(--qry-shadow-lg); cursor: pointer;
+    animation: qry-pop var(--qry-speed) var(--qry-ease); transition: opacity var(--qry-speed), transform var(--qry-speed);
+}
+.qry-toast { display: flex; align-items: start; gap: .6rem; }
+.qry-toast-text { flex: 1; }
+.qry-toast-close { margin: -.2rem -.4rem -.2rem 0; padding: 0 .3rem; border: 0; border-radius: var(--qry-radius-sm); background: none; color: var(--qry-text-muted); font: 1.1rem/1.2 var(--qry-font); cursor: pointer; }
+.qry-toast-close:hover { color: var(--qry-text); background: var(--qry-tint); }
+.qry-toast.is-leaving { opacity: 0; transform: translateX(12px); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NAVIGATION — tabs (makeTabs), sidebar (makeSidebar), header (makeAutoHideHeader)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.qry-tabs { display: flex; gap: .2rem; border-bottom: 1px solid var(--qry-line); overflow-x: auto; }
+.qry-tab { min-height: var(--qry-control-sm); padding: .55rem .9rem; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--qry-text-muted); font: 600 .92rem var(--qry-font); cursor: pointer; white-space: nowrap; }
+.qry-tab:hover { color: var(--qry-text); }
+.qry-tab[aria-selected="true"] { color: var(--qry-accent); border-bottom-color: var(--qry-accent); }
+.qry-tab:is(:has(svg), :has(img)) { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; }
+/* .fill: the tabs share the bar's width equally (a drawer's tab bar) */
+.qry-tabs.fill { gap: 0; }
+.qry-tabs.fill > .qry-tab { flex: 1 1 0; min-width: 0; padding-inline: .4rem; overflow: hidden; text-overflow: ellipsis; }
+/* panels: shown / hidden by the `hidden` attribute (makeTabs) */
+
+.qry-header { display: flex; align-items: center; gap: .75rem; height: 3.5rem; padding: 0 1rem; background: var(--qry-glass); backdrop-filter: blur(10px); border-bottom: 1px solid var(--qry-line); }
+.qry-header.sticky { position: sticky; top: 0; z-index: 30; transition: transform var(--qry-speed) var(--qry-ease); }
+.qry-header.sticky.is-hidden { transform: translateY(-100%); }
+
+.qry-app { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; grid-template-columns: minmax(0, 1fr); }   /* never wider than the screen */
+.qry-app-body { display: flex; min-height: 0; }
+.qry-content { flex: 1 1 auto; min-width: 0; padding: var(--qry-gap); overflow: auto; }
+.qry-sidebar { flex: 0 0 15rem; width: 15rem; display: flex; flex-direction: column; gap: .2rem; padding: .7rem; background: var(--qry-surface); border-right: 1px solid var(--qry-line); transition: width var(--qry-speed) var(--qry-ease), flex-basis var(--qry-speed) var(--qry-ease); overflow: hidden; }
+.qry-sidebar :where(a, button):not(.qry-btn) { display: flex; align-items: center; gap: .6rem; padding: .5rem .6rem; border: 0; border-radius: var(--qry-radius-sm); background: none; color: var(--qry-text); font: 500 .94rem var(--qry-font); text-decoration: none; white-space: nowrap; cursor: pointer; }
+.qry-sidebar :where(a, button):not(.qry-btn):hover { background: var(--qry-tint); }
+.qry-sidebar [aria-current]:not([aria-current="false"]) { background: var(--qry-tint); color: var(--qry-accent); }
+.qry-sidebar-head { display: flex; align-items: center; gap: .6rem; padding: .3rem .4rem .8rem; font-weight: 700; }
+.qry-sidebar-section { margin: .9rem .6rem .3rem; font-size: .72rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--qry-text-subtle); }
+.qry-sidebar-foot { margin-top: auto; padding-top: .6rem; border-top: 1px solid var(--qry-line); }
+.qry-sidebar.is-collapsed { flex-basis: 3.6rem; width: 3.6rem; }
+.qry-sidebar.is-collapsed .qry-sidebar-section { display: none; }
+.qry-sidebar.is-collapsed .qry-label { display: none; }
+.qry-overlay { position: fixed; inset: 0; z-index: 39; background: var(--qry-scrim); opacity: 0; pointer-events: none; transition: opacity var(--qry-speed); }
+.qry-overlay.is-visible { opacity: 1; pointer-events: auto; }
+@media (max-width: 768px) {
+    .qry-sidebar.mobile { position: fixed; inset: 0 auto 0 0; z-index: 40; transform: translateX(-100%); transition: transform var(--qry-speed) var(--qry-ease); box-shadow: var(--qry-shadow-lg); }
+    .qry-sidebar.mobile.is-open { transform: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WORKSPACE — full-screen tool shell: header · aside | splitter | main | splitter | aside.end · footer
+   Both asides are optional drawers: a tab bar on top stays pinned while the drawer scrolls.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.qry-workspace { --qry-aside-w: 240px; --qry-aside-end-w: 280px;   /* px: makeSplitter reads and writes them */
+    height: 100vh; width: 100%; overflow: hidden; display: grid; grid-template-rows: auto 1fr auto; grid-template-columns: minmax(0, 1fr); background: var(--qry-bg); }   /* never wider than the screen */
+.qry-workspace-header, .qry-workspace-footer { display: flex; align-items: center; gap: .5rem; padding: 0 .7rem; background: var(--qry-surface); }
+.qry-workspace-header { height: 3rem; border-bottom: 1px solid var(--qry-line-strong); }
+.qry-workspace-footer { height: 2rem; border-top: 1px solid var(--qry-line-strong); font-size: .78rem; color: var(--qry-text-muted); }
+.qry-workspace-body { min-height: 0; display: flex; }
+.qry-workspace-aside { flex: 0 0 var(--qry-aside-w); width: var(--qry-aside-w); min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: auto; background: var(--qry-surface); border-right: 1px solid var(--qry-line); }
+.qry-workspace-aside.end { flex-basis: var(--qry-aside-end-w); width: var(--qry-aside-end-w); border-right: 0; border-left: 1px solid var(--qry-line); }
+.qry-workspace-aside > .qry-tabs { position: sticky; top: 0; z-index: 1; flex: none; background: var(--qry-surface); }
+/* a drawer closes with its splitter: is-aside-collapsed (the start one), is-end-collapsed (the end one) */
+.qry-workspace.is-aside-collapsed :is(.qry-workspace-aside:not(.end), .qry-workspace-aside:not(.end) + .qry-split),
+.qry-workspace.is-end-collapsed :is(.qry-workspace-aside.end, .qry-split:has(+ .qry-workspace-aside.end)) { display: none; }
+.qry-workspace-main { flex: 1 1 auto; min-width: 0; min-height: 0; position: relative; display: flex; overflow: hidden; }
+
+.qry-split { flex: 0 0 6px; cursor: col-resize; position: relative; touch-action: none; }
+.qry-split::after { content: ''; position: absolute; inset: 0 2px; border-radius: 2px; background: var(--qry-line); transition: background var(--qry-speed); }
+.qry-split:hover::after, .qry-split.is-dragging::after { background: var(--qry-accent); }
+.qry-split.horizontal { cursor: row-resize; }
+.qry-split.horizontal::after { inset: 2px 0; }
+
+.qry-stage { position: relative; flex: 1 1 auto; overflow: auto; cursor: grab; touch-action: none; background: var(--qry-surface-2); }
+.qry-stage.is-grabbing { cursor: grabbing; }
+/* <div class="qry-workspace mobile">: on a narrow screen (≤ 768 px, as .qry-sidebar.mobile) the tool
+   becomes a page — header, aside, main, footer stacked, the document scrolls, no splitter */
+@media (max-width: 768px) {
+    .qry-workspace.mobile { height: auto; min-height: 100vh; min-height: 100dvh; overflow: visible; }
+    .qry-workspace.mobile .qry-workspace-header { position: sticky; top: 0; z-index: 20; height: auto; min-height: 3rem; flex-wrap: wrap; padding-block: .35rem; }   /* its controls wrap, never off-screen */
+    .qry-workspace.mobile .qry-workspace-body { flex-direction: column; }
+    .qry-workspace.mobile .qry-workspace-aside { flex: none; width: auto; overflow: visible; border-right: 0; border-bottom: 1px solid var(--qry-line); }
+    .qry-workspace.mobile .qry-workspace-aside.end { border-left: 0; border-top: 1px solid var(--qry-line); }
+    .qry-workspace.mobile .qry-split { display: none; }
+    .qry-workspace.mobile .qry-workspace-main, .qry-workspace.mobile .qry-content { overflow: visible; }
+}
+
+.qry-drop-overlay { position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; background: color-mix(in srgb, var(--qry-accent) 18%, transparent); opacity: 0; pointer-events: none; transition: opacity var(--qry-speed-fast); }
+.qry-drop-overlay.is-visible { opacity: 1; }
+.qry-drop-overlay-inner { display: grid; justify-items: center; gap: .6rem; padding: 2rem 3rem; border: 2px dashed var(--qry-accent); border-radius: var(--qry-radius-lg); background: var(--qry-surface); color: var(--qry-accent); font-weight: 700; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SITE — defaults for the qry-web page helpers (a page may style its own instead)
+   ═══════════════════════════════════════════════════════════════════════════ */
+/* viewer: <dialog class="qry-viewer"><button class="close">…<figure><img><figcaption></figure>
+   <button data-go="-1">‹</button><button data-go="1">›</button></dialog> */
+.qry-viewer { width: 100vw; height: 100vh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: color-mix(in oklab, var(--qry-ink) 94%, transparent); color: var(--qry-ink-text); }
+.qry-viewer::backdrop { background: transparent; }
+.qry-viewer figure { margin: 0; height: 100%; display: grid; grid-template-rows: 1fr auto; place-items: center; padding: 3.5rem 1rem 1rem; }
+.qry-viewer img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.qry-viewer figcaption { padding: .6rem; font-size: .92rem; color: var(--qry-ink-text); }
+.qry-viewer-pos { opacity: .75; margin-left: .5rem; font-variant-numeric: tabular-nums; }
+.qry-viewer button { position: absolute; display: grid; place-items: center; width: 3rem; height: 3rem; border: 0; border-radius: 50%; background: color-mix(in oklab, var(--qry-ink-text) 12%, transparent); color: var(--qry-ink-text); font-size: 1.6rem; cursor: pointer; }
+.qry-viewer button:hover { background: color-mix(in oklab, var(--qry-ink-text) 24%, transparent); }
+.qry-viewer .close { top: 1rem; right: 1rem; }
+.qry-viewer [data-go="-1"] { left: 1rem; top: 50%; transform: translateY(-50%); }
+.qry-viewer [data-go="1"] { right: 1rem; top: 50%; transform: translateY(-50%); }
+
+/* reveal: hidden until seen — only when JavaScript runs (reveal() adds .qry-js) */
+.qry-js [data-reveal]:not(.is-in) { opacity: 0; transform: translateY(14px); }
+[data-reveal] { transition: opacity var(--qry-speed-slow) var(--qry-ease), transform var(--qry-speed-slow) var(--qry-ease); transition-delay: var(--qry-delay, 0s); }
+
+/* back to top */
+.qry-to-top { position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); z-index: 30; display: grid; place-items: center; width: 2.8rem; height: 2.8rem; border-radius: 50%; background: var(--qry-surface); color: var(--qry-text); box-shadow: var(--qry-shadow-lg); text-decoration: none; transition: opacity var(--qry-speed), visibility var(--qry-speed); }
+.qry-to-top.is-hidden { opacity: 0; visibility: hidden; }
+
+/* films(): one play button over the poster (the video's parent is the positioned box) */
+.qry-film-play { position: absolute; inset: 0; display: grid; place-items: center; width: 100%; border: 0; padding: 0; background: none; cursor: pointer; }
+.qry-film-play span { display: grid; place-items: center; width: 4.5rem; aspect-ratio: 1; border-radius: 50%; background: color-mix(in oklab, var(--qry-ink) 70%, transparent); color: var(--qry-ink-text); transition: transform var(--qry-speed-fast); }
+.qry-film-play svg { width: 1.8rem; height: 1.8rem; margin-left: .2rem; fill: currentColor; }
+.qry-film-play:hover span, .qry-film-play:focus-visible span { transform: scale(1.08); }
+/* click-to-load embed: a link sized like the player it becomes */
+.qry-embed, .qry-embed-frame { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: var(--qry-radius); background: var(--qry-surface-2) center / cover; color: var(--qry-text); text-decoration: none; font-weight: 600; }
+
+/* scroll-spy: the menu link of the section being read */
+a.is-current { color: var(--qry-accent); }
+
+/* keyboard hints: <main class="qry-keys"> (or <html class="qry-keys">) — every element inside it
+   with aria-keyshortcuts shows the shortcut in a small key badge, on devices with a mouse only
+   (fine pointer + hover: a touch screen has no keys to hint at). The badge is the attribute as
+   written — give an element ONE shortcut ("T", "1", "Enter"); it is drawn in currentColor, so it
+   follows the element's tone; its text is kept out of the accessible name (aria-keyshortcuts
+   already tells assistive technology). Inputs cannot carry ::after: label them yourself. */
+@media (hover: hover) and (pointer: fine) {
+    .qry-keys [aria-keyshortcuts]::after {
+        content: attr(aria-keyshortcuts) / ""; display: inline-block; min-width: 1.5em; margin-inline-start: .45em; padding: 0 .35em;
+        border: 1px solid color-mix(in srgb, currentColor 40%, transparent); border-bottom-width: 2px; border-radius: 4px;
+        font: 600 .7rem/1.45 var(--qry-font-mono); text-align: center; opacity: .85; vertical-align: .1em;
+    }
+}
+
+/* $.tip — the core's shared tooltip, skinned */
+#qry-tooltip { max-width: 18rem; padding: .45rem .7rem; border: 1px solid var(--qry-line); border-radius: var(--qry-radius-sm); background: var(--qry-surface); color: var(--qry-text); box-shadow: var(--qry-shadow-lg); font: .82rem/1.4 var(--qry-font); }
+#qry-tooltip-title { font-weight: 700; color: var(--qry-text-strong); }
+#qry-tooltip-content { color: var(--qry-text-muted); }
+
+}
+
+@layer qry.utilities {
+/* ═══════════════════════════════════════════════════════════════════════════
+   UTILITIES
+   ═══════════════════════════════════════════════════════════════════════════ */
+.qry-animate { animation: qry-fade-in var(--qry-speed) var(--qry-ease) both; }
+.qry-stagger > * { animation: qry-fade-in var(--qry-speed) var(--qry-ease) both; animation-delay: calc(var(--qry-i, 0) * 50ms); }
+.qry-stagger > :nth-child(2) { --qry-i: 1; } .qry-stagger > :nth-child(3) { --qry-i: 2; } .qry-stagger > :nth-child(4) { --qry-i: 3; }
+.qry-stagger > :nth-child(5) { --qry-i: 4; } .qry-stagger > :nth-child(6) { --qry-i: 5; } .qry-stagger > :nth-child(n+7) { --qry-i: 6; }
+@keyframes qry-fade-in { from { opacity: 0; transform: translateY(6px); } }
+.qry-safe-top { padding-top: env(safe-area-inset-top, 0px); }
+.qry-safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.qry-safe-x { padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+.qry-safe-y { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.qry-safe-all { padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+.qry-no-select { user-select: none; }
+.qry-touch-none { touch-action: none; }
+.qry-touch-pan-x { touch-action: pan-x; }
+.qry-touch-pan-y { touch-action: pan-y; }
+.qry-touch-manip { touch-action: manipulation; }   /* no double-tap zoom delay on buttons */
+@media print {
+    :root, [data-theme] { color-scheme: light !important; }           /* paper is light */
+    .qry-header, .qry-sidebar, .qry-toasts, .qry-to-top, .qry-overlay, .qry-skip, .qry-drop-overlay, #qry-tooltip, .qry-dev-console { display: none !important; }
+    [data-reveal] { opacity: 1 !important; transform: none !important; }
+    .qry-workspace { height: auto; overflow: visible; }
+    body { background: #fff; color: #000; }
+}
+}

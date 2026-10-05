@@ -35,7 +35,7 @@
 //   book.persist(idx);                                               // project
 
 import { OcdPage, pageShell, pageFile, parseFonts, OCD_VERSION } from './ocd.js';
-import { zipSync } from 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm';
+import { zipSync } from '../vendor/fflate.js';
 
 const P = window.prism;
 const enc = (s) => new TextEncoder().encode(s);
