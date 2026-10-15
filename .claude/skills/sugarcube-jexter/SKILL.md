@@ -1682,6 +1682,33 @@ before shipping, compile under BOTH JDK 21 and the newest JDK the user runs.
 TAB back as a space (doc-D p20: `[\t?]/[ ?]`); on doc-B the `badmat` hostile payload lands where the reader
 never looks, so it is read in silence and gate 5 goes red.
 
+### A downstream reader is a reference engine too: write images every decoder gets right (2026-10-15)
+
+A press customer feeds the normalized PDF to its own PDF→OCD converter (not ours: a different "OCD").
+Pages that Acrobat, PDFBox and poppler showed perfectly came out of it with flat colours as drifting
+cyan/magenta STRIPES and ghosted logos, while the SOURCE PDF converted fine. The pixels were not the
+cause: decoded, every image of the output equalled the source's, soft mask included. The ENCODING was.
+
+- The model stores a lossless image as PNG (`ImageIO`), and `PdfWriter` handed those bytes to
+  `PDImageXObject.createFromByteArray`, which keeps the PNG encoder's per-row predictor filters. Measured
+  on the reported page set: rows **Paeth 13 966 · Up 4 321 · Sub 651 · None 165 · Average 67**. The
+  source (iText) used **Sub on every row**. A Paeth/Average decoder that is subtly wrong (the classic is
+  Paeth over SIGNED bytes) smears exactly those stripes; Sub needs only the current row and every decoder
+  gets it right. Simulated with a signed-byte Paeth: the old output turns to confetti, the new one is
+  untouched.
+- `write/PdfImages` now writes PNG images itself: 8-bit DeviceRGB/DeviceGray samples, alpha as a separate
+  `/SMask` (only when some pixel is translucent), Flate + Predictor 15 with **Sub on every row**,
+  `DecodeParms` inline. Grey is read from the RASTER, never `getRGB` (Java's grey space is linear: getRGB
+  would lighten it). A non-8-bit image (16-bit) and any non-PNG bytes keep PDFBox's path; JPEG stays DCT.
+- Verified: 0 differing pixels in poppler AND PDFBox on the customer's 5 pages, the 27-feature matrix and
+  a grey / grey+alpha / palette / 16-bit fixture; byte-reproducible; qpdf unchanged; +9% file size on a
+  photo-heavy press file (Sub compresses photos a little less than Paeth), 46 fewer objects.
+- The lesson for any writer change: the gates prove the PDF is RIGHT; a customer's own reader proves it
+  is ORDINARY. Prefer the encoding the source producer used over the cleverest legal one.
+- Still open, and the bigger win: a source JPEG with a soft mask is DECODED at import (`passThrough`
+  refuses masked images), so it comes back as Flate — on this file 2.6 MB in, 11–12 MB out. Keeping the
+  DCT bytes with a separate mask needs the model to carry the mask beside the image.
+
 ### Jexter's hot folder and its folders, driven for real (2026-09-21)
 
 A press customer's report, three defects, each reproduced on the ORIGINAL build before being fixed:

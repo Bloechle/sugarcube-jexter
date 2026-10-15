@@ -491,7 +491,7 @@ public final class PdfWriter {
         if (img == null) {
             byte[] bytes = doc.image(ref);
             if (bytes == null) return;
-            img = PDImageXObject.createFromByteArray(pdf, bytes, ref);
+            img = PdfImages.create(pdf, bytes, ref);
             images.put(ref, img);
         }
         cs.drawImage(img, new Matrix(im.transform().awt()));   // unit square → page
