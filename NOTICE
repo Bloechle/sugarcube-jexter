@@ -15,7 +15,7 @@ It bundles and depends on the following third-party software:
 - Bouncy Castle (optional, runtime — for encrypted PDFs).
   Licensed under the Bouncy Castle license (MIT-style).
 - ZigZag — document image binarization and background removal, vendored as source
-  under src/zigzag/ from github.com/Bloechle/zigzag (the upstream is the authority;
+  under src/sugarcube/zigzag/ from github.com/Bloechle/zigzag (the upstream is the authority;
   this copy differs from ports/ZigZag.java by its package line only).
   Copyright (c) Jean-Luc Bloechle. Licensed under the GNU Affero General Public
   License v3.0; published as Bloechle, Hennebert, Gisler, "ZigZag: A Robust

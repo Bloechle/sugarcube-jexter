@@ -16,7 +16,7 @@ import sugarcube.jexter.ocd.model.OCDLayerContent;
 import sugarcube.jexter.ocd.model.OCDPage;
 import sugarcube.jexter.ocd.model.OCDText;
 
-import zigzag.ZigZag;
+import sugarcube.zigzag.ZigZag;
 
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;

@@ -18,7 +18,7 @@
  *
  * Copyright (c) Jean-Luc Bloechle - AGPL v3
  */
-package zigzag;
+package sugarcube.zigzag;
 
 
 import javax.imageio.ImageIO;
