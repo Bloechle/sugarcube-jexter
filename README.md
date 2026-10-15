@@ -122,7 +122,7 @@ PDF ─[convert.PdfImporter]→ OCDDocument ─[write.*]→ PDF · EPUB · HTML 
 the same `-Xlint:all -Werror` gate as CI. It opens a local deck, or runs headless:
 
 ```bash
-node nimbus-jexter.cjs                      # deck: jar · build (jar + app-image) · ai bundle
+node nimbus-jexter.cjs                      # deck: jar · build (jar + app-image)
 node nimbus-jexter.cjs --run=jar  $(pwd)    # _artifacts/sugarcube-jexter.jar
 node nimbus-jexter.cjs --run=build $(pwd)   # + _artifacts/SugarcubeJexter/ (bundled runtime, one .exe per tool)
 ```

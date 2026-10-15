@@ -4,17 +4,17 @@ description: >
   Sugarcube jexter — a Java engine (Apache PDFBox 3.x, JDK 21+) that lifts a PDF
   into one normalized in-memory model, the Open Canonical Document (OCD), and
   projects it to PDF, fixed-layout EPUB3, reflowable HTML, SVG, Markdown, DocTags,
-  or the self-contained OCD-EPUB (.ocd.epub) working format. Use this bundle when
+  or the self-contained OCD-EPUB (.ocd.epub) working format. Use this card when
   working on the OCD model, the PDF→OCD import (pdfimport), the analysis pass
   (geometry-first structure recovery, nav-guided alignment), the projections
   (write.*), font compilation (GlyfOtf/CffOtf), the Prism workbench, or the
   convert contract it shares with the conversion service (doc/FRONTEND.md).
-  Read this card first, then the four documents under
-  doc/ (FORMAT, ANALYSIS, FRONTEND, TRACER), then open source files on demand
-  via the Files table in the overview.
+  Read this card first, then the skill .claude/skills/sugarcube-jexter/SKILL.md,
+  then the four documents under doc/ (FORMAT, ANALYSIS, FRONTEND, TRACER), then
+  open source files on demand.
 ---
 
-# jexter — what it is, and how to read this bundle
+# jexter — what it is, and how to work on it
 
 `jexter` opens a PDF and lifts it into **one** normalized model — the **OCD**
 (Open Canonical Document) — then projects that single model to every output.
@@ -60,16 +60,28 @@ moves a pixel.
 - **A change that REMOVES content must prove the content is invisible** — every reference engine paints nothing there, and the ink measurement shows a gain, not a trade. Rendering first, structure second: OCD-EPUB is a faithful replica that also carries a logical layer, never the other way round.
 - **Name by contract, not mechanism.** English code/comments/docs; French conversation.
 - **Detect the obvious, defer the ambiguous** — headings + reading order are heuristic/nav; figures/tables/captions/lists/code are deferred to PDF/UA or the optional LLM `Refiner`.
-- **`_` prefix = never committed.** `_artifacts/` holds the deliverables (`target/` is the intermediate scratch — the two are kept apart on purpose), `_private/` and `_ai-*` never leave the machine; every one of them is ignored, without exception. `nimbus-jexter.cjs` at the root is the build orchestrator — tracked, because it is the documented way to build the project. Everything else under `src/` is the engine.
+- **`_` prefix = never committed.** `_artifacts/` holds the deliverables (`target/` is the intermediate scratch — the two are kept apart on purpose), `_private/` never leaves the machine; every one of them is ignored, without exception. `nimbus-jexter.cjs` at the root is the build orchestrator — tracked, because it is the documented way to build the project. Everything else under `src/` is the engine.
 
-## Session setup (what the generic project instructions defer to this card)
+## Skills — read before working
 
-- **Skills** — read `sugarcube-jexter` at `start` (dev, fidelity, release gates); `nimbus` for the
-  build deck, the AI bundle or these instructions; `docling` when the task touches DocTags
-  / OCD-AI; `qry-js` when it touches Prism, PDFInspector, Jexter or any web UI.
-- **Repo** — `github.com/Bloechle/sugarcube-jexter` (public). When this bundle predates the
-  question, fetch the file from `main` rather than answering from the bundle.
-- **Build** — `node nimbus-jexter.cjs` (deck) or `node nimbus-jexter.cjs --run=jar|build|context <abs path>`;
+| Where | Skill |
+|---|---|
+| anything in this repo: dev, fidelity gates, Prism, release | `.claude/skills/sugarcube-jexter/SKILL.md` (in the repo, updated by commit) |
+| the build deck family (`nimbus-jexter.cjs`) | account skill `nimbus` |
+| DocTags / OCD-AI | account skill `docling` |
+| Prism, PDFInspector, Jexter or any web UI | account skill `qry-js` |
+
+Private notes (market audit, who consumes the library) stay in the account skill
+`sugarcube-jexter`: this repo is public. Skill < this card < the source: a disagreement is a
+signal — fix the skill in the same commit.
+
+## Session setup
+
+- **Repo** — `git clone --depth 1 https://github.com/Bloechle/sugarcube-jexter` (public). The clone
+  is the hand-off: there is no AI bundle any more. Push straight to `main`; every push runs the CI
+  gate below, so reproduce it first. Write LF. No customer document, name or contact ever enters
+  the repo.
+- **Build** — `node nimbus-jexter.cjs` (deck) or `node nimbus-jexter.cjs --run=jar|build <abs path>`;
   CI is `.github/workflows/build.yml`: `javac --release 21 -Xlint:all -Werror` over the WHOLE tree
   (`src/jj2000` included) + doclint over **our** files only (`grep -v '^src/jj2000/'`, with
   `-sourcepath src` so vendored types still resolve) + `node --check` + link check. `mvn -q package` is an IDE convenience, not the build.
