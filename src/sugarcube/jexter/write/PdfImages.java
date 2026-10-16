@@ -8,7 +8,9 @@ import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.awt.color.ColorSpace;
 import java.awt.image.ColorModel;
+import java.awt.image.IndexColorModel;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -27,7 +29,12 @@ import java.io.OutputStream;
  * the one every decoder gets right; it costs a little compression on photographs and nothing on the flat
  * areas where the stripes showed.
  *
- * <p>JPEG bytes are not touched: they go through PDFBox as before and stay DCT.
+ * <p>A black-and-white image (a 1-bit PNG: every bilevel scan, every TIFF G4 page re-encoded at import)
+ * is written as it always was, 1-bit DeviceGray, Flate, no predictor — 24× less data than RGB, and no row
+ * filter at all to get wrong.
+ *
+ * <p>JPEG bytes are not touched: they go through PDFBox as before and stay DCT. A 16-bit PNG goes through
+ * PDFBox too, which writes it 8-bit DeviceRGB without a predictor — the behaviour before this class.
  */
 final class PdfImages {
 
@@ -38,6 +45,7 @@ final class PdfImages {
     static PDImageXObject create(PDDocument pdf, byte[] bytes, String name) throws IOException {
         if (isPng(bytes)) {
             BufferedImage bi = ImageIO.read(new ByteArrayInputStream(bytes));
+            if (bi != null && bilevel(bi)) return bilevelImage(pdf, bi);
             if (bi != null && eightBit(bi)) return lossless(pdf, bi);
         }
         return PDImageXObject.createFromByteArray(pdf, bytes, name);
@@ -47,17 +55,58 @@ final class PdfImages {
         return b.length > 8 && (b[0] & 0xFF) == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G';
     }
 
-    /** Every band 8 bits deep: the only depth written here. A 16-bit image keeps PDFBox's own path,
-     *  which preserves its depth, rather than lose half of it. */
+    /** Every band 8 bits deep — what {@link #lossless} writes. A 16-bit image keeps PDFBox's own path. */
     private static boolean eightBit(BufferedImage bi) {
         for (int bits : bi.getColorModel().getComponentSize()) if (bits != 8) return false;
         return true;
     }
 
+    /** A 1-bit image, opaque: a 1-bit grey PNG, or a palette of at most two entries that are black and
+     *  white. Decided from the PNG's own colour model, never from the pixels — an RGB image that merely
+     *  looks black and white stays RGB, because a press reader with a CMYK output intent paints DeviceGray
+     *  (black only) and DeviceRGB (rich black) differently. */
+    private static boolean bilevel(BufferedImage bi) {
+        ColorModel cm = bi.getColorModel();
+        if (cm.hasAlpha()) return false;
+        if (cm instanceof IndexColorModel icm) {
+            if (icm.getMapSize() > 2 || icm.getTransparentPixel() >= 0) return false;
+            for (int i = 0; i < icm.getMapSize(); i++) {
+                int rgb = icm.getRGB(i) & 0xFFFFFF;
+                if (rgb != 0 && rgb != 0xFFFFFF) return false;
+            }
+            return true;
+        }
+        return cm.getColorSpace().getType() == ColorSpace.TYPE_GRAY && cm.getComponentSize(0) == 1;
+    }
+
+    /** 1-bit DeviceGray (1 = white, rows padded to a byte), Flate, no predictor. */
+    private static PDImageXObject bilevelImage(PDDocument pdf, BufferedImage bi) throws IOException {
+        int w = bi.getWidth(), h = bi.getHeight(), stride = (w + 7) / 8;
+        COSStream st = pdf.getDocument().createCOSStream();
+        st.setItem(COSName.TYPE, COSName.XOBJECT);
+        st.setItem(COSName.SUBTYPE, COSName.IMAGE);
+        st.setInt(COSName.WIDTH, w);
+        st.setInt(COSName.HEIGHT, h);
+        st.setInt(COSName.BITS_PER_COMPONENT, 1);
+        st.setItem(COSName.COLORSPACE, COSName.DEVICEGRAY);
+        int[] px = new int[w];
+        byte[] row = new byte[stride];
+        try (OutputStream out = st.createOutputStream(COSName.FLATE_DECODE)) {
+            for (int y = 0; y < h; y++) {
+                bi.getRGB(0, y, w, 1, px, 0, w);
+                java.util.Arrays.fill(row, (byte) 0);
+                for (int x = 0; x < w; x++)
+                    if ((px[x] & 0xFFFFFF) == 0xFFFFFF) row[x >> 3] |= (byte) (0x80 >>> (x & 7));
+                out.write(row);
+            }
+        }
+        return new PDImageXObject(new org.apache.pdfbox.pdmodel.common.PDStream(st), null);
+    }
+
     private static PDImageXObject lossless(PDDocument pdf, BufferedImage bi) throws IOException {
         int w = bi.getWidth(), h = bi.getHeight();
         ColorModel cm = bi.getColorModel();
-        boolean gray = cm.getNumColorComponents() == 1 && cm.getColorSpace().getType() == java.awt.color.ColorSpace.TYPE_GRAY;
+        boolean gray = cm.getNumColorComponents() == 1 && cm.getColorSpace().getType() == ColorSpace.TYPE_GRAY;
         boolean alpha = cm.hasAlpha();
         int n = gray ? 1 : 3;
         byte[] samples = new byte[w * h * n];

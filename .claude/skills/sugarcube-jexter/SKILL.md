@@ -1703,7 +1703,14 @@ decoded them, which is what settled it — compare those, not screenshots:
 - **The fix**: `write/PdfImages` writes PNG images itself — 8-bit DeviceRGB/DeviceGray samples, alpha as
   a separate `/SMask` (only when a pixel is translucent), Flate + Predictor 15 with **Sub on every row**,
   `DecodeParms` inline. Grey is read from the RASTER, never `getRGB` (Java's grey is linear: getRGB
-  lightens it). 16-bit and non-PNG bytes keep PDFBox's path; JPEG stays DCT. After it, the simulator
+  lightens it). A 1-bit PNG (every bilevel scan, every TIFF G4 page, which `imageimport` re-encodes as
+  PNG) is written 1-bit DeviceGray, Flate, NO predictor — as before: the first version of the fix sent it
+  through the 8-bit path and a black-and-white scan came out 8-bit RGB, 24× the data, every gate green
+  (caught only by converting a 1-bit PNG and reading the XObject). "Bilevel" is decided from the PNG's
+  colour model, never the pixels: an RGB image that merely looks black and white stays RGB, because with
+  a CMYK output intent DeviceGray (black only) and DeviceRGB (rich black) print differently. 16-bit and
+  non-PNG bytes keep PDFBox's path (no predictor; 16-bit comes out 8-bit RGB, as it always did); JPEG
+  stays DCT. Normalizing to Sub is now part of the normalization contract. After it, the simulator
   finds **0 corrupted images** on the same 5 documents. Pixel A/B: 0 differing pixels in poppler AND
   PDFBox on the customer files, the 27-feature matrix and a grey/grey+alpha/palette/16-bit fixture;
   byte-reproducible; +9 % on a photo-heavy file.
