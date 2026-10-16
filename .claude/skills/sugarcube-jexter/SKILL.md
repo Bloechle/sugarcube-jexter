@@ -1682,32 +1682,40 @@ before shipping, compile under BOTH JDK 21 and the newest JDK the user runs.
 TAB back as a space (doc-D p20: `[\t?]/[ ?]`); on doc-B the `badmat` hostile payload lands where the reader
 never looks, so it is read in silence and gate 5 goes red.
 
-### A downstream reader is a reference engine too: write images every decoder gets right (2026-10-15)
+### A downstream reader is a reference engine too: write images every decoder gets right (2026-10-15/16)
 
 A press customer feeds the normalized PDF to its own PDF→OCD converter (not ours: a different "OCD").
 Pages that Acrobat, PDFBox and poppler showed perfectly came out of it with flat colours as drifting
-cyan/magenta STRIPES and ghosted logos, while the SOURCE PDF converted fine. The pixels were not the
-cause: decoded, every image of the output equalled the source's, soft mask included. The ENCODING was.
+cyan/magenta STRIPES, while the SOURCE PDF converted fine. Its output container holds the images as it
+decoded them, which is what settled it — compare those, not screenshots:
 
-- The model stores a lossless image as PNG (`ImageIO`), and `PdfWriter` handed those bytes to
-  `PDImageXObject.createFromByteArray`, which keeps the PNG encoder's per-row predictor filters. Measured
-  on the reported page set: rows **Paeth 13 966 · Up 4 321 · Sub 651 · None 165 · Average 67**. The
-  source (iText) used **Sub on every row**. A Paeth/Average decoder that is subtly wrong (the classic is
-  Paeth over SIGNED bytes) smears exactly those stripes; Sub needs only the current row and every decoder
-  gets it right. Simulated with a signed-byte Paeth: the old output turns to confetti, the new one is
-  untouched.
-- `write/PdfImages` now writes PNG images itself: 8-bit DeviceRGB/DeviceGray samples, alpha as a separate
-  `/SMask` (only when some pixel is translucent), Flate + Predictor 15 with **Sub on every row**,
-  `DecodeParms` inline. Grey is read from the RASTER, never `getRGB` (Java's grey space is linear: getRGB
-  would lighten it). A non-8-bit image (16-bit) and any non-PNG bytes keep PDFBox's path; JPEG stays DCT.
-- Verified: 0 differing pixels in poppler AND PDFBox on the customer's 5 pages, the 27-feature matrix and
-  a grey / grey+alpha / palette / 16-bit fixture; byte-reproducible; qpdf unchanged; +9% file size on a
-  photo-heavy press file (Sub compresses photos a little less than Paeth), 46 fewer objects.
-- The lesson for any writer change: the gates prove the PDF is RIGHT; a customer's own reader proves it
-  is ORDINARY. Prefer the encoding the source producer used over the cleverest legal one.
+- **The cause, proven bit for bit.** Its PNG-predictor decoder reads the UPPER-LEFT neighbour as 0 at
+  byte index == bpp (an off-by-one: `i > bpp` where `i >= bpp` is meant). Only Paeth uses that
+  neighbour, so only Paeth rows go wrong, only at the first byte of the second pixel — the RED channel —
+  and the error then runs right (via `a`) and down (via `b`): red-only streaks. A simulator with exactly
+  that bug reproduces the converter's images **100.00 % of pixels, max diff 0**, on three documents;
+  a correct decoder matches 6–49 %. Where the left margin is uniform (`a = b = c`) the bug is silent,
+  which is why one large image survived and threw the first guess off.
+- **Why the source was fine.** iText writes Sub on every row; the model stores lossless images as PNG
+  and `PdfWriter` used to hand those bytes to `createFromByteArray`, which keeps the PNG encoder's
+  per-row choice — on one batch **Paeth 15 350 · Up 4 418 · Average 251 · Sub 449**. 73 images over 5
+  documents were corrupted by the converter.
+- **The fix**: `write/PdfImages` writes PNG images itself — 8-bit DeviceRGB/DeviceGray samples, alpha as
+  a separate `/SMask` (only when a pixel is translucent), Flate + Predictor 15 with **Sub on every row**,
+  `DecodeParms` inline. Grey is read from the RASTER, never `getRGB` (Java's grey is linear: getRGB
+  lightens it). 16-bit and non-PNG bytes keep PDFBox's path; JPEG stays DCT. After it, the simulator
+  finds **0 corrupted images** on the same 5 documents. Pixel A/B: 0 differing pixels in poppler AND
+  PDFBox on the customer files, the 27-feature matrix and a grey/grey+alpha/palette/16-bit fixture;
+  byte-reproducible; +9 % on a photo-heavy file.
+- **The gate**: `python3 -I scripts/predictor_rows.py out.pdf` counts the row filters and exits 1 on any
+  Up/Average/Paeth row. No pixel gate can see this defect — every engine we have decodes Paeth right.
+- The lesson for any writer change: the gates prove the PDF is RIGHT; a customer's reader proves it is
+  ORDINARY. Prefer the encoding the source producer used over the cleverest legal one. And when a
+  consumer's output container is available, diff its decoded assets against ours before theorising —
+  the first guess here (a signed-byte Paeth) was wrong.
 - Still open, and the bigger win: a source JPEG with a soft mask is DECODED at import (`passThrough`
-  refuses masked images), so it comes back as Flate — on this file 2.6 MB in, 11–12 MB out. Keeping the
-  DCT bytes with a separate mask needs the model to carry the mask beside the image.
+  refuses masked images), so it comes back as Flate — 2.6 MB in, 12 MB out on one file. Keeping the DCT
+  bytes with a separate mask needs the model to carry the mask beside the image.
 
 ### Jexter's hot folder and its folders, driven for real (2026-09-21)
 
@@ -2424,6 +2432,8 @@ scripts/  — structural + visual axes
   DrawProbe.java          — every glyph the page really draws in a band: font, code, and whether PDFBox
                             hands back an outline. The ground truth the importer sees
   ImgProbe.java           — every image XObject: filter, colour space, and why PDFBox cannot decode it
+  predictor_rows.py       — the PNG-predictor row filters of every image in a PDF; exit 1 on Up/Average/
+                            Paeth (a downstream converter decodes Paeth wrong — see §5c, "downstream reader")
   FontProbe.java          — per font, how many glyph outlines come back EMPTY, with and without
                             the post repair — the only surface that sees a face that paints nothing
 scripts/bench/  — THE CHROMIUM SCENARIOS (22), the other half of the gates
