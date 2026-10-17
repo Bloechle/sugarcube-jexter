@@ -26,6 +26,6 @@ const rec = await page.evaluate(() => {
 });
 const b64 = await page.evaluate(() => { const u = new Uint8Array(window.prism.bookBytes()); let s=''; const C=8192;
   for (let i=0;i<u.length;i+=C) s += String.fromCharCode(...u.subarray(i,i+C)); return btoa(s); });
-fs.writeFileSync('/tmp/fix/anim.ocd.epub', Buffer.from(b64, 'base64'));
+fs.writeFileSync(`${process.env.BENCH_FIX || '/tmp/fix'}/anim.ocd.epub`, Buffer.from(b64, 'base64'));
 console.log(JSON.stringify({ dlg, rec, errors }, null, 1));
 await browser.close(); srv.close(); process.exit(0);

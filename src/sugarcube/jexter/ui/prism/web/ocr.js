@@ -277,9 +277,9 @@ function detail(rd, idx) {
 async function copyText() {
     const idx = Math.max(0, P.state.current ?? 0);
     const rd = readPage(book.frameDoc(idx));
-    if (!rd?.words) { P.toast('This page carries no OCR text.', 'warning'); return; }
-    try { await navigator.clipboard.writeText(pageText(rd)); P.toast(`Copied ${rd.words} words of page ${idx + 1}.`, 'success'); }
-    catch { P.toast('The clipboard refused the text.', 'danger'); }
+    if (!rd?.words) { P.toast('This page carries no OCR text.', { tone: 'warn' }); return; }
+    try { await navigator.clipboard.writeText(pageText(rd)); P.toast(`Copied ${rd.words} words of page ${idx + 1}.`, { tone: 'ok' }); }
+    catch { P.toast('The clipboard refused the text.', { tone: 'danger' }); }
 }
 
 function ribbon() {

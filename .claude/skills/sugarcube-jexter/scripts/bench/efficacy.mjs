@@ -1,9 +1,10 @@
 // "No console error" is not "it works". For every command of every tool: does anything OBSERVABLE
 // change — the page DOM, the container members, the ribbon's own state, a toast? A command that moves
 // nothing is either broken or a no-op nobody would miss.
-import { serve, openPrism } from './prism_bench.mjs';
+import { serve, openPrism, watchToasts } from './prism_bench.mjs';
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
 const { browser, page, errors } = await openPrism({ dev: true, book: '/hidden.ocd.epub', viewport: { width: 1500, height: 950 } });
+const toasts = await watchToasts(page);
 await page.waitForTimeout(1200);
 
 const snap = () => page.evaluate(() => {
@@ -16,7 +17,7 @@ const snap = () => page.evaluate(() => {
     members: Object.keys(files).length, bytes,
     ribbon: document.querySelector('#ribbon')?.innerHTML.length || 0,
     drawer: document.querySelector('.px-drawer:not([hidden])')?.innerHTML.length || 0,
-    toasts: document.querySelectorAll('sl-alert').length,
+    toasts: document.querySelectorAll('.qry-toast').length,
   };
 });
 const diff = (a, b) => Object.keys(a).filter(k => a[k] !== b[k]);

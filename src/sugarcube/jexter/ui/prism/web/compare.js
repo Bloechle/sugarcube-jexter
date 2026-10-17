@@ -33,7 +33,7 @@ const text = async (bytes) => new TextDecoder().decode((await backend.convert(by
  *  measure the two extractors, not the two documents. */
 async function against(file) {
   const mine = P.bookBytes?.();
-  if (!mine) { P.toast('Open a document first.', 'warning'); return; }
+  if (!mine) { P.toast('Open a document first.', { tone: 'warn' }); return; }
   st.busy = true; st.other = file.name; ribbon(); drawer();
   try {
     const them = new Uint8Array(await file.arrayBuffer());
@@ -41,11 +41,10 @@ async function against(file) {
     st.a = a; st.b = b;
     st.hunks = diff(a, b);
     st.sel = -1;
-    P.toast(st.hunks.length ? `${st.hunks.length} difference(s).` : 'No textual difference.',
-            st.hunks.length ? 'warning' : 'success');
+    P.toast(st.hunks.length ? `${st.hunks.length} difference(s).` : 'No textual difference.', { tone: st.hunks.length ? 'warn' : 'ok' });
   } catch (e) {
     st.hunks = []; st.a = st.b = null;
-    P.toast(`Compare failed: ${reason(e)}`, 'danger');
+    P.toast(`Compare failed: ${reason(e)}`, { tone: 'danger' });
   } finally { st.busy = false; drawer(); ribbon(); }
 }
 const reason = (e) => { try { return JSON.parse(e.message).error || e.message; } catch { return e.message || String(e); } };
@@ -193,8 +192,8 @@ function copy() {
     `${i + 1}. ${h.section ? '[' + h.section + '] ' : ''}${h.kind}\n`
     + (h.removed ? `   − ${h.removed}\n` : '') + (h.added ? `   + ${h.added}\n` : ''));
   navigator.clipboard.writeText([...head, ...body].join('\n'))
-    .then(() => P.toast('Differences copied.', 'success'))
-    .catch(() => P.toast('Could not reach the clipboard.', 'warning'));
+    .then(() => P.toast('Differences copied.', { tone: 'ok' }))
+    .catch(() => P.toast('Could not reach the clipboard.', { tone: 'warn' }));
 }
 
 function drawer() {

@@ -28,6 +28,6 @@ await page.waitForTimeout(2000);
 const after = await runsIn();
 const b64 = await page.evaluate(() => { const u = new Uint8Array(window.prism.bookBytes()); let s=''; const C=8192;
   for (let i=0;i<u.length;i+=C) s += String.fromCharCode(...u.subarray(i,i+C)); return btoa(s); });
-fs.writeFileSync('/tmp/fix/animkeep.ocd.epub', Buffer.from(b64, 'base64'));
+fs.writeFileSync(`${process.env.BENCH_FIX || '/tmp/fix'}/animkeep.ocd.epub`, Buffer.from(b64, 'base64'));
 console.log(JSON.stringify({ before, after, errors }, null, 1));
 await browser.close(); srv.close(); process.exit(0);

@@ -1,10 +1,11 @@
 // Specificity: on documents that hide nothing, Reveal must say nothing. A checker that cries wolf on
 // ordinary pages is worse than no checker.
-import { serve, openPrism } from './prism_bench.mjs';
+import { serve, openPrism, watchToasts } from './prism_bench.mjs';
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
 const rows = [];
 for (const book of ['/sample.ocd.epub', '/turned.ocd.epub']) {
   const { browser, page, errors } = await openPrism({ book });
+  const toasts = await watchToasts(page);
   await page.evaluate(() => window.prism.setTool('redact'));
   await page.waitForTimeout(700);
   await page.evaluate((s) => [...document.querySelectorAll(s + '.px-rb-btn')].find(b => b.textContent.trim() === 'Reveal').click(),
@@ -19,7 +20,7 @@ for (const book of ['/sample.ocd.epub', '/turned.ocd.epub']) {
     }
     return { runs, red, marks };
   });
-  const toast = await page.evaluate(() => [...document.querySelectorAll('sl-alert')].map(a => a.textContent.trim().slice(0, 90)).pop());
+  const toast = (await toasts()).map(t => t.text.slice(0, 90)).pop();
   rows.push(`${book.padEnd(22)} runs=${String(m.runs).padStart(3)} flagged=${m.red} markers=${m.marks}  errors=${errors.length}\n   toast: ${toast}`);
   await browser.close();
 }

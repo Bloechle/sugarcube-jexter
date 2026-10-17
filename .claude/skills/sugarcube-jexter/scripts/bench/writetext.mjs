@@ -1,9 +1,10 @@
 // The affordance, driven like a reader would: type the text, add a font file, click Place, click the page.
-import { serve, openPrism } from './prism_bench.mjs';
+import { serve, openPrism, watchToasts } from './prism_bench.mjs';
 import fs from 'node:fs';
 const FIX = process.env.BENCH_FIX || '/tmp/fix';   // make_bench_fixtures.py writes here
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
 const { browser, page, errors } = await openPrism({ dev: true, book: '/dossier.ocd.epub', viewport: { width: 1500, height: 980 } });
+const toasts = await watchToasts(page);
 const slot = '#ribbon [data-ribbon="edit"] ';
 await page.evaluate(() => window.prism.setTool('edit'));
 await page.waitForTimeout(800);
@@ -23,7 +24,7 @@ const [chooser] = await Promise.all([
 ]);
 await chooser.setFiles('/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf');
 await page.waitForTimeout(6000);
-out.afterFont = await page.evaluate(() => [...document.querySelectorAll('sl-alert')].map(a => a.textContent.trim().slice(0, 90)).pop());
+out.afterFont = (await toasts()).map(t => t.text.slice(0, 90)).pop();
 // Place, then click on the page
 await page.evaluate((s) => [...document.querySelectorAll(s + '.px-rb-btn')].find(b => b.textContent.trim() === 'Place').click(), slot);
 await page.waitForTimeout(400);

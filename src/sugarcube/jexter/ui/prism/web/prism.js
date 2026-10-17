@@ -30,7 +30,7 @@
 //                sidecar, so the .epub is portable AND re-editable in PRISM.
 //   console    — F2 log panel capturing console.* + errors.
 import '/shared/js/icons.js';                          // the apps' icon set (icons.add): registered before boot() draws
-import { boot, theme, toast as qryToast, makeDropZone, makeDialog, makeMenu, copy } from '/shared/vendor/qry/qry-app.js';
+import { boot, theme, toast, makeDropZone, makeDialog, makeMenu, copy } from '/shared/vendor/qry/qry-app.js';
 import { unzip } from '/shared/vendor/fflate.js';
 
 // The chassis takes NO static /shared import: `book.js` reads `window.prism` at module scope, so the
@@ -82,11 +82,6 @@ function setStatus(html) {
   const el = $.opt('#status'); if (!el) return;
   el.innerHTML = html;
 }
-
-/** THE toast of the app and of every tool (P.toast): a qry toast, in the words the tools speak —
- *  success · warning · danger · neutral/info — and an optional duration in ms. */
-const TONE = { success: 'ok', warning: 'warn', danger: 'danger', neutral: '', info: '', primary: '' };
-const toast = (msg, tone = 'info', ms) => qryToast(String(msg), { tone: TONE[tone] ?? tone, ...(ms ? { duration: ms } : {}) });
 
 /** The app's dialogs and sheets (native <dialog>, index.html), each made modal ONCE — backdrop, Escape,
  *  [data-close], focus back. P.dialog(id).open() / .close() for the tools. */
@@ -382,13 +377,13 @@ async function main() {
   if (localStorage.getItem('prism:theme') == null) theme.mode('dark'); // dark by default, like Prism
   wireChrome();
   try { await initSW(); }
-  catch (e) { toast(e.message, 'danger'); return; }   // no Service Worker → nothing can be served
+  catch (e) { toast(e.message, { tone: 'danger' }); return; }   // no Service Worker → nothing can be served
 
   // Optional: ?epub=<same-origin url> loads a co-located sample (still client-side).
   const src = new URLSearchParams(location.search).get('epub');
   if (src) {
     try { openEpub(await (await fetch(src)).arrayBuffer(), src.split('/').pop()); }
-    catch (e) { toast(`Could not fetch "${src}": ${e.message}`, 'danger'); }
+    catch (e) { toast(`Could not fetch "${src}": ${e.message}`, { tone: 'danger' }); }
   }
 }
 
@@ -454,7 +449,7 @@ async function openEpub(buffer, name) {
       clearSurfaces(); $('body').cls('+is-loading');
       return window.prism.hooks.openSource(buffer, name);
     }
-    toast('This is a PDF or an image — no conversion engine is available here. Open an .epub / .ocd.epub.', 'warning');
+    toast('This is a PDF or an image — no conversion engine is available here. Open an .epub / .ocd.epub.', { tone: 'warn' });
     return;
   }
   setStatus('<span class="jx-spin"></span> Opening\u2026');
@@ -463,7 +458,7 @@ async function openEpub(buffer, name) {
   clearSurfaces(); $('body').cls('+is-loading');
   let files;
   try { files = await new Promise((res, rej) => unzip(new Uint8Array(buffer), (err, out) => err ? rej(err) : res(out))); }
-  catch { toast('Not a valid ZIP/EPUB archive.', 'danger'); setStatus('<i data-icon="sparkles"></i> Ready'); return; }
+  catch { toast('Not a valid ZIP/EPUB archive.', { tone: 'danger' }); setStatus('<i data-icon="sparkles"></i> Ready'); return; }
 
   const prev = state.id;
   const id = 'b' + (++seq);
@@ -474,7 +469,7 @@ async function openEpub(buffer, name) {
     if (prev) swSend({ type: 'unload', id: prev }).catch(() => {});
     setStatus('<i data-icon="check"></i> Ready');
   } catch (e) {
-    toast(`Could not open the EPUB: ${e.message}`, 'danger');
+    toast(`Could not open the EPUB: ${e.message}`, { tone: 'danger' });
     swSend({ type: 'unload', id }).catch(() => {});
     setStatus('<i data-icon="sparkles"></i> Ready');
   }
@@ -1377,7 +1372,7 @@ function wireChrome() {
   makeDropZone(document.body, { overlayLabel: 'Drop your .epub', onFiles: async files => {
     const doc = [...files].find(f => OPENABLE.test(f.name));
     if (doc) openEpub(await doc.arrayBuffer(), doc.name);
-    else toast('Drop a .epub / .ocd.epub, a PDF or an image to open it.', 'warning');
+    else toast('Drop a .epub / .ocd.epub, a PDF or an image to open it.', { tone: 'warn' });
   }});
 
   $.all('.tab-btn').forEach(btn => btn.on('click', () => {
@@ -1427,7 +1422,7 @@ function wireChrome() {
     if (e.key === 'F2') { e.preventDefault(); toggleLog(); return; }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
       e.preventDefault(); const on = !devMode(); setDevMode(on);
-      toast(on ? 'Dev mode on — tabs in development are visible' : 'Dev mode off', on ? 'success' : 'neutral', 2200);
+      toast(on ? 'Dev mode on — tabs in development are visible' : 'Dev mode off', { tone: on ? 'ok' : '', duration: 2200 });
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); dialog('export-dialog').open(); return; }
@@ -1476,8 +1471,8 @@ function copyLog() {
   const body = $.opt('#log-body'); if (!body) return;
   const rows = [...body.querySelectorAll('.log-row')].filter(r => r.offsetParent !== null);
   const text = rows.map(r => `${r.querySelector('.log-lv').textContent} ${r.querySelector('.log-msg').textContent}`.trim()).join('\n');
-  if (!text) { toast('Console is empty', 'warning'); return; }
-  copy(text); toast(`Copied ${rows.length} line${rows.length === 1 ? '' : 's'}`, 'success');
+  if (!text) { toast('Console is empty', { tone: 'warn' }); return; }
+  copy(text); toast(`Copied ${rows.length} line${rows.length === 1 ? '' : 's'}`, { tone: 'ok' });
 }
 
 const _fmt = a => { try { return typeof a === 'string' ? a : a instanceof Error ? a.message : JSON.stringify(a); } catch { return String(a); } };

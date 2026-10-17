@@ -14,7 +14,7 @@
 // there), `bookBytes` (the container as it stands) and `pageIndexOf`.
 
 import { zipSync } from '/shared/vendor/fflate.js';
-import { makeEvents } from '/shared/vendor/qry/qry-app.js';
+import { makeEvents, confirm } from '/shared/vendor/qry/qry-app.js';
 import * as backend from './backend.js';
 import { parseFonts as parseFontsSvg, SVG_NS, inReadingOrder, readingRuns, runBox } from '/shared/js/ocd.js';
 import { book } from '/shared/js/book.js';
@@ -122,9 +122,9 @@ function watchProgress() {
 }
 
 P.hooks.openSource = async (buffer, name) => {
-    if (!await engineReady) { P.toast('This is a PDF or an image and no conversion engine is running here.', 'warning'); return; }
+    if (!await engineReady) { P.toast('This is a PDF or an image and no conversion engine is running here.', { tone: 'warn' }); return; }
     P.setStatus?.('<span class="jx-spin"></span> Converting\u2026');
-    P.toast('Converting…', 'primary');
+    const busy = P.toast('Converting…', { duration: 0 });
     const stop = watchProgress();
     try {
         const art = await backend.convert(buffer, 'ocd', convOpts(), showStep);
@@ -134,8 +134,8 @@ P.hooks.openSource = async (buffer, name) => {
         await book.open(art.bytes, name
             ? name.replace(/\.(pdf|png|jpe?g|tiff?)$/i, '') + '.ocd.epub'
             : art.filename || 'document.ocd.epub');
-    } catch (e) { P.toast(`Conversion failed: ${e.message || e}`, 'danger'); P.setStatus?.('<i data-icon="sparkles"></i> Ready'); }
-    finally { stop(); }
+    } catch (e) { P.toast(`Conversion failed: ${e.message || e}`, { tone: 'danger' }); P.setStatus?.('<i data-icon="sparkles"></i> Ready'); }
+    finally { stop(); busy.close(); }
 };
 
 /* -- Hook: book opened — detect ocd/ members, take the text layer -- */
@@ -467,7 +467,7 @@ const EXPORT_EXT = { pdf: '.pdf', ocd: '.ocd.epub', epub: '.epub', html: '.html'
 async function exportAs(to, opts = {}) {
     if (!engine) return;
     const bytes = bookBytes();
-    if (!bytes) { P.toast('Open a document first.', 'warning'); return; }
+    if (!bytes) { P.toast('Open a document first.', { tone: 'warn' }); return; }
     // save dialog FIRST (while the click's transient activation is valid):
     // original name, new extension — then convert, then write to the handle
     const name = P.exportName(EXPORT_EXT[to] || '.' + to);
@@ -495,20 +495,21 @@ async function exportAs(to, opts = {}) {
     // members before conversion — is a feature, not this line.)
     // OCD carries them now (passengers), so only the OTHER targets lose them — and only those ask.
     const augs = to === 'ocd' ? 0 : Object.values(P.state.aug?.pages || {}).reduce((n, l) => n + l.length, 0);
-    if (augs && !confirm(`This document carries ${augs} augmentation${augs > 1 ? 's' : ''} — links, `
+    if (augs && !await confirm(`This document carries ${augs} augmentation${augs > 1 ? 's' : ''} — links, `
                        + `reveal zones, animations, media. They live in Prism's own container and `
                        + `${to.toUpperCase()} cannot carry them: the export will not contain them.\n\n`
                        + `Export to OCD instead to keep them re-editable. Continue anyway?`)) {
-        P.toast('Export cancelled — the augmentations are still there.', 'neutral');
+        P.toast('Export cancelled — the augmentations are still there.');
         return;
     }
 
-    P.toast(`Exporting ${to}…`, 'primary');
+    const busy = P.toast(`Exporting ${to}…`, { duration: 0 });
     try {
         const art = await backend.convert(bytes, to, opts);
         await P.saveAs(art.blob, name, handle);
-        P.toast(`Exported ${name}`, 'success');
-    } catch (e) { P.toast(`Export failed: ${e.message || e}`, 'danger'); }
+        P.toast(`Exported ${name}`, { tone: 'ok' });
+    } catch (e) { P.toast(`Export failed: ${e.message || e}`, { tone: 'danger' }); }
+    finally { busy.close(); }
 }
 
 function wire() {

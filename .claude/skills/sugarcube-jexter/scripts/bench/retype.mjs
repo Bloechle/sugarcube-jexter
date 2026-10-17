@@ -1,10 +1,11 @@
 // Pick the font from the document's own list, write, then select an EXISTING run and retype it —
 // and check one Ctrl+Z puts the old one back.
-import { serve, openPrism } from './prism_bench.mjs';
+import { serve, openPrism, watchToasts } from './prism_bench.mjs';
 import fs from 'node:fs';
 const FIX = process.env.BENCH_FIX || '/tmp/fix';   // make_bench_fixtures.py writes here
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
 const { browser, page, errors } = await openPrism({ dev: true, book: '/withfont.ocd.epub', viewport: { width: 1500, height: 980 } });
+const toasts = await watchToasts(page);
 const slot = '#ribbon [data-ribbon="edit"] ';
 const out = {};
 await page.evaluate(() => window.prism.setTool('edit'));
@@ -34,7 +35,7 @@ await page.evaluate((s) => { const t = document.querySelector(s + 'input[type="t
 await page.evaluate((s) => [...document.querySelectorAll(s + '.px-rb-btn')].find(b => b.textContent.trim() === 'Retype').click(), slot);
 await page.waitForTimeout(1200);
 out.retyped = await read();
-out.warned = await page.evaluate(() => [...document.querySelectorAll('sl-alert')].map(a => a.textContent.trim().slice(0,150)).pop());
+out.warned = (await toasts()).map(t => t.text.slice(0, 150)).pop();
 await page.keyboard.press('Control+z');
 await page.waitForTimeout(900);
 out.undone = await read();

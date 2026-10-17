@@ -13,12 +13,10 @@
  *   GET  /api/tree?root=doc → [node…]         GET /api/content?page · /api/stream?obj · /api/render?obj · /api/text?page
  */
 import '/shared/js/icons.js';                          // the apps' icon set (icons.add): registered before boot() draws
-import { boot, theme, toast as qryToast, makeTabs, makeMenu, makeDialog, infoRow as makeRow, makeTable, makeEvents } from '/shared/vendor/qry/qry-app.js';
+import { boot, theme, toast, makeTabs, makeMenu, makeDialog, infoRow as makeRow, makeTable, makeEvents } from '/shared/vendor/qry/qry-app.js';
 import { loadOcd, esc } from '/shared/js/ocd.js';   // the OCD-EPUB carries the fonts (pages/fonts.svg, the single representation)
 
 const R = Math.round;
-const TONE = { success: 'ok', warning: 'warn', danger: 'danger', neutral: '', info: '' };
-const toast = (msg, tone = 'info', ms) => qryToast(String(msg), { tone: TONE[tone] ?? tone, ...(ms ? { duration: ms } : {}) });
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const J = (p, opt) => fetch(p, opt).then(r => r.json());
 
@@ -81,13 +79,13 @@ function selectPage(i) {
 async function openFile(file) {
     if (!file) return;
     if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
-        toast('PDF Inspector opens PDF files \u2014 an OCD-EPUB belongs in Prism.', 'warning'); return;
+        toast('PDF Inspector opens PDF files \u2014 an OCD-EPUB belongs in Prism.', { tone: 'warn' }); return;
     }
     status(`Loading ${file.name}\u2026`, true);
     let meta;
     try { meta = await J(`/api/open?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file }); }
-    catch { status('Load failed'); toast('Load failed', 'danger'); return; }
-    if (meta.error) { status('Load failed'); toast(meta.error, 'danger'); return; }
+    catch { status('Load failed'); toast('Load failed', { tone: 'danger' }); return; }
+    if (meta.error) { status('Load failed'); toast(meta.error, { tone: 'danger' }); return; }
     docMeta = meta; cur = 0; docVersion++;
 
     structBuilt = false; cache.ops = {}; cache.text = {}; $.opt('#tree')?.empty(); detail?.reset(); fontV = -1; fontDoc = null; resV = -1; resData = null;
@@ -239,7 +237,7 @@ async function loadText() {
 
 // ── save page raster (native Save As where available) ─────────────────────────
 async function savePageImage() {
-    if (!docMeta) { toast('Open a document first.', 'warning'); return; }
+    if (!docMeta) { toast('Open a document first.', { tone: 'warn' }); return; }
     const base = (docMeta.name || 'document').replace(/\.[^.]+$/, '');
     const url = `/api/page?i=${cur}&dpi=300${renderSrc ? '&src=' + encodeURIComponent(renderSrc) : ''}`;
     const filename = `${base}-p${cur + 1}.png`;
@@ -247,11 +245,11 @@ async function savePageImage() {
         let handle;
         try { handle = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: 'PNG image', accept: { 'image/png': ['.png'] } }] }); }
         catch (e) { if (e && e.name === 'AbortError') return; }
-        if (handle) { status(`Saving ${filename}\u2026`, true); try { const res = await fetch(url); const w = await handle.createWritable(); await w.write(await res.blob()); await w.close(); status(`Saved ${filename}`); } catch { status('Save failed'); toast('Save failed', 'danger'); } return; }
+        if (handle) { status(`Saving ${filename}\u2026`, true); try { const res = await fetch(url); const w = await handle.createWritable(); await w.write(await res.blob()); await w.close(); status(`Saved ${filename}`); } catch { status('Save failed'); toast('Save failed', { tone: 'danger' }); } return; }
     }
     status(`Saving ${filename}\u2026`, true);
     try { const res = await fetch(url); const u = URL.createObjectURL(await res.blob()); const a = document.createElement('a'); a.href = u; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); status(`Saved ${filename}`); }
-    catch { status('Save failed'); toast('Save failed', 'danger'); }
+    catch { status('Save failed'); toast('Save failed', { tone: 'danger' }); }
 }
 
 // ── render-source switch (footer) ─────────────────────────────────────────────
@@ -463,10 +461,10 @@ async function downloadImage(im) {
         let handle;
         try { handle = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: 'PNG image', accept: { 'image/png': ['.png'] } }] }); }
         catch (e) { if (e && e.name === 'AbortError') return; }
-        if (handle) { try { const res = await fetch(url); const w = await handle.createWritable(); await w.write(await res.blob()); await w.close(); } catch { toast('Download failed', 'danger'); } return; }
+        if (handle) { try { const res = await fetch(url); const w = await handle.createWritable(); await w.write(await res.blob()); await w.close(); } catch { toast('Download failed', { tone: 'danger' }); } return; }
     }
     try { const res = await fetch(url); const u = URL.createObjectURL(await res.blob()); const a = document.createElement('a'); a.href = u; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); }
-    catch { toast('Download failed', 'danger'); }
+    catch { toast('Download failed', { tone: 'danger' }); }
 }
 
 // ── boot ──────────────────────────────────────────────────────────────────────
@@ -514,7 +512,7 @@ function init() {
         switch (value) {
             case 'open': $('#file').click(); break;
             case 'save-image': savePageImage(); break;
-            case 'doc': if (!docMeta) toast('Open a document first.', 'warning'); else drawer.open(); break;
+            case 'doc': if (!docMeta) toast('Open a document first.', { tone: 'warn' }); else drawer.open(); break;
         }
     } });
     $('#btn-theme').on('click', () => { theme.toggle(); syncThemeIcon(); stageApi()?.setTheme(theme.isDark()); });

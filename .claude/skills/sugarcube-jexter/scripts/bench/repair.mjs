@@ -3,10 +3,11 @@
 // 2026-09-14: the verdict now runs BY ITSELF and writes nothing; `Re-check` asks again and `Repair` is
 // the one verb that turns findings into work. The old `Audit` did both — so it is `Re-check` + `Repair`
 // here, and a check that only wants the verdict presses `Re-check` alone.
-import { serve, openPrism } from './prism_bench.mjs';
+import { serve, openPrism, watchToasts } from './prism_bench.mjs';
 import fs from 'node:fs';
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
 const { browser, page, errors } = await openPrism({ book: '/scan.ocd.epub' });
+const toasts = await watchToasts(page);
 const slot = '#ribbon [data-ribbon="redact"] ';
 const click = (l) => page.evaluate(([s, l]) => [...document.querySelectorAll(s + '.px-rb-btn')].find(b => b.textContent.trim() === l).click(), [slot, l]);
 const bytes = () => page.evaluate(() => {
@@ -25,7 +26,7 @@ await page.waitForFunction(() => {
   return d && d.querySelector('image');
 }, null, { timeout: 40000 });
 await page.waitForTimeout(2500);
-const toast = await page.evaluate(() => [...document.querySelectorAll('sl-alert')].map(a => a.textContent.trim().slice(0, 160)).pop());
+const toast = (await toasts()).map(t => t.text.slice(0, 160)).pop();
 const b1 = await bytes();
 // audit again: the repair must PROVE itself
 await click('Re-check'); await page.waitForTimeout(8000);   // the verdict only: what is LEFT

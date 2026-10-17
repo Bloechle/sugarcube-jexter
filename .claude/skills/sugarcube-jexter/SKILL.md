@@ -395,8 +395,10 @@ Refactored, public layout — all under `sugarcube.jexter`:
   the drawing as `.tcaret > .qry-icon`. An unknown name: qry's dashed square + one console.error. Before, a caret kept
   by reference (`$.create('i')`) was the DETACHED placeholder once drawn, so PDF Inspector's tree chevrons never turned;
   the `<i>` staying fixed that, and `.tcaret`'s .8rem — dead under `svg.lucide` — was dropped to keep 1.15em.
-  qry 3's names (2026-10-17): `toast(msg, { tone, duration })` (each app's `toast` wrapper maps its
-  words — success / warning / danger / neutral — to qry's tones), `boot({ theme: { persist } })` +
+  qry 3's names (2026-10-17): `toast(msg, { tone, duration })` called as it is — no wrapper since
+  2026-10-18 (the three apps each had one): tones `ok` / `warn` / `danger`, none for a plain notice;
+  plain TEXT (never escaped HTML); a long step is a toast that stays (`{ duration: 0 }`) and is
+  `close()`d in a `finally`; a question is qry's `confirm` / `prompt` (awaited), never the browser's. `boot({ theme: { persist } })` +
   `theme.mode(m)`, `makeTabs('.jx-tab', { panels, attribute })` + `.selected(name)`,
   `makeTable(columns, rows, { numbered, sort }).element` (columns `numeric`, `format`),
   `makeDropZone({ overlayLabel })`, `makeDialog().isOpen()`, and every SSE stream is

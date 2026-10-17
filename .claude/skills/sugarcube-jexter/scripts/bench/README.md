@@ -24,7 +24,10 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node sweep.mjs
 
 `prism_bench.mjs` is the harness: it serves `site/` (a copy of `ui/prism/web`, with `ui/shared/web` as
 `site/shared/` — qry 3, fflate and the icons are vendored there, nothing to rewrite), answers `/api/convert`
-and `/api/font` by shelling out to the engine, and exports `openPrism` / `drag` / `serve`.
+and `/api/font` by shelling out to the engine, and exports `openPrism` / `drag` / `serve` / `watchToasts`.
+`openPrism` opens in DEV mode unless told otherwise: Redact and Augment are dev tabs, and a scenario
+driving one outside dev mode clicks nothing. `watchToasts(page)` collects qry's toasts as they appear
+(`{ text, tone }`) — install it before the action. `formsvalue` needs a form: `BENCH_BOOK=/rich.ocd.epub`.
 
 `inspect2.mjs` and `jexterapp.mjs` are the exception: they drive the OTHER two apps, which serve
 themselves. Start the app and drive it **in one shell** — a background server does not survive between

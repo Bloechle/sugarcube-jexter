@@ -10,7 +10,7 @@ const state = () => page.evaluate((s) => {
   const r = b?.getBoundingClientRect();
   return { present: !!b, active: b?.classList.contains('active'), iconPaths: icon?.querySelectorAll('path, circle, line, rect').length || 0,
            box: r && { w: Math.round(r.width), h: Math.round(r.height), top: Math.round(r.top) },
-           switches: document.querySelectorAll(s + 'sl-switch').length };
+           switches: document.querySelectorAll(s + '.qry-switch, input[role="switch"]').length };
 }, slot);
 const click = (l) => page.evaluate(([s, l]) => [...document.querySelectorAll(s + '.px-rb-btn')].find(b => b.textContent.trim() === l).click(), [slot, l]);
 const out = { off: await state() };

@@ -10,14 +10,14 @@ page.on('requestfailed', r => errors.push('FAILED ' + r.url().slice(0, 90)));
 await page.goto('http://127.0.0.1:7347/', { waitUntil: 'load' });
 await page.waitForTimeout(2500);
 const shell = await page.evaluate(() => ({ title: document.title,
-  buttons: [...document.querySelectorAll('button, sl-button')].map(b => b.textContent.trim()).filter(Boolean).slice(0, 10),
-  options: document.querySelectorAll('sl-switch, input[type="checkbox"], sl-select').length,
+  buttons: [...document.querySelectorAll('button')].map(b => b.textContent.trim()).filter(Boolean).slice(0, 10),
+  options: document.querySelectorAll('input[type="checkbox"], select, .qry-seg').length,
   text: document.body.innerText.replace(/\s+/g, ' ').slice(0, 120) }));
 const input = await page.$('input[type="file"]');
 await input.setInputFiles(FIX + '/hidden.pdf');
 // Shoelace CUSTOM ELEMENTS, not <button>: querySelectorAll('button') finds none of this app's controls.
 const clicked = await page.evaluate(() => {
-  const all = [...document.querySelectorAll('button, sl-button')];
+  const all = [...document.querySelectorAll('button')];
   const b = all.find(x => /Normalize all/i.test(x.textContent));
   if (b) { b.click(); return b.tagName; } return 'NOT FOUND: ' + all.map(x => x.textContent.trim()).join(' | ');
 });

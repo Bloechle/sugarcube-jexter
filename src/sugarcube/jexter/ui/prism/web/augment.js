@@ -69,11 +69,11 @@ function pushUndo() {
   if (undoStack.length > 40) undoStack.shift();
 }
 function undo() {
-  if (!undoStack.length) { toast('Nothing to undo.', 'neutral'); return; }
+  if (!undoStack.length) { toast('Nothing to undo.'); return; }
   state.aug.pages = JSON.parse(undoStack.pop());
   saveAug();
   eachLoadedFrame((idx, doc) => renderAug(idx, doc));
-  toast('Undone.', 'success');
+  toast('Undone.', { tone: 'ok' });
 }
 
 const newAugId = () => 'aug_' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
@@ -94,7 +94,7 @@ function commitAug(idx, entry, msg) {
   pushUndo();
   augFor(idx).push(entry);
   refreshAug(idx);
-  if (msg) toast(msg, 'success');
+  if (msg) toast(msg, { tone: 'ok' });
 }
 
 
@@ -113,7 +113,7 @@ function setEditing(on) {
   // user discover it by dragging on a page that cannot answer.
   if (bound < total) P.logLine?.('error', `augment: ${total - bound} of ${total} loaded page(s) have no marquee — the frame hook did not run`, 'augment');
   renderEditList();
-  toast('Augment — pick a kind above, then drag a rectangle on the page. Drag to move, corner to resize, double-click to remove.', 'primary');
+  toast('Augment — pick a kind above, then drag a rectangle on the page. Drag to move, corner to resize, double-click to remove.');
 }
 
 // Marquee drawing (add) + delete, bound once per frame; inert unless editing.
@@ -204,7 +204,7 @@ function deleteAug(idx, id) {
   pushUndo();
   list.splice(i, 1);
   refreshAug(idx);
-  toast('Augmentation removed', 'success');
+  toast('Augmentation removed', { tone: 'ok' });
 }
 
 // Edit an entry: anim reopens its settings dialog; others edit the note
@@ -242,7 +242,7 @@ async function addLink(idx, rect) {
   if (/^https?:\/\//i.test(s)) { kind = 'url'; to = s; }
   else {
     const n = parseInt(s, 10);
-    if (!n || n < 1 || n > state.pages.length) { toast(`Enter a page 1–${state.pages.length} or an http(s) URL.`, 'warning'); return; }
+    if (!n || n < 1 || n > state.pages.length) { toast(`Enter a page 1–${state.pages.length} or an http(s) URL.`, { tone: 'warn' }); return; }
     kind = 'page'; to = n - 1;
   }
   commitAug(idx, {
@@ -258,7 +258,7 @@ async function addAnim(idx, rect) {
   const doc = frameDoc(idx); if (!doc) return;
   const zone = zoneOf(idx, rect);
   const els = selectEls(doc, idx, zone);
-  if (!els.length) { toast('No SVG content in that zone.', 'warning'); return; }
+  if (!els.length) { toast('No SVG content in that zone.', { tone: 'warn' }); return; }
   const r = await askAnim({});
   if (!r) return;
   commitAug(idx, {

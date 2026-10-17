@@ -1,6 +1,7 @@
-import { serve, openPrism, drag } from './prism_bench.mjs';
+import { serve, openPrism, drag, watchToasts } from './prism_bench.mjs';
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
 const { browser, page, errors } = await openPrism({ dev: true, book: '/dossier.ocd.epub', viewport: { width: 1500, height: 950 } });
+const toasts = await watchToasts(page);
 let asked = null;
 page.on('dialog', d => { asked = d.message().slice(0, 150); d.dismiss(); });
 const at = (x, y) => page.evaluate(([x, y]) => { const f = document.querySelector('.prism-page[data-index="0"] .prism-frame');
@@ -22,6 +23,6 @@ const clicked = await page.evaluate(() => {
   return { hiddenNow: b.hidden };
 });
 await page.waitForTimeout(3000);
-const toast = await page.evaluate(() => [...document.querySelectorAll('sl-alert')].map(a => a.textContent.trim().slice(0, 80)).pop());
+const toast = (await toasts()).map(t => t.text.slice(0, 80)).pop();
 console.log(JSON.stringify({ before, clicked, asked, toast, errors }, null, 1));
 await browser.close(); srv.close(); process.exit(0);

@@ -116,8 +116,10 @@ export function serve() {
   });
 }
 
-/** Open Prism on a book, with the errors surfaced — a silent page is the usual failure. */
-export async function openPrism({ dev = false, book = '/sample.ocd.epub', viewport = { width: 1500, height: 1000 } } = {}) {
+/** Open Prism on a book, with the errors surfaced — a silent page is the usual failure. In dev mode by
+ *  default: the tools in development (Redact, Augment…) are hidden without it, and a scenario that drives
+ *  one would click nothing. `devtabs` passes `dev` itself. */
+export async function openPrism({ dev = true, book = '/sample.ocd.epub', viewport = { width: 1500, height: 1000 } } = {}) {
   const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
   const page = await (await browser.newContext({ viewport })).newPage();
   const errors = [];
@@ -139,6 +141,21 @@ export const ribbon = (page, tool, label) => page.evaluate(([t, l]) => {
   if (!b) throw new Error('no ribbon command ' + l);
   b.click();
 }, [tool, label]);
+
+/** Every qry toast as it appears — they are TRANSIENT, so a later look finds them gone. Install it before
+ *  the action; it returns a reader of { text, tone } (qry fills a toast's text a frame later, so the
+ *  nodes are kept and read at call time). Watches the whole document: in an open modal, toasts live there. */
+export async function watchToasts(page) {
+  await page.evaluate(() => {
+    window.__toasts = [];
+    new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes)
+      if (n.classList?.contains('qry-toast')) window.__toasts.push(n);
+    }).observe(document.documentElement, { childList: true, subtree: true });
+  });
+  return () => page.evaluate(() => window.__toasts.map(n => ({
+    text: n.querySelector('.qry-toast-text')?.textContent.trim() ?? '',
+    tone: [...n.classList].find(c => c !== 'qry-toast' && c !== 'is-leaving') ?? '' })));
+}
 
 /** A pointer drag — never `dragAndDrop`: this UI uses pointer events with capture, and synthetic
  *  HTML5 dnd does not fire over its content. */

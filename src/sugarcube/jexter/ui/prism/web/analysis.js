@@ -10,6 +10,7 @@
 import { jx, engine, bookBytes, pageIndexOf, activeStructure } from './engine.js';
 import { SVG_NS, inReadingOrder, readingRuns } from '/shared/js/ocd.js';  // the overlay namespace, and the one reading-order authority
 import * as backend from './backend.js';
+import { confirm } from '/shared/vendor/qry/qry-app.js';
 import { book } from '/shared/js/book.js';
 
 const P = window.prism;
@@ -151,11 +152,12 @@ let stagesData = null, stagesLoading = false;
 async function ensureStages() {
     if (stagesData || stagesLoading || !engine) return;
     stagesLoading = true;
-    P.toast('Computing pipeline stages…', 'primary');
+    const busy = P.toast('Computing pipeline stages…', { duration: 0 });
     try { stagesData = await backend.stages(bookBytes()); }
     catch { stagesData = null; }
+    busy.close();
     stagesLoading = false;
-    if (!stagesData) { P.toast('Stages unavailable.', 'warning'); return; }
+    if (!stagesData) { P.toast('Stages unavailable.', { tone: 'warn' }); return; }
     refreshOverlays();
 }
 
@@ -354,12 +356,12 @@ P.registerTool({
 P.on('page', (idx) => { if (P.tool?.() === 'analysis') buildTree(idx); });
 
 async function reanalyze() {
-    if (!engine) { P.toast('No conversion engine here.', 'warning'); return; }
+    if (!engine) { P.toast('No conversion engine here.', { tone: 'warn' }); return; }
     const bytes = bookBytes();
-    if (!bytes) { P.toast('Open a document first.', 'warning'); return; }
+    if (!bytes) { P.toast('Open a document first.', { tone: 'warn' }); return; }
     if (Object.values(P.state.aug?.pages || {}).some(l => l.length)
-        && !confirm('Re-analyzing rebuilds the book — your live edits will be dropped. Continue?')) return;
-    P.toast('Re-analyzing — 100% heuristic…', 'primary');
+        && !await confirm('Re-analyzing rebuilds the book — your live edits will be dropped. Continue?')) return;
+    const busy = P.toast('Re-analyzing — 100% heuristic…', { duration: 0 });
     try {
         // the engine clears inherited heading roles, rebuilds the heuristic structure,
         // makes it the default and re-projects it — pure geometry, nothing inherited
@@ -367,7 +369,8 @@ async function reanalyze() {
         const name = P.state.name;
         await book.open(art.bytes, name);
         stagesData = null;                                  // stale: recompute on next use
-        P.toast('Heuristic analysis applied — heuristic structure is now the default.', 'success');
-    } catch (e) { P.toast(`Re-analysis failed: ${e.message || e}`, 'danger'); }
+        P.toast('Heuristic analysis applied — heuristic structure is now the default.', { tone: 'ok' });
+    } catch (e) { P.toast(`Re-analysis failed: ${e.message || e}`, { tone: 'danger' }); }
+    finally { busy.close(); }
 }
 

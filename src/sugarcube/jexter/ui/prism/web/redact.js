@@ -514,7 +514,7 @@ function toggleReveal() {
   // or the count reads as a contradiction of the very finding it is reporting.
   P.toast(n
     ? `${n} thing(s) still hidden on the visible page(s) — ${Object.entries(total).map(([k, v]) => `${v} ${k}`).join(' · ')}${hint}`
-    : `Nothing hidden on the visible page(s): nothing painted over, nothing painted invisible${hint}.`, n ? 'warning' : 'success');
+    : `Nothing hidden on the visible page(s): nothing painted over, nothing painted invisible${hint}.`, { tone: n ? 'warn' : 'ok' });
 }
 
 /* -- Block mode: what a click would take, shown before the click ------------------------------- */
@@ -646,13 +646,13 @@ function bind(doc, idx) {
 function add(it) { st.items.push(it); st.sel = isFinding(it) ? -1 : st.items.length - 1; refresh(); }
 function wholePage() {
   const idx = P.state.current ?? 0, doc = book.frameDoc(idx), svg = doc?.querySelector('svg[data-ocd="page"]');
-  if (!svg) { P.toast('Open a page first.', 'warning'); return; }
+  if (!svg) { P.toast('Open a page first.', { tone: 'warn' }); return; }
   const b = pageBox(svg);
   add(item(idx + 1, [b.x, b.y, b.w, b.h], 'page', `page ${idx + 1}`));
 }
 
 /* -- the engine: check, find, apply — all on the one route ------------------------------------- */
-const bytes = () => { const b = P.bookBytes?.(); if (!b) P.toast('Open a document first.', 'warning'); return b; };
+const bytes = () => { const b = P.bookBytes?.(); if (!b) P.toast('Open a document first.', { tone: 'warn' }); return b; };
 const reason = (e) => { try { return JSON.parse(e.message).error || e.message; } catch { return e.message || String(e); } };
 
 /** The engine's refusals, said in the tool's own terms.
@@ -693,12 +693,12 @@ async function check(quiet = true) {
     st.report = { ran: true, busy: false, pages: rep.pages || P.state?.pages?.length || 0, findings: rep.findings || [] };
     if (!quiet) {
       const n = st.report.findings.length;
-      P.toast(n ? `${n} thing(s) still recoverable under the boxes — red on the pages.` : 'Clean: nothing recoverable under any box.', n ? 'warning' : 'success');
+      P.toast(n ? `${n} thing(s) still recoverable under the boxes — red on the pages.` : 'Clean: nothing recoverable under any box.', { tone: n ? 'warn' : 'ok' });
     }
   } catch (e) {
     // A failed check is NOT a clean document — `ran` stays false, so no surface may say "clean".
     st.report = { ran: false, busy: false, pages: 0, findings: [] };
-    P.toast(`Audit failed: ${reason(e)}`, 'danger');
+    P.toast(`Audit failed: ${reason(e)}`, { tone: 'danger' });
   } finally { st.report.busy = false; refresh(); }
 }
 
@@ -710,12 +710,11 @@ async function repair() {
   const add = st.report.findings.filter(f => !seen.has(key(f)));
   if (!add.length) {
     P.toast(st.report.findings.length ? 'Every finding is already in the list.'
-                                      : 'Nothing to repair — the audit found nothing under the boxes.',
-            st.report.findings.length ? 'primary' : 'success');
+                                      : 'Nothing to repair — the audit found nothing under the boxes.', { tone: st.report.findings.length ? '' : 'ok' });
     return;
   }
   st.items = st.items.concat(add); st.sel = -1; refresh();
-  P.toast(`${add.length} finding(s) queued for repair — Apply removes what they still hide.`, 'warning');
+  P.toast(`${add.length} finding(s) queued for repair — Apply removes what they still hide.`, { tone: 'warn' });
 }
 
 /* -- the filed verdict --------------------------------------------------------------------------
@@ -739,21 +738,21 @@ function reportText() {
 }
 
 async function copyReport() {
-  try { await navigator.clipboard.writeText(reportText()); P.toast('Verdict copied, with its method.', 'success'); }
-  catch { P.toast('Could not reach the clipboard.', 'warning'); }
+  try { await navigator.clipboard.writeText(reportText()); P.toast('Verdict copied, with its method.', { tone: 'ok' }); }
+  catch { P.toast('Could not reach the clipboard.', { tone: 'warn' }); }
 }
 async function find() {
   const re = st.match.trim();
-  if (!re) { P.toast('Type a pattern to find — the field is beside the command.', 'warning'); return; }
+  if (!re) { P.toast('Type a pattern to find — the field is beside the command.', { tone: 'warn' }); return; }
   const b = bytes(); if (!b) return;
   try {
     const found = await parseFindings(await backend.convert(b, 'zones', { match: re }));
     st.items = st.items.concat(found); st.sel = -1; refresh();
-    P.toast(found.length ? `${found.length} match(es) marked.` : 'No match.', found.length ? 'primary' : 'warning');
-  } catch (e) { P.toast(`Find failed: ${reason(e)}`, 'danger'); }
+    P.toast(found.length ? `${found.length} match(es) marked.` : 'No match.', { tone: found.length ? '' : 'warn' });
+  } catch (e) { P.toast(`Find failed: ${reason(e)}`, { tone: 'danger' }); }
 }
 async function apply() {
-  if (!st.items.length) { P.toast('Nothing to redact: pick a zone, find a pattern, or press Repair.', 'warning'); return; }
+  if (!st.items.length) { P.toast('Nothing to redact: pick a zone, find a pattern, or press Repair.', { tone: 'warn' }); return; }
   const b = bytes(); if (!b) return;
   const n = st.items.length, pages = [...new Set(st.items.map(it => it.page))];
   try {
@@ -767,7 +766,7 @@ async function apply() {
     }
     st.items = []; st.sel = -1; refresh();
     pages.forEach(p => book.refreshPage(p - 1));
-    P.toast(`Redacted ${n} item(s) on ${pages.length} page(s) — zones proven clean. Export to keep it.`, 'success');
+    P.toast(`Redacted ${n} item(s) on ${pages.length} page(s) — zones proven clean. Export to keep it.`, { tone: 'ok' });
     // The verdict describes the document as it WAS one call ago. A stale "still hidden" survives the very
     // repair that answered it, and a stale "clean" is the one wrong answer this tool may never give — so
     // the check is asked again about what the container now holds.

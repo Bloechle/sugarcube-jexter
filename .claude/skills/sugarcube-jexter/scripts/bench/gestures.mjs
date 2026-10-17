@@ -1,6 +1,6 @@
 import { serve, openPrism, drag } from './prism_bench.mjs';
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
-const { browser, page, errors } = await openPrism({ dev: false });
+const { browser, page, errors } = await openPrism();
 const out = {};
 await page.evaluate(() => window.prism.setTool('redact'));
 await page.waitForTimeout(500);

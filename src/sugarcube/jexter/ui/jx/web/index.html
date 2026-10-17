@@ -381,10 +381,8 @@
 
 <script type="module">
   import '/shared/js/icons.js';                          // the apps' icon set (icons.add): registered before boot() draws
-  import { boot, theme, toast as qryToast, makeDropZone, makeDialog, makeMenu, makeEvents, format, copy } from '/shared/vendor/qry/qry-app.js';
+  import { boot, theme, toast, makeDropZone, makeDialog, makeMenu, makeEvents, format, copy } from '/shared/vendor/qry/qry-app.js';
 
-  const TONE = { success: 'ok', warning: 'warn', danger: 'danger', neutral: '', info: '' };
-  const toast = (msg, tone = 'info', ms) => qryToast(String(msg), { tone: TONE[tone] ?? tone, ...(ms ? { duration: ms } : {}) });
 
   const FSA = ('showOpenFilePicker' in window);   // File System Access API (Chromium → the window WebApp opens)
 
@@ -528,7 +526,7 @@
     showHotBar(true);
     await pollHot();                                    // first pass now
     hot.timer = setInterval(pollHot, Math.max(1, cfg.interval) * 1000);   // then every cfg.interval s
-    toast(`Watching “${escapeHtml(dir.name)}”`, 'success', 1600);
+    toast(`Watching “${dir.name}”`, { tone: 'ok', duration: 1600 });
   }
   function stopHot(){
     if (hot.timer){ clearInterval(hot.timer); hot.timer = null; }
@@ -695,7 +693,7 @@
     }));
     busy = false; $('#run').attr('disabled',null); $('#add-files').attr('disabled',null); $('#add-folder').attr('disabled',null);
     const ok = files.filter(f => f.status==='done').length;
-    toast(`${ok} file${ok>1?'s':''} normalized`, 'success', 1800);
+    toast(`${ok} file${ok>1?'s':''} normalized`, { tone: 'ok', duration: 1800 });
   }
 
   // ── saving loose files ──
@@ -706,7 +704,7 @@
       try {
         const h = await window.showSaveFilePicker({ suggestedName:outName(f.file.name), types:[{ description:'PDF', accept:{ 'application/pdf':['.pdf'] } }] });
         const w = await h.createWritable(); await w.write(f.blob); await w.close();
-        f.saved = true; f.msg = `saved as ${h.name} ✓`; render(); toast('Saved', 'success', 1500);
+        f.saved = true; f.msg = `saved as ${h.name} ✓`; render(); toast('Saved', { tone: 'ok', duration: 1500 });
       } catch (e){ if (e && e.name === 'AbortError') return; downloadOne(f); }   // cancelled → nothing; real error → fall back
     } else downloadOne(f);
   }
@@ -730,7 +728,7 @@
       try {
         const dir = await window.showDirectoryPicker({ mode:'readwrite' });
         for (const f of d){ const oh = await dir.getFileHandle(outName(f.file.name), { create:true }), w = await oh.createWritable(); await w.write(f.blob); await w.close(); f.saved = true; f.msg = `saved in “${dir.name}” ✓`; }
-        toast(`Saved ${d.length} file${d.length>1?'s':''} to “${escapeHtml(dir.name)}”`, 'success', 2200); render();
+        toast(`Saved ${d.length} file${d.length>1?'s':''} to “${dir.name}”`, { tone: 'ok', duration: 2200 }); render();
       } catch {}
     } else d.forEach((f,i) => setTimeout(() => downloadOne(f), i*350));
   }
@@ -793,7 +791,7 @@ java -cp sugarcube-jexter.jar sugarcube.jexter.ui.jx.Jexter --hotfolder ./inbox 
       // copy buttons in the API dialog
       $('#api-dialog').on('click', e => {
         const b = e.target.closest('[data-copy]'); if (!b) return;
-        copy(EX[b.dataset.copy] || ''); toast('Copied', 'success', 1200);
+        copy(EX[b.dataset.copy] || ''); toast('Copied', { tone: 'ok', duration: 1200 });
       });
 
       // row actions (delegated)

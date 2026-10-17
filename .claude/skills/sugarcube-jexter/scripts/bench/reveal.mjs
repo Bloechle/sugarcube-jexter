@@ -1,9 +1,10 @@
 // 2026-09-14: the verdict now runs BY ITSELF and writes nothing; `Re-check` asks again and `Repair` is
 // the one verb that turns findings into work. The old `Audit` did both — so it is `Re-check` + `Repair`
 // here, and a check that only wants the verdict presses `Re-check` alone.
-import { serve, openPrism } from './prism_bench.mjs';
+import { serve, openPrism, watchToasts } from './prism_bench.mjs';
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
 const { browser, page, errors } = await openPrism({ book: '/hidden.ocd.epub' });
+const toasts = await watchToasts(page);
 const out = {}; const slot = '#ribbon [data-ribbon="redact"] ';
 await page.evaluate(() => window.prism.setTool('redact'));
 await page.waitForTimeout(700);
@@ -30,7 +31,7 @@ out.audit = await page.evaluate(() => document.querySelectorAll('#rd-list li:not
 await page.evaluate((s) => [...document.querySelectorAll(s + '.px-rb-btn')].find(b => b.textContent.trim() === 'Reveal').click(), slot);
 await page.waitForTimeout(700);
 out.afterReveal = { runs: await seen(), box: await boxFill() };
-out.toast = await page.evaluate(() => [...document.querySelectorAll('sl-alert')].map(a => a.textContent.trim().slice(0, 130)).pop());
+out.toast = (await toasts()).map(t => t.text.slice(0, 130)).pop();
 // off again: everything back
 await page.evaluate((s) => [...document.querySelectorAll(s + '.px-rb-btn')].find(b => b.textContent.trim() === 'Reveal').click(), slot);
 await page.waitForTimeout(500);
