@@ -40,7 +40,7 @@ body.jx-app {
   display:flex; align-items:center; gap:.4rem; margin-top:.7rem;
   font-size:.82rem; font-weight:600; color:var(--qry-text);
 }
-.px-about-facts dt svg { width:.9rem; height:.9rem; color:var(--jx-brand-bright); flex:0 0 auto; }
+.px-about-facts dt .qry-icon { width:.9rem; height:.9rem; color:var(--jx-brand-bright); flex:0 0 auto; }
 .px-about-facts dd { margin:.1rem 0 0 1.3rem; font-size:.8rem; line-height:1.5; color:var(--qry-text-muted); }
 .px-sp { flex:1; }
 .px-about p { margin:.35rem 0; font-size:.9rem; line-height:1.55; color:var(--qry-text); }
@@ -64,14 +64,14 @@ body.tool-edit .px-stage { outline:2px solid rgba(229,72,77,.45); outline-offset
 
 /* Edits panel rows */
 .edit-row { display:flex; align-items:center; gap:.45rem; }
-.edit-row > i, .edit-row > svg { width:15px; height:15px; color:var(--jx-brand-bright); flex:0 0 auto; }
+.edit-row > i > .qry-icon { width:15px; height:15px; color:var(--jx-brand-bright); flex:0 0 auto; }
 .er-lbl { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .er-acts { display:inline-flex; gap:.05rem; flex:0 0 auto; opacity:.55; transition:opacity .15s; }
 .edit-row:hover .er-acts { opacity:1; }
 .er-btn { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; padding:0;
   border:0; border-radius:6px; background:transparent; color:var(--qry-text-muted); cursor:pointer; }
 .er-btn:hover { background:var(--qry-tint); color:var(--qry-text); }
-.er-btn i, .er-btn svg { width:14px; height:14px; }
+.er-btn .qry-icon { width:14px; height:14px; }
 
 /* ── Icon buttons ─────────────────────────────────────────────────────── */
 .px-icon {
@@ -82,8 +82,8 @@ body.tool-edit .px-stage { outline:2px solid rgba(229,72,77,.45); outline-offset
 .px-icon:hover { background:var(--qry-tint); color:var(--qry-text); }
 .px-icon:active { transform:translateY(.5px); }
 .px-icon.sm { width:28px; height:28px; }
-.px-icon i, .px-icon svg { width:19px; height:19px; }
-.px-icon.sm i, .px-icon.sm svg { width:16px; height:16px; }
+.px-icon .qry-icon { width:19px; height:19px; }
+.px-icon.sm .qry-icon { width:16px; height:16px; }
 
 /* ── Body: rail + stage ───────────────────────────────────────────────── */
 .px-body { flex:1; display:flex; min-height:0; }
@@ -130,7 +130,7 @@ body.has-drawer #toggle-drawer { display:inline-flex; }
   font-size:.76rem; font-weight:700; color:var(--qry-accent);
   border-bottom:1px solid color-mix(in srgb, var(--qry-text) 10%, transparent);
 }
-.px-pane-head i, .px-pane-head svg { width:.95rem; height:.95rem; }
+.px-pane-head .qry-icon { width:.95rem; height:.95rem; }
 /* ONE gutter for every block of a pane. They had three (.6 / .5 / .1rem) and the eye reads the
    difference as damage before it reads the content — the numeric fields sat flush against the edge
    while the line above them did not. */
@@ -151,14 +151,14 @@ body.has-drawer #toggle-drawer { display:inline-flex; }
   color:var(--qry-text-muted); background:transparent; border:0; border-radius:999px;
   transition:color .15s, background .15s, box-shadow .15s;
 }
-.tab-btn i, .tab-btn svg { width:.9rem; height:.9rem; flex:0 0 auto; }
+.tab-btn .qry-icon { width:.9rem; height:.9rem; flex:0 0 auto; }
 .tab-btn span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .tab-btn:hover { color:var(--qry-text); background:var(--qry-tint); }
 .tab-btn.active {
   color:var(--qry-accent); background:var(--qry-tint);
   box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--qry-accent) 32%, transparent);
 }
-.tab-btn.active i, .tab-btn.active svg { color:var(--qry-accent); }
+.tab-btn.active .qry-icon { color:var(--qry-accent); }
 
 .tab-panel { flex:1; overflow:auto; padding:.5rem; min-height:0; }
 .tab-panel.hidden { display:none; }
@@ -261,7 +261,7 @@ body.has-drawer #toggle-drawer { display:inline-flex; }
   color:#fff; background:linear-gradient(135deg, var(--jx-brand-bright), var(--jx-brand));
 }
 .search-box button:hover { filter:brightness(1.07); }
-.search-box button i, .search-box button svg { width:17px; height:17px; }
+.search-box button .qry-icon { width:17px; height:17px; }
 .search-info { font-size:.72rem; color:var(--qry-text-muted); padding:0 .35rem .45rem; }
 
 /* ── Stage — the scroll of fixed-layout pages ─────────────────────────── */
@@ -311,7 +311,7 @@ body.is-loading #empty { display:none; }
 }
 .px-segbtn:hover { color:var(--qry-text); }
 .px-segbtn.active { background:var(--qry-accent); color:#fff; }
-.px-segbtn i, .px-segbtn svg { width:16px; height:16px; }
+.px-segbtn .qry-icon { width:16px; height:16px; }
 
 .prism-page {
   position:relative; flex:0 0 auto;
@@ -373,9 +373,9 @@ body.is-loading #empty { display:none; }
   position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:.7rem; text-align:center; color:var(--qry-text-muted); padding:2rem;
 }
-.px-empty > i:first-child, .px-empty > svg:first-child { width:60px; height:60px; opacity:.4; }
+.px-empty > i:first-child > .qry-icon { width:60px; height:60px; opacity:.4; }
 .px-empty p { margin:0; font-size:.95rem; }
-.px-empty p i, .px-empty p svg { width:16px; height:16px; vertical-align:-3px; }
+.px-empty p .qry-icon { width:16px; height:16px; vertical-align:-3px; }
 .px-empty b { color:var(--qry-accent); }
 .px-empty small { font-size:.76rem; opacity:.75; }
 
@@ -425,7 +425,7 @@ body.is-loading #empty { display:none; }
   font:500 .68rem/1.1 var(--qry-font, system-ui), sans-serif;
   transition:background .14s ease, color .14s ease;
 }
-.px-rb-btn svg { width:1.15rem; height:1.15rem; }
+.px-rb-btn .qry-icon { width:1.15rem; height:1.15rem; }
 .px-rb-btn:hover:not([disabled]) { background:color-mix(in srgb, var(--qry-text) 7%, transparent); }
 .px-rb-btn.active { background:color-mix(in srgb, var(--qry-accent) 16%, transparent); color:var(--qry-accent); }
 .px-rb-btn[disabled] { opacity:.4; cursor:default; }
@@ -490,7 +490,7 @@ body.is-loading #empty { display:none; }
 .px-filebtn { display:inline-flex; align-items:center; gap:.32rem; padding:.2rem .6rem;
   border:0; border-radius:999px; background:transparent; color:var(--jx-brand-bright); cursor:pointer;
   font:600 .76rem/1 var(--qry-font, system-ui), sans-serif; }
-.px-filebtn svg { width:.85rem; height:.85rem; }
+.px-filebtn .qry-icon { width:.85rem; height:.85rem; }
 .px-filebtn:hover { background:color-mix(in srgb, var(--jx-brand) 14%, transparent); }
 :root[data-theme="light"] .px-filebtn,
 html:not([data-theme="dark"]) .px-filebtn { color:var(--jx-brand-deep); }
@@ -499,7 +499,7 @@ html:not([data-theme="dark"]) .px-filebtn { color:var(--jx-brand-deep); }
    belongs on the about card and the favicon, not repeated in every chrome. Same glyph, same slot,
    same gesture everywhere. */
 .px-menu-btn { display:inline-flex; align-items:center; justify-content:center; }
-.px-menu-btn i, .px-menu-btn svg { width:1.1rem; height:1.1rem; }
+.px-menu-btn .qry-icon { width:1.1rem; height:1.1rem; }
 
 .px-pager { display:inline-flex; align-items:baseline; gap:.3rem;
   font-family:var(--qry-font-mono); font-size:.76rem; color:var(--qry-text); }
@@ -534,7 +534,7 @@ html:not([data-theme="dark"]) .px-filebtn { color:var(--jx-brand-deep); }
 .log-head { display:flex; align-items:center; gap:.5rem; padding:.34rem .55rem; flex:0 0 auto;
   background:#0b1119; border-bottom:1px solid rgba(255,255,255,.08); }
 .log-title { font-weight:700; font-size:.74rem; display:inline-flex; align-items:center; gap:.4rem; color:#e6edf6; cursor:pointer; }
-.log-title i, .log-title svg { width:.95rem; height:.95rem; color:var(--jx-brand-bright); }
+.log-title .qry-icon { width:.95rem; height:.95rem; color:var(--jx-brand-bright); }
 .log-tag { font-size:.58rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:#9fb0c3;
   border:1px solid rgba(255,255,255,.18); border-radius:999px; padding:0 .35rem; }
 .log-sp { flex:1; }
@@ -576,7 +576,7 @@ html:not([data-theme="dark"]) .px-filebtn { color:var(--jx-brand-deep); }
 /* -- jexter-style chrome: footer status + standalone header logo ----- */
 .px-status { display:inline-flex; align-items:center; gap:.4rem; font-size:.78rem;
   color:var(--qry-text-muted); padding:0 .5rem; white-space:nowrap; min-width:7rem; }
-.px-status svg { width:.9rem; height:.9rem; }
+.px-status .qry-icon { width:.9rem; height:.9rem; }
 
 
 /* -- Settings and Fonts: two sheets (sugarcube.css carries the header signature of every dialog) -- */
@@ -584,7 +584,7 @@ html:not([data-theme="dark"]) .px-filebtn { color:var(--jx-brand-deep); }
 .px-fonts { --qry-sheet-w: 30rem; }
 .cfg-row { display:flex; align-items:center; justify-content:space-between; gap:.8rem; padding:.35rem 0; }
 .cfg-lbl { display:inline-flex; align-items:center; gap:.45rem; font-size:.85rem; color:var(--qry-text-muted); }
-.cfg-lbl svg { width:.95rem; height:.95rem; }
+.cfg-lbl .qry-icon { width:.95rem; height:.95rem; }
 .cfg-row select { width: 6.5rem; min-height: 2rem; padding-block: .2rem; }
 
 /* redact drawer: actions row, findings list */
@@ -608,7 +608,7 @@ body.tool-redact .px-stage { outline:2px solid rgba(229,72,77,.35); outline-offs
   border:1px solid var(--qry-line-strong); border-radius:8px; background:transparent;
   color:inherit; cursor:pointer; transition:border-color .15s, background .15s, transform .15s; }
 .export-opt:hover { border-color:var(--qry-accent); background:var(--qry-tint); transform:translateY(-1px); }
-.export-opt svg { width:1.3rem; height:1.3rem; color:var(--qry-accent); flex:none; }
+.export-opt .qry-icon { width:1.3rem; height:1.3rem; color:var(--qry-accent); flex:none; }
 .export-opt .n { font-weight:600; display:block; font-size:.85rem; }
 .export-opt .d { font-size:.72rem; color:var(--qry-text-muted); }
 .help-grid { display:grid; grid-template-columns:auto 1fr; gap:.45rem .9rem; align-items:center; font-size:.85rem; }
@@ -618,7 +618,7 @@ body.tool-redact .px-stage { outline:2px solid rgba(229,72,77,.35); outline-offs
 .px-tooltabs .px-tooltab { display:inline-flex; align-items:center; gap:.3rem; font:inherit; font-size:.78rem;
   padding:.2rem .6rem; border:0; background:transparent; color:var(--qry-text-muted);
   cursor:pointer; }
-.px-tooltabs .px-tooltab svg { width:.85rem; height:.85rem; }
+.px-tooltabs .px-tooltab .qry-icon { width:.85rem; height:.85rem; }
 
 /* Tabs still in development. Only rendered when dev mode is on (Ctrl/Cmd+Shift+D), and they mark
    THEMSELVES — an amber name and a dot. The badge that used to hang off the corner of the bar said
@@ -686,7 +686,7 @@ body.col-resizing iframe { pointer-events:none; }   /* frames swallow pointermov
   display:flex; flex-direction:column; gap:.5rem; }
 .cfg-title { display:flex; align-items:center; gap:.45rem; font-family:Poppins,sans-serif;
   font-weight:600; font-size:.82rem; color:var(--qry-text); }
-.cfg-title svg { width:.95rem; height:.95rem; color:var(--qry-accent); }
+.cfg-title .qry-icon { width:.95rem; height:.95rem; color:var(--qry-accent); }
 .cfg-switch { display:flex; align-items:center; gap:.6rem; padding:.3rem 0; font-size:.82rem; cursor:pointer; }
 .cfg-switch:has(:disabled) { opacity:.55; cursor:not-allowed; }
 .cfg-hint { font-size:.72rem; color:var(--qry-text-muted); line-height:1.35; }
@@ -814,7 +814,7 @@ html:not([data-theme="dark"]) .px-stage {
 }
 :root[data-theme="light"] .tab-btn.active,
 html:not([data-theme="dark"]) .tab-btn.active { color:var(--jx-brand-deep); }
-.tab-btn.active i, .tab-btn.active svg { color:currentColor; }
+.tab-btn.active .qry-icon { color:currentColor; }
 .px-tooltabs .px-tooltab.active {
   background:color-mix(in srgb, var(--jx-brand) 14%, transparent);
   color:var(--jx-brand-bright); font-weight:600; box-shadow:none;

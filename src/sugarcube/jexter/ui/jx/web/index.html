@@ -6,12 +6,11 @@
   <title>Jexter — PDF normalizer</title>
   <link rel="icon" type="image/svg+xml" href="/shared/sugarcube-mark.svg">
 
-  <!-- qry 3, vendored under /shared (nothing is fetched): qry-ui → the Sugarcube look → qry.js → icons -->
+  <!-- qry 3, vendored under /shared (nothing is fetched): qry-ui → the Sugarcube look → qry.js → modules (each imports the icon set, /shared/js/icons.js) -->
   <link rel="stylesheet" href="/shared/vendor/qry/qry-ui.css">
   <link rel="stylesheet" href="/shared/sugarcube.css">
   <script src="/shared/vendor/qry/qry.js"></script>
   <script>try { const t = JSON.parse(localStorage.getItem('jexter:theme')); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}</script>
-  <script type="module" src="/shared/js/icons.js"></script>
 
   <style>
     /* ── Jexter — one fixed normalization. Clean light-first chrome on qry-ui tokens,
@@ -28,11 +27,11 @@
     /* One icon opens the menu in all three tools — the title bar already names the app, and the
        mark belongs on the about card and the favicon, not repeated in every chrome. */
     .jx-menu-btn{ display:inline-flex; align-items:center; justify-content:center; padding:.22rem .4rem; }
-    .jx-menu-btn i,.jx-menu-btn svg{ width:1.1rem; height:1.1rem; }
+    .jx-menu-btn .qry-icon{ width:1.1rem; height:1.1rem; }
     .jx-icon-btn{ appearance:none; border:1px solid var(--qry-line); background:var(--qry-glass); color:var(--qry-text);
       width:2rem; height:2rem; border-radius:var(--qry-radius-sm); cursor:pointer; display:grid; place-items:center; transition:background .15s,border-color .15s,color .15s; }
     .jx-icon-btn:hover{ background:var(--qry-tint); border-color:color-mix(in srgb,var(--jx-brand) 35%,var(--qry-line)); color:var(--jx-brand); }
-    .jx-icon-btn i,.jx-icon-btn svg{ width:1.05rem; height:1.05rem; }
+    .jx-icon-btn .qry-icon{ width:1.05rem; height:1.05rem; }
 
     /* single centred column — one operation, no options */
     .jx-main{ flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; align-items:center; padding:1.2rem 1.2rem 1.6rem; }
@@ -65,7 +64,7 @@
     .jx-hero:hover{ border-color:var(--jx-brand-bright); background:color-mix(in srgb, var(--qry-accent) 6%, transparent); }
     .jx-hero .orb{ width:4.8rem; height:4.8rem; border-radius:999px; display:grid; place-items:center; margin-bottom:.25rem;
       background:color-mix(in srgb, var(--qry-accent) 12%, transparent); color:var(--jx-brand); box-shadow:0 10px 26px -16px color-mix(in srgb, var(--qry-accent) 70%, transparent); }
-    .jx-hero .orb i,.jx-hero .orb svg{ width:2.3rem; height:2.3rem; }
+    .jx-hero .orb .qry-icon{ width:2.3rem; height:2.3rem; }
     .jx-hero h2{ margin:0; color:var(--qry-text); font-size:1.25rem; }
     .jx-hero p{ margin:0; font-size:.85rem; max-width:30rem; }
 
@@ -77,14 +76,14 @@
     .jx-promise li{ display:grid; grid-template-columns:auto 1fr; gap:.15rem .55rem; align-items:start;
       padding:.6rem .7rem; border:1px solid var(--qry-line); border-radius:var(--qry-radius);
       background:var(--qry-glass); }
-    .jx-promise i,.jx-promise svg{ width:1rem; height:1rem; color:var(--jx-brand); grid-row:span 2; margin-top:.15rem; }
+    .jx-promise .qry-icon{ width:1rem; height:1rem; color:var(--jx-brand); grid-row:span 2; margin-top:.15rem; }
     .jx-promise b{ font-size:.82rem; font-weight:650; color:var(--qry-text); }
     .jx-promise span{ font-size:.74rem; line-height:1.35; color:var(--qry-text-muted); }
 
     .jx-row{ display:flex; align-items:center; gap:.75rem; padding:.65rem .85rem; border:1px solid var(--qry-line); border-radius:var(--qry-radius); background:var(--qry-glass); transition:border-color .15s; }
     .jx-row.done{ border-color:rgba(63,174,106,.45); } .jx-row.error{ border-color:rgba(214,83,58,.45); }
-    .jx-row .ic{ width:1.2rem; height:1.2rem; color:var(--qry-text-muted); flex:none; }
-    .jx-row.done .ic{ color:var(--jx-brand-bright); } .jx-row.error .ic{ color:#d6533a; }
+    .jx-row .ic > .qry-icon{ width:1.2rem; height:1.2rem; color:var(--qry-text-muted); flex:none; }
+    .jx-row.done .ic > .qry-icon{ color:var(--jx-brand-bright); } .jx-row.error .ic > .qry-icon{ color:#d6533a; }
     .jx-row .meta{ flex:1; min-width:0; }
     .jx-row .nm{ font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .jx-row .sub{ font-size:.74rem; color:var(--qry-text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -95,21 +94,21 @@
     .jx-row.error .jx-badge{ color:#d6533a; border-color:rgba(214,83,58,.4); }
     .jx-x{ appearance:none; border:0; background:transparent; color:var(--qry-text-muted); cursor:pointer; display:grid; place-items:center; width:1.9rem; height:1.9rem; border-radius:8px; }
     .jx-x:hover{ color:#d6533a; background:color-mix(in srgb,#d6533a 14%,transparent); }
-    .jx-x i,.jx-x svg{ width:1rem; height:1rem; }
+    .jx-x .qry-icon{ width:1rem; height:1rem; }
 
     /* labelled API button (header) */
 
     /* per-file Open button */
     .jx-open{ appearance:none; border:0; background:transparent; color:var(--jx-brand); cursor:pointer; display:grid; place-items:center; width:1.9rem; height:1.9rem; border-radius:8px; }
     .jx-open:hover{ background:color-mix(in srgb, var(--qry-accent) 12%, transparent); }
-    .jx-open i,.jx-open svg{ width:1rem; height:1rem; }
+    .jx-open .qry-icon{ width:1rem; height:1rem; }
 
     /* where results go — one line under the actions, opens Settings */
     .jx-dest{ display:flex; align-items:center; gap:.5rem; flex:0 0 auto; margin:-.35rem 0 1rem; padding:.4rem .7rem;
       font-size:.8rem; color:var(--qry-text-muted); border:1px solid var(--qry-line); border-radius:var(--qry-radius);
       background:var(--qry-glass); cursor:pointer; transition:border-color .15s, background .15s; }
     .jx-dest:hover,.jx-dest:focus-visible{ border-color:color-mix(in srgb,var(--jx-brand) 40%,var(--qry-line)); background:color-mix(in srgb, var(--qry-accent) 5%, transparent); outline:none; }
-    .jx-dest i,.jx-dest svg{ width:1rem; height:1rem; color:var(--jx-brand); flex:none; }
+    .jx-dest .qry-icon{ width:1rem; height:1rem; color:var(--jx-brand); flex:none; }
     .jx-dest b{ color:var(--qry-text); font-weight:600; }
     .jx-dest .sp{ flex:1; }
     .jx-dest .lnk{ color:var(--jx-brand); font-weight:600; }
@@ -124,15 +123,15 @@
     .opt-intro{ margin:0 .15rem .1rem; font-size:.78rem; line-height:1.45; color:var(--qry-text-muted); }
     .opt-intro b{ color:var(--qry-text); font-weight:600; }
     .opt-note{ display:flex; gap:.5rem; align-items:flex-start; margin-top:.35rem; }
-    .opt-note i,.opt-note svg{ width:.95rem; height:.95rem; color:var(--jx-brand); flex:none; margin-top:.1rem; }
+    .opt-note .qry-icon{ width:.95rem; height:.95rem; color:var(--jx-brand); flex:none; margin-top:.1rem; }
     .opt-main{ display:flex; align-items:center; flex-wrap:wrap; column-gap:.3rem; }
     .opt-main .opt-value{ flex-basis:100%; }
     .opt-q{ appearance:none; border:0; background:transparent; padding:0; width:1.3rem; height:1.3rem; display:inline-grid; place-items:center;
       border-radius:999px; color:var(--qry-text-muted); cursor:pointer; opacity:.7; transition:color .12s, background .12s, opacity .12s; }
     .opt-q:hover,.opt-q:focus-visible{ opacity:1; color:var(--jx-brand); background:color-mix(in srgb, var(--qry-accent) 10%, transparent); outline:none; }
     .opt-q[aria-expanded="true"]{ opacity:1; color:#fff; background:var(--jx-brand); }
-    .opt-q i,.opt-q svg{ width:.9rem; height:.9rem; color:inherit; background:none; padding:0; }
-    .opt-lead svg{ display:inline-block; width:.85rem; height:.85rem; vertical-align:-.14rem; margin:0 .1rem; color:var(--jx-brand); }
+    .opt-q .qry-icon{ width:.9rem; height:.9rem; color:inherit; background:none; padding:0; }
+    .opt-lead .qry-icon{ display:inline-block; width:.85rem; height:.85rem; vertical-align:-.14rem; margin:0 .1rem; color:var(--jx-brand); }
     .opt-value code{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.72rem; color:var(--jx-brand-deep); }
     [data-theme="dark"] .opt-value code{ color:var(--jx-brand-bright); }
     .opt-help:not(.opt-help-free){ background:color-mix(in srgb, var(--qry-accent) 5%, transparent); padding-top:.1rem; }
@@ -144,7 +143,7 @@
     .opt-warn{ display:flex; gap:.5rem; margin:0 .85rem .7rem; padding:.5rem .6rem; border-radius:8px; font-size:.74rem; line-height:1.45;
       color:#9a4a12; background:color-mix(in srgb,#e8913a 14%,transparent); border:1px solid color-mix(in srgb,#e8913a 40%,transparent); }
     .opt-warn[hidden]{ display:none; }
-    .opt-warn i,.opt-warn svg{ width:.95rem; height:.95rem; flex:none; margin-top:.1rem; }
+    .opt-warn .qry-icon{ width:.95rem; height:.95rem; flex:none; margin-top:.1rem; }
     [data-theme="dark"] .opt-warn{ color:#f0b27a; }
     [data-theme="dark"] .opt-help code, [data-theme="dark"] .jx-doc code{ color:var(--jx-brand-bright); background:color-mix(in srgb, var(--qry-accent) 18%, transparent); }
     /* A section opens with a title that reads as one: the icon in a tinted badge, the name in text colour,
@@ -152,9 +151,9 @@
     .opt-sec-head{ display:flex; align-items:center; gap:.55rem; padding:0 .1rem; }
     .opt-sec-head::after{ content:''; flex:1; height:1px; margin-left:.35rem;
       background:linear-gradient(90deg, color-mix(in srgb, var(--jx-brand) 45%, transparent), transparent); }
-    .opt-sec-head > i,.opt-sec-head > svg{ box-sizing:content-box; width:.9rem; height:.9rem; padding:.3rem; border-radius:7px; flex:0 0 auto;
+    .opt-sec-head > i > .qry-icon{ box-sizing:content-box; width:.9rem; height:.9rem; padding:.3rem; border-radius:7px; flex:0 0 auto;
       color:var(--jx-brand); background:color-mix(in srgb, var(--qry-accent) 12%, transparent); }
-    [data-theme="dark"] .opt-sec-head > i,[data-theme="dark"] .opt-sec-head > svg{ color:var(--jx-brand-bright); background:color-mix(in srgb, var(--qry-accent) 25%, transparent); }
+    [data-theme="dark"] .opt-sec-head > i > .qry-icon{ color:var(--jx-brand-bright); background:color-mix(in srgb, var(--qry-accent) 25%, transparent); }
     .opt-sec-head span{ font-size:.74rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--qry-text); }
     .opt-card{ border:1px solid var(--qry-line); border-radius:var(--qry-radius); background:color-mix(in srgb, var(--qry-text) 2.5%, transparent); overflow:hidden; }
     .opt-row{ display:flex; align-items:center; gap:1rem; min-height:2.7rem; padding:.35rem .85rem; transition:background .12s; }
@@ -179,21 +178,21 @@
     .jx-doc h3{ display:flex; align-items:center; gap:.45rem; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
       color:var(--qry-text-muted); margin:1.2rem 0 .5rem; }
     .jx-doc h3::after{ content:''; flex:1; height:1px; background:var(--qry-line); }
-    .jx-doc h3 i,.jx-doc h3 svg{ width:.9rem; height:.9rem; color:var(--jx-brand); }
+    .jx-doc h3 .qry-icon{ width:.9rem; height:.9rem; color:var(--jx-brand); }
     .jx-codewrap{ position:relative; }
     .jx-doc pre{ margin:.1rem 0; background:var(--qry-glass); border:1px solid var(--qry-line); border-radius:10px;
       padding:.75rem .85rem; overflow:auto; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.78rem; line-height:1.6; color:var(--qry-text); }
     .jx-copy{ position:absolute; top:.45rem; right:.45rem; appearance:none; cursor:pointer; display:inline-flex; align-items:center; gap:.3rem;
       border:1px solid var(--qry-line); background:var(--qry-bg); color:var(--qry-text-muted); border-radius:7px; padding:.2rem .45rem; font-size:.7rem; }
     .jx-copy:hover{ color:var(--jx-brand); border-color:color-mix(in srgb,var(--jx-brand) 40%,var(--qry-line)); }
-    .jx-copy i,.jx-copy svg{ width:.85rem; height:.85rem; }
+    .jx-copy .qry-icon{ width:.85rem; height:.85rem; }
     .jx-opts{ width:100%; border-collapse:collapse; font-size:.78rem; }
     .jx-opts td{ padding:.45rem .4rem; vertical-align:top; border-top:1px solid var(--qry-line); color:var(--qry-text-muted); line-height:1.45; }
     .jx-opts tr:first-child td{ border-top:0; }
     .jx-opts td:first-child{ white-space:nowrap; padding-left:0; }
     .jx-doc .tip + .tip{ margin-top:.55rem; }
     .jx-doc .tip{ margin-top:1rem; font-size:.78rem; color:var(--qry-text-muted); display:flex; gap:.5rem; align-items:flex-start; }
-    .jx-doc .tip i,.jx-doc .tip svg{ width:.95rem; height:.95rem; color:var(--jx-brand); flex:none; margin-top:.12rem; }
+    .jx-doc .tip .qry-icon{ width:.95rem; height:.95rem; color:var(--jx-brand); flex:none; margin-top:.12rem; }
     .jx-doc code{ white-space:nowrap; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.82rem; color:var(--jx-brand-deep); background:color-mix(in srgb, var(--qry-accent) 8%, transparent); padding:.05rem .3rem; border-radius:5px; }
   </style>
 </head>
@@ -381,6 +380,7 @@
 <input type="file" id="dir" webkitdirectory hidden>
 
 <script type="module">
+  import '/shared/js/icons.js';                          // the apps' icon set (icons.add): registered before boot() draws
   import { boot, theme, toast as qryToast, makeDropZone, makeDialog, makeMenu, makeEvents, format, copy } from '/shared/vendor/qry/qry-app.js';
 
   const TONE = { success: 'ok', warning: 'warn', danger: 'danger', neutral: '', info: '' };

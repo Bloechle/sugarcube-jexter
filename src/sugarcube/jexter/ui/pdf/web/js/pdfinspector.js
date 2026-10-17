@@ -12,6 +12,7 @@
  *   POST /api/open?name=…  → meta            GET /api/page?i&dpi[&src] → PNG
  *   GET  /api/tree?root=doc → [node…]         GET /api/content?page · /api/stream?obj · /api/render?obj · /api/text?page
  */
+import '/shared/js/icons.js';                          // the apps' icon set (icons.add): registered before boot() draws
 import { boot, theme, toast as qryToast, makeTabs, makeMenu, makeDialog, infoRow as makeRow, makeTable, makeEvents } from '/shared/vendor/qry/qry-app.js';
 import { loadOcd, esc } from '/shared/js/ocd.js';   // the OCD-EPUB carries the fonts (pages/fonts.svg, the single representation)
 

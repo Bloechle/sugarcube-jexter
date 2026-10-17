@@ -1,19 +1,20 @@
 /*
- * icons.js — the line icons of Prism, Jexter and PDF Inspector, inlined: no icon library is loaded,
- * nothing is fetched. The drawings are Lucide's (v1.17.0, ISC licence — vendor/LICENSE-lucide.txt), copied for the
- * names these apps use; an unknown name draws a square and says so in the console.
+ * icons.js — the line icons of Prism, Jexter and PDF Inspector: the apps' ONE set, and all it does is
+ * register it with qry (`icons.add`). The drawings are Lucide's (v1.17.0, ISC licence —
+ * ../vendor/LICENSE-lucide.txt), copied for the names these apps use; nothing is fetched.
  *
- *   <i data-icon="search"></i>          drawn as soon as it is in the document (one MutationObserver):
- *                                       markup, templates and innerHTML all just work — no call to make
- *   el.dataset.icon = 'sun'             redrawn when the name changes
- *   icon('x', { size: 16 })            the <svg> as a string, for a template
- *
- * The <i> becomes `<svg class="lucide lucide-<name> …the i's own classes…">`, as Lucide's own script made it:
- * CSS sizes `svg.lucide` (sugarcube.css: 1.15em by default),
- * colour is `currentColor`. To add an icon: copy its inner SVG from lucide.dev into ICONS, under its name.
+ * Everything else is qry's (qry-app.js, ICONS):
+ *   <i data-icon="search"></i>          drawn as soon as it is in the document — boot() starts icons.watch()
+ *   el.dataset.icon = 'sun'             redrawn: the <i> stays, the <svg class="qry-icon"> inside changes
+ *   icon('x', { size: 16 })            the <svg> as markup, for a template
+ * The look is CSS: `.qry-icon` (sugarcube.css: 1.15em by default; each app sizes it by context).
+ * An unknown name draws a dashed square and logs ONE console error. Each app imports this module first.
+ * To add an icon: copy its inner SVG from lucide.dev into the set, under its name.
  */
 
-const ICONS = {
+import { icons } from '/shared/vendor/qry/qry-app.js';
+
+icons.add({
     'align-left': '<path d="M21 5H3"/><path d="M15 12H3"/><path d="M17 19H3"/>',
     'arrow-up-down': '<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>',
     'baseline': '<path d="M4 20h16"/><path d="m6 16 6-12 6 12"/><path d="M8 12h8"/>',
@@ -151,63 +152,4 @@ const ICONS = {
     'zap': '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
     'zoom-in': '<circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/>',
     'zoom-out': '<circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/>',
-};
-
-const NS = 'http://www.w3.org/2000/svg';
-const ATTRS = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' };
-const warned = new Set();
-const paths = (name) => {
-    if (ICONS[name]) return ICONS[name];
-    if (!warned.has(name)) { warned.add(name); console.warn(`icons.js: no icon named "${name}"`); }
-    return '<rect x="4" y="4" width="16" height="16" rx="2"/>';
-};
-
-/** The icon as an SVG string: `icon('search')`, `icon('x', { size: 16, cls: 'spin' })`. */
-export const icon = (name, { size, cls = '' } = {}) =>
-    `<svg xmlns="${NS}" class="lucide lucide-${name}${cls ? ' ' + cls : ''}"${size ? ` width="${+size}" height="${+size}"` : ''}`
-    + Object.entries(ATTRS).map(([k, v]) => ` ${k}="${v}"`).join('') + ` aria-hidden="true">${paths(name)}</svg>`;
-
-/** Draw one placeholder: an <i data-icon> becomes an <svg data-icon>, keeping its classes, title and ARIA. */
-function draw(el) {
-    const name = el.dataset.icon;
-    if (el.namespaceURI === NS) {                        // already drawn: only its name changed
-        if (el.dataset.drawn === name) return;
-        el.innerHTML = paths(name);
-        el.setAttribute('class', `lucide lucide-${name} ${(el.dataset.cls || '')}`.trim());
-        el.dataset.drawn = name;
-        return;
-    }
-    const svg = document.createElementNS(NS, 'svg');
-    for (const [k, v] of Object.entries(ATTRS)) svg.setAttribute(k, v);
-    for (const a of el.attributes) if (a.name !== 'class') svg.setAttribute(a.name, a.value);
-    if (!svg.hasAttribute('aria-label') && !svg.hasAttribute('role')) svg.setAttribute('aria-hidden', 'true');
-    svg.dataset.cls = el.className;
-    svg.setAttribute('class', `lucide lucide-${name} ${el.className}`.trim());
-    svg.innerHTML = paths(name);
-    svg.dataset.drawn = name;
-    el.replaceWith(svg);
-}
-
-/** Draw every placeholder under `root` (the document by default). The observer below makes this automatic;
- *  call it yourself only for a tree that is not in the document yet. */
-export function drawIcons(root = document) {
-    if (root.matches?.('[data-icon]')) draw(root);
-    root.querySelectorAll?.('[data-icon]').forEach(draw);
-}
-
-// One observer for the whole app: whatever adds a placeholder (markup, a template, innerHTML), it is
-// drawn before the next paint; whatever renames one, it is redrawn.
-if (typeof document !== 'undefined' && !window.__icons) {
-    window.__icons = new MutationObserver((records) => {
-        for (const r of records) {
-            if (r.type === 'attributes') draw(r.target);
-            else for (const n of r.addedNodes) if (n.nodeType === 1) drawIcons(n);
-        }
-    });
-    const start = () => {
-        drawIcons();
-        window.__icons.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-icon'] });
-    };
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
-    else start();
-}
+});

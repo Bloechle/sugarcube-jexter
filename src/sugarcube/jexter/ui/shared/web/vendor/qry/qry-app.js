@@ -19,7 +19,7 @@
  *   CHARTS      makeChart (dots, lines, bars, rules — plain SVG in the theme's tokens)
  *   INPUT       makeKeyboard · makeSlider (a custom slider's keys + ARIA) · makeDropZone (drop, paste and choose)
  *   SERVER      makeEvents (one SSE stream: online, last(name), on(name))
- *   ICONS       icons.add · icon · icons.render   (qry draws none: the app registers its own)
+ *   ICONS       icons.add · icons.watch (boot starts it) · icon   (qry draws none: the app registers its own)
  *   DEVICE      makeWakeLock · makePwa (service worker, updates, install, offline copy)
  *   TABLES      makeTable · makeChips · infoRow
  *
@@ -250,17 +250,19 @@ export const theme = (() => {
 })();
 
 /** One-call convenience for the common opening sequence:
- *  set the title → apply the saved theme → run `ready` on DOM-ready.
+ *  set the title → apply the saved theme → draw the icons (`icons.watch()`) → run `ready` on DOM-ready.
  *  Every step is also available standalone — use this only if it saves typing.
  *  @param {Object}   [opts]
  *  @param {Function} [opts.ready]        Run once the DOM is ready
  *  @param {boolean|{persist?: string, ground?: string}} [opts.theme=true]   Apply persisted/system theme (an object: theme.init's options)
+ *  @param {boolean}  [opts.icons=true]   Draw every <i data-icon>, now and as they come (icons.watch)
  *  @param {string}   [opts.title]        Sets document.title if given
  *  @example boot({ title: 'Gallery', ready: () => wire() })
  */
-export const boot = ({ ready, theme: useTheme = true, title } = {}) => {
+export const boot = ({ ready, theme: useTheme = true, icons: useIcons = true, title } = {}) => {
     if (title) document.title = title;
     if (useTheme) theme.init(useTheme === true ? {} : useTheme);
+    if (useIcons) icons.watch();                                   // every <i data-icon> drawn, now and later
     if (ready) $.ready(ready);
 };
 
@@ -1385,35 +1387,61 @@ export const makeEvents = (url, { seed = {} } = {}) => {
 // ICONS — a registry: qry draws none, the app registers its own (24 × 24, stroked)
 // ════════════════════════════════════════════════════════════════════════════
 
-const _icons = new Map();
-/** The app's icons, by name. `icons.add({ name: drawing })` registers them — a drawing is a path's
- *  `d` ("M4 6h16M4 12h16") or SVG markup for a 24 × 24 box ('<circle cx="12" cy="12" r="9"/>…',
- *  Lucide's files as they are). `icons.render(root)` fills every `[data-icon="name"]` under root
- *  (and root itself) — the element STAYS (change its data-icon and render again to swap: a play
- *  button becoming pause). qry-ui.css draws `.qry-icon` stroked in currentColor (`--qry-icon-stroke`,
- *  2); a filled shape says so itself (`fill="currentColor"`).
- *  @example icons.add({ play: 'M7 4.5v15l12.5-7.5z', list: 'M4 6h16M4 12h16M4 18h16' })
- *  @example <button data-icon="play" aria-label="Play"></button>  … icons.render()
+const _icons = new Map(), _missing = new Set(), _watched = new WeakSet(), _drawn = new WeakMap();
+/** @private — what an unknown name draws: a dashed square, seen at once (and said once in the console). */
+const _MISSING = '<rect x="3.5" y="3.5" width="17" height="17" rx="2" stroke-dasharray="3 2.5"/>';
+/** The app's icons, by name — ONE workflow, every app:
+ *  1. its set, in one module that only registers: `icons.add({ name: drawing })` — a drawing is SVG
+ *     markup for a 24 × 24 box, stroked (Lucide's convention: copy a file's inner SVG from
+ *     lucide.dev as it is, its ISC licence beside the set), or a path's `d` ("M4 6h16M4 12h16");
+ *  2. in markup, `<i data-icon="name"></i>` anywhere — drawn as soon as it is in the document
+ *     (`boot()` starts `icons.watch()`: one MutationObserver; markup, templates, innerHTML just
+ *     work), redrawn when its `data-icon` changes (play → pause); the element STAYS (its classes,
+ *     its aria-label), the <svg> goes inside;
+ *  3. in a string, `icon(name, opts)` ($.html-safe);
+ *  4. the look is CSS: `.qry-icon` (qry-ui.css), 1.25em, stroked in currentColor, its width
+ *     `--qry-icon-stroke` (2) — size it by the host's font-size or `[data-icon]`'s rules, never per
+ *     drawing; a filled shape says so itself (`fill="currentColor"`).
+ *  An unknown name draws a dashed square and logs ONE console error per name: a browser suite
+ *  that fails on console errors (they all do) catches a typo or a forgotten registration.
+ *  @example icons.add({ play: '<path d="M7 4.5v15l12.5-7.5z"/>', list: 'M4 6h16M4 12h16M4 18h16' })
+ *  @example <button aria-label="Play"><i data-icon="play"></i></button>
  */
 export const icons = {
     add(set) { for (const [name, drawing] of Object.entries(set)) _icons.set(name, drawing); return icons; },
     has: (name) => _icons.has(name),
-    render(root = document) {
-        const all = [...(root.matches?.('[data-icon]') ? [root] : []), ...root.querySelectorAll('[data-icon]')];
-        for (const el of all) el.html(icon(el.dataset.icon));
+    /** Draw every `[data-icon]` under root now, and each one that enters it or changes its name
+     *  (boot() calls it for the document; a second call on the same root does nothing). */
+    watch(root = document, { signal } = {}) {
+        if (_watched.has(root) || signal?.aborted) return;
+        _watched.add(root);
+        const draw = (el) => { const n = el.dataset.icon; if (_drawn.get(el) !== n) { _drawn.set(el, n); el.html(icon(n)); } };
+        const scan = (node) => { if (node.matches?.('[data-icon]')) draw(node); for (const el of node.querySelectorAll?.('[data-icon]') ?? []) draw(el); };
+        const observer = new MutationObserver((records) => {
+            for (const r of records) {
+                if (r.type === 'attributes') { if (r.target.isConnected && r.target.matches('[data-icon]')) draw(r.target); }
+                else for (const n of r.addedNodes) if (n.nodeType === 1) scan(n);
+            }
+        });
+        observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-icon'] });
+        scan(root);
+        signal?.addEventListener('abort', () => { observer.disconnect(); _watched.delete(root); }, { once: true });
     },
 };
 
 /** One icon as markup ($.html-safe): an inline <svg class="qry-icon">, hidden from assistive
  *  technology unless `label` names it (a button with only an icon names the BUTTON instead).
- *  @param {string} name  registered with icons.add (an unknown name warns and draws nothing)
+ *  @param {string} name  registered with icons.add (an unknown name: a dashed square + one console error)
  *  @param {{size?: number|string, label?: string, class?: string}} [opts]  size: px or any CSS length (default 1.25em)
  *  @returns {SafeHTML}
  *  @example btn.html($.html`${icon('save')} Save`)
  */
 export const icon = (name, { size, label, class: cls = '' } = {}) => {
-    const d = _icons.get(name);
-    if (d == null) { console.warn(`icon(${JSON.stringify(name)}) — not registered: icons.add({ ${name}: '…' })`); return $.raw(''); }
+    let d = _icons.get(name);
+    if (d == null) {
+        if (!_missing.has(name)) { _missing.add(name); console.error(`icon(${JSON.stringify(name)}) — not registered: icons.add({ ${JSON.stringify(name)}: '<path …/>' })`); }
+        d = _MISSING; cls = `${cls} is-missing`;
+    }
     const px = typeof size === 'number' ? `${size}px` : size;
     return $.raw(`<svg class="${$.esc(`qry-icon ${cls}`.trim())}" viewBox="0 0 24 24"${px ? ` style="width:${$.esc(px)};height:${$.esc(px)}"` : ''}${label
         ? ` role="img" aria-label="${$.esc(label)}"` : ' aria-hidden="true"'} focusable="false">${d.trimStart().startsWith('<') ? d : `<path d="${$.esc(d)}"/>`}</svg>`);

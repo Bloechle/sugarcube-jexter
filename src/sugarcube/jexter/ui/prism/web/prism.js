@@ -29,6 +29,7 @@
 //   export     — bake the model into clean page copies (portable) + ship the
 //                sidecar, so the .epub is portable AND re-editable in PRISM.
 //   console    — F2 log panel capturing console.* + errors.
+import '/shared/js/icons.js';                          // the apps' icon set (icons.add): registered before boot() draws
 import { boot, theme, toast as qryToast, makeDropZone, makeDialog, makeMenu, copy } from '/shared/vendor/qry/qry-app.js';
 import { unzip } from '/shared/vendor/fflate.js';
 
@@ -76,7 +77,7 @@ function emit(evt, ...args) {
   for (const cb of subs.get(evt) || []) { try { cb(...args); } catch (e) { console.error(e); } }
 }
 
-// Footer status line (jexter-style): one place sets it; its <i data-icon> draws itself (icons.js).
+// Footer status line (jexter-style): one place sets it; its <i data-icon> draws itself (qry's icons.watch, which boot() starts).
 function setStatus(html) {
   const el = $.opt('#status'); if (!el) return;
   el.innerHTML = html;

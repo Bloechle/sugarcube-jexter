@@ -386,7 +386,15 @@ Refactored, public layout — all under `sugarcube.jexter`:
   `shared/web/vendor/` (nothing is fetched): qry 3 (`qry/`: `qry.js` the classic core, `qry-ui.css`,
   `qry-web.js` the website tier, `qry-app.js` the app tier that re-exports it — every module imports
   `/shared/vendor/qry/qry-app.js`; refresh with qry2's `nimbus-qry2.cjs --run=vendor --app --to=<dir>`),
-  fflate (unzip + zipSync), Poppins; the line icons are Lucide drawings inlined in `js/icons.js`.
+  fflate (unzip + zipSync), Poppins; the line icons are Lucide drawings, the apps' ONE set in `js/icons.js` — it only
+  calls qry's `icons.add`, and each app's entry module imports it before `boot()` (which starts `icons.watch()`).
+  Icons (2026-10-17, qry2 461e820): `<i data-icon="name">` STAYS and gets an `<svg class="qry-icon">` inside, redrawn
+  when `data-icon` changes; `i[data-icon] { display: contents }` + `.qry-icon { 1.15em, baseline }` in `sugarcube.css`
+  keep the look the replaced `svg.lucide` had (A/B: every icon's box and stroke identical on 23 screens of the three
+  apps). Size by context with `X .qry-icon` — never `X i` / `X svg`; a class on the `<i>` (`.tcaret`, `.ic`) reaches
+  the drawing as `.tcaret > .qry-icon`. An unknown name: qry's dashed square + one console.error. Before, a caret kept
+  by reference (`$.create('i')`) was the DETACHED placeholder once drawn, so PDF Inspector's tree chevrons never turned;
+  the `<i>` staying fixed that, and `.tcaret`'s .8rem — dead under `svg.lucide` — was dropped to keep 1.15em.
   qry 3's names (2026-10-17): `toast(msg, { tone, duration })` (each app's `toast` wrapper maps its
   words — success / warning / danger / neutral — to qry's tones), `boot({ theme: { persist } })` +
   `theme.mode(m)`, `makeTabs('.jx-tab', { panels, attribute })` + `.selected(name)`,
@@ -1795,10 +1803,11 @@ Both cheap, both now scenarios, both had been wrong for as long as they existed:
   renamed: the pane went bare. `scripts/bench/groupstyle.mjs` probes the three heading classes by
   COMPUTED style (a heading that lost its rule still shows its text) and checks `compare.js` emits its
   own.
-- **An icon name that does not exist leaves its placeholder.** `lucide.createIcons()` REPLACES the `<i
-  data-lucide>`; a typo leaves the element sitting there, and a hole in a row of line icons reads as a
-  layout wobble rather than as a typo. `scripts/bench/icons.mjs` visits every tool and reports every
-  `[data-lucide]` that drew nothing — 71 names, 0 dead today. Run it after adding a command.
+- **An icon name that does not exist must not ship.** A hole in a row of line icons reads as a layout
+  wobble rather than as a typo. Today (qry's icons) an unknown name draws a dashed square
+  (`.qry-icon.is-missing`) and logs one console.error; `scripts/bench/icons.mjs` visits every tool and
+  reports every `[data-icon]` without a drawn `.qry-icon` or with the square, and fails on any console
+  error — 81 names, 0 dead (2026-10-17). Run it after adding a command.
 
 **And a stub that pretended to be a fallback**: `engine.js` resolved a structure reference as
 `doc.getElementById(id) || doc.getElementById(paraOf(pi, id))` with `const paraOf = () => ''` — so the

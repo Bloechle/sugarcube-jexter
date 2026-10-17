@@ -459,9 +459,13 @@ dialog > .qry-toasts { position: fixed; }
 .qry-toast-close:hover { color: var(--qry-text); background: var(--qry-tint); }
 .qry-toast.is-leaving { opacity: 0; transform: translateX(12px); }
 
-/* icons (qry-app.js icon / icons.render): stroked in the text's colour; a filled shape says so itself */
+/* icons (qry-app.js: <i data-icon> drawn by icons.watch, or icon()): stroked in the text's colour; a filled shape says so itself */
 .qry-icon { inline-size: 1.25em; block-size: 1.25em; flex: none; vertical-align: -.25em; fill: none; stroke: currentColor;
             stroke-width: var(--qry-icon-stroke, 2); stroke-linecap: round; stroke-linejoin: round; }
+.qry-icon.is-missing { color: var(--qry-danger); }   /* an unknown name: a dashed square, seen at once */
+i[data-icon] { display: contents; }                    /* the host of a drawn icon (icons.watch): out of the layout,
+                                                          the <svg> is its parent's child (a flex button lines it up) —
+                                                          so name the BUTTON, never the <i> */
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NAVIGATION — tabs (makeTabs), sidebar (makeSidebar), header (makeAutoHideHeader)

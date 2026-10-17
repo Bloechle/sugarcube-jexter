@@ -53,7 +53,7 @@ sleep 9 && node inspect2.mjs
 | `repair` | a scan: the box is baked into new image bytes and the second audit is empty |
 | `refusal` | a zone that only PARTLY covers a box: refused, with a message that says what to do |
 | `authortext` | `ocd.js` authors a run and the ENGINE reads it back whole — `data-size`, `data-blanks`, `fonts.svg#`. It PROVES it now: it re-exports the container with the engine and compares the re-written run against what was typed (it used to print two dead attribute names and assert nothing) |
-| `icons` | every icon name a ribbon or the chrome asks for actually DRAWS — lucide leaves the placeholder for a name it does not know, and a hole in a row of line icons reads as a layout wobble |
+| `icons` | every `<i data-icon>` a ribbon or the chrome asks for actually DRAWS a `.qry-icon` — a name the set (`shared/web/js/icons.js`) does not register draws qry's dashed square and logs a console error; a hole in a row of line icons reads as a layout wobble, not as a typo |
 | `groupstyle` | every pane that groups its rows uses its OWN heading class, and each of those classes is styled — checked by computed style, because a heading that lost its rule still shows its text |
 | `fontmetrics` | the metrics `ocd.js` reads out of `pages/fonts.svg` ARE the ones the member states — they were all 0 for as long as the short v1 names sat in the parser, and both font panels drew fewer guides for it |
 | `redactaudit` | the Audit tab folded into Redact: the verdict runs by itself, writes NOTHING to the container, Repair is the one crossing into the work list, and Apply makes the verdict be asked again |

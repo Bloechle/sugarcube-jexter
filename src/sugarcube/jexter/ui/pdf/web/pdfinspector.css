@@ -24,7 +24,7 @@ body.jx-app { display: flex; flex-direction: column; height: 100vh; overflow: hi
    belongs on the about card and the favicon, not repeated in every chrome. Same glyph, same slot,
    same gesture everywhere. */
 .jx-menu-btn { display: inline-flex; align-items: center; justify-content: center; padding: .25rem .45rem; }
-.jx-menu-btn i, .jx-menu-btn svg { width: 1.1rem; height: 1.1rem; }
+.jx-menu-btn .qry-icon { width: 1.1rem; height: 1.1rem; }
 
 
 /* ── Header tabs (segmented) ── */
@@ -36,13 +36,13 @@ body.jx-app { display: flex; flex-direction: column; height: 100vh; overflow: hi
 .jx-tab { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
     padding: .34rem .8rem; cursor: pointer; font-size: .76rem; font-weight: 600; color: var(--qry-text-muted);
     background: none; border: 0; border-radius: 999px; transition: color .15s, background .15s, box-shadow .15s; }
-.jx-tab i, .jx-tab svg { width: .95rem; height: .95rem; flex: 0 0 auto; }
+.jx-tab .qry-icon { width: .95rem; height: .95rem; flex: 0 0 auto; }
 .jx-tab:hover { color: var(--qry-text); }
 .jx-tab[aria-selected="true"] {
   color: var(--qry-accent); background: var(--qry-surface);
   box-shadow: 0 1px 2px rgba(0,0,0,.12), inset 0 0 0 1px color-mix(in srgb, var(--qry-accent) 30%, transparent);
 }
-.jx-tab[aria-selected="true"] svg { color: var(--qry-accent); }
+.jx-tab[aria-selected="true"] .qry-icon { color: var(--qry-accent); }
 
 /* ── Body grid: pages · splitter · viewer ── */
 .jx-body { flex: 1; display: grid; min-height: 0; grid-template-columns: var(--jx-left-w, 230px) 6px 1fr; }
@@ -99,8 +99,8 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
     font-size: .78rem; white-space: nowrap; }
 .trow:hover { background: var(--qry-tint); }
 .trow.sel { background: color-mix(in srgb, var(--qry-accent) 16%, transparent); }
-.tcaret { width: .8rem; height: .8rem; flex: 0 0 auto; color: var(--qry-text-muted); }
-.tcaret.leaf { opacity: .4; }
+.tcaret > .qry-icon { flex: 0 0 auto; color: var(--qry-text-muted); }   /* 1.15em, as it always drew */
+.tcaret.leaf > .qry-icon { opacity: .4; }
 .tcos { overflow: hidden; text-overflow: ellipsis; }
 .tcos-stream { color: var(--jx-brand-bright); }
 .tcos-dict { color: var(--qry-accent); }
@@ -116,7 +116,7 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 .srcbtn { display: inline-flex; align-items: center; gap: .3rem; padding: .22rem .55rem; cursor: pointer;
     font-size: .72rem; font-weight: 600; color: var(--qry-text-muted); background: transparent;
     border: 0; border-radius: 999px; transition: color .15s, background .15s; }
-.srcbtn i, .srcbtn svg { width: .85rem; height: .85rem; }
+.srcbtn .qry-icon { width: .85rem; height: .85rem; }
 .srcbtn:hover { color: var(--qry-text); }
 .srcbtn.is-on { color: #fff; background: var(--qry-accent); box-shadow: 0 1px 3px color-mix(in srgb, var(--qry-accent) 40%, transparent); }
 .cmp-toggle { border: 1px solid var(--qry-line); }
@@ -141,14 +141,14 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 .jx-foot .sp { flex: 1; }
 .jx-foot .mono { font-family: var(--qry-font-mono); font-size: .7rem; color: var(--qry-text-muted); }
 .jx-foot #status { font-weight: 600; color: var(--qry-text); display: inline-flex; align-items: center; gap: .35rem; }
-.jx-foot #status i, .jx-foot #status svg { color: var(--qry-accent); width: .9rem; height: .9rem; }
+.jx-foot #status .qry-icon { color: var(--qry-accent); width: .9rem; height: .9rem; }
 .zoom { display: inline-flex; align-items: center; gap: .3rem; }
 .zoom .qry-btn { padding: .2rem .5rem; }
 .qry-btn { display: inline-flex; align-items: center; justify-content: center; gap: .3rem; cursor: pointer;
     font-size: .74rem; color: var(--qry-text-muted); background: none; border: 1px solid transparent; border-radius: 6px;
     padding: .25rem .4rem; transition: all var(--qry-speed) var(--qry-ease); }
 .qry-btn:hover { color: var(--qry-text); background: var(--qry-tint); }
-.qry-btn i, .qry-btn svg { width: 1rem; height: 1rem; }
+.qry-btn .qry-icon { width: 1rem; height: 1rem; }
 
 /* ── Doc drawer tables ── */
 .jx-section { display: flex; align-items: center; gap: .5rem; margin: 1.1rem 0 .45rem; font-size: .72rem; font-weight: 700;
@@ -172,7 +172,7 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 .dropzone.show { display: flex; }
 .dropzone-card { display: flex; flex-direction: column; align-items: center; gap: .6rem; padding: 2.4rem 3rem;
     border: 2px dashed var(--qry-accent); border-radius: 16px; background: var(--qry-glass); color: var(--qry-text); }
-.dropzone-card i, .dropzone-card svg { width: 2.6rem; height: 2.6rem; color: var(--qry-accent); }
+.dropzone-card .qry-icon { width: 2.6rem; height: 2.6rem; color: var(--qry-accent); }
 
 .scroll::-webkit-scrollbar, .pi-pre::-webkit-scrollbar, .pi-tree-col::-webkit-scrollbar, .pagelist::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--qry-accent) 30%, transparent); border-radius: 10px; background-clip: padding-box; border: 2px solid transparent; }

@@ -75,7 +75,7 @@ linkedom pitfalls (bench-only artifacts, NOT bugs):
 sandbox at `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`:
 ```sh
 cd /tmp/jstest && PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npm i playwright-core
-# nothing to vendor: qry 3, fflate and the icons are in shared/web/vendor/ already —
+# nothing to vendor: qry 3 and fflate are in shared/web/vendor/, the icon set in shared/web/js/ —
 # copy ui/prism/web to site/ and ui/shared/web to site/shared/. Serve + drive:
 node server.mjs > /tmp/server.log 2>&1 & SRV=$!; sleep 1.5
 timeout 90 node drive.mjs; kill $SRV        # one shell — servers die between tool calls

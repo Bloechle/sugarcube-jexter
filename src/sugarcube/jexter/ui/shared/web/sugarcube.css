@@ -44,8 +44,11 @@ body.jx-app {
         var(--qry-bg);
 }
 
-/* ── icons (icons.js): 1.15em by default, sized by context ── */
-svg.lucide { flex: none; width: 1.15em; height: 1.15em; max-width: none; }
+/* ── icons: qry's <svg class="qry-icon"> inside the <i data-icon> that asked for it (the set: js/icons.js).
+   The <i> is only the placeholder (qry-ui.css: `display: contents` — the drawn <svg> is THE box, a flex row
+   lays it out alone). 1.15em on the text's baseline by default (qry's 1.25em, -.25em is not this look);
+   an app sizes `.qry-icon` by context, and puts a rule on the <svg>, never on the <i>. ── */
+.qry-icon { inline-size: 1.15em; block-size: 1.15em; max-width: none; vertical-align: baseline; }
 
 /* ── a busy line (the status bar while the engine works) ─────────────────── */
 .jx-spin { display: inline-block; width: .85em; height: .85em; border-radius: 50%; flex: none;
@@ -67,7 +70,7 @@ svg.lucide { flex: none; width: 1.15em; height: 1.15em; max-width: none; }
 .qry-menu > :is(button, a) > .jx-kbd { margin-inline-start: auto; }
 .jx-kbd { font-family: var(--qry-font-mono); font-size: .66rem; color: var(--qry-text-muted);
     border: 1px solid var(--qry-line); border-radius: 5px; padding: .02rem .3rem; white-space: nowrap; }
-.qry-menu svg.lucide { width: 1rem; height: 1rem; color: var(--qry-text-muted); }
+.qry-menu .qry-icon { width: 1rem; height: 1rem; color: var(--qry-text-muted); }
 
 /* ── toasts: the tone as a band on the leading edge ──────────────────────── */
 .qry-toast { box-shadow: 0 8px 26px -14px rgba(0, 0, 0, .55); }
