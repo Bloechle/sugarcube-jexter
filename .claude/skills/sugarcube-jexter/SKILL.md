@@ -64,7 +64,7 @@ command, do not replace the tool.**
 | links, fields, annotations, layers, outline — before and after a trip | `Rich.java` + `make_rich.py` | §5 |
 | a broken or malicious container | `make_hostile.py` + `Hostile.java` | §5 |
 | drive the real Prism in Chromium against the real engine | `scripts/bench/prism_bench.mjs` + the scenarios | §4 · bench/README |
-| a text/structure comparison against docling | the `docling` skill | — |
+| a text/structure comparison against docling | the `docling` skill (`.claude/skills/docling/`, in this repo) | — |
 | a customer batch: source vs DELIVERED vs NEW, per reported page, two engines, + an all-pages "made worse" sweep | `scripts/batch_score.py` | §5c, press batch 2026-09-21 |
 
 Measured 2026-09-21 on the `rich` fixture, corrected commands: `compare.py` ran end to end on both a

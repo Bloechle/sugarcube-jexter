@@ -68,7 +68,7 @@ moves a pixel.
 |---|---|
 | anything in this repo: dev, fidelity gates, Prism, release | `.claude/skills/sugarcube-jexter/SKILL.md` (in the repo, updated by commit) |
 | the build deck family (`nimbus-jexter.cjs`) | account skill `nimbus` |
-| DocTags / OCD-AI | account skill `docling` |
+| DocTags / OCD-AI | `.claude/skills/docling/SKILL.md` |
 | Prism, PDFInspector, Jexter or any web UI | account skill `qry-js` |
 
 Private notes (market audit, who consumes the library) stay in the account skill
