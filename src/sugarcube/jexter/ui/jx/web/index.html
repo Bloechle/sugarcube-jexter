@@ -6,7 +6,7 @@
   <title>Jexter — PDF normalizer</title>
   <link rel="icon" type="image/svg+xml" href="/shared/sugarcube-mark.svg">
 
-  <!-- qry 2, vendored under /shared (nothing is fetched): qry-ui → the Sugarcube look → qry.js → icons -->
+  <!-- qry 3, vendored under /shared (nothing is fetched): qry-ui → the Sugarcube look → qry.js → icons -->
   <link rel="stylesheet" href="/shared/vendor/qry/qry-ui.css">
   <link rel="stylesheet" href="/shared/sugarcube.css">
   <script src="/shared/vendor/qry/qry.js"></script>
@@ -381,10 +381,10 @@
 <input type="file" id="dir" webkitdirectory hidden>
 
 <script type="module">
-  import { boot, theme, toast as qryToast, makeDropZone, makeDialog, makeMenu, format, copy } from '/shared/vendor/qry/qry-web.js';
+  import { boot, theme, toast as qryToast, makeDropZone, makeDialog, makeMenu, makeEvents, format, copy } from '/shared/vendor/qry/qry-app.js';
 
-  const TONE = { success: 'ok', warning: 'warn', danger: 'danger', neutral: 'info' };
-  const toast = (msg, tone = 'info', ms) => qryToast(String(msg), TONE[tone] || tone, ms ? { duration: ms } : undefined);
+  const TONE = { success: 'ok', warning: 'warn', danger: 'danger', neutral: '', info: '' };
+  const toast = (msg, tone = 'info', ms) => qryToast(String(msg), { tone: TONE[tone] ?? tone, ...(ms ? { duration: ms } : {}) });
 
   const FSA = ('showOpenFilePicker' in window);   // File System Access API (Chromium → the window WebApp opens)
 
@@ -759,7 +759,7 @@ java -cp sugarcube-jexter.jar sugarcube.jexter.ui.jx.Jexter --hotfolder ./inbox 
 
   // ── boot + wiring ──
   const api = makeDialog('#api-dialog'), settings = makeDialog('#cfg-drawer');
-  boot({ title:'Jexter', theme: { key: 'jexter:theme' }, ready(){
+  boot({ title:'Jexter', theme: { persist: 'jexter:theme' }, ready(){
       syncThemeIcon();
       render(); fillApiDoc(); initCfgUI();
       if (!(FSA && window.showDirectoryPicker)) $('#hot').css('display','none');
@@ -807,11 +807,11 @@ java -cp sugarcube-jexter.jar sugarcube.jexter.ui.jx.Jexter --hotfolder ./inbox 
       });
 
       // real drag & drop (File objects) via the qry-ui overlay
-      makeDropZone(document.body, { label:'Drop PDFs to normalize', onFiles: list => addFiles(list, null) });
+      makeDropZone(document.body, { overlayLabel:'Drop PDFs to normalize', onFiles: list => addFiles(list, null) });
 
       // keep the app alive — the WebApp watchdog exits a few seconds after the
       // window (this SSE connection) drops. It's local, so there's no status to show.
-      try { new EventSource('/api/alive'); } catch {}
+      makeEvents('/api/alive');
     }});
 
   function openCfg(){ settings.open(); }

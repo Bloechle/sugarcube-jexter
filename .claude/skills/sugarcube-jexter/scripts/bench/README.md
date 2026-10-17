@@ -22,8 +22,8 @@ JEXTER_CP_FULL="$OUT:$REPO/lib/*" JAVA_BIN=$JDK21/bin/java \
 PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node sweep.mjs
 ```
 
-`prism_bench.mjs` is the harness: it serves `site/` (a copy of `ui/prism/web` + `ui/shared/web` with
-the CDN urls rewritten to the seeded `/cdn` cache — see `../seed_cdn_cache.py`), answers `/api/convert`
+`prism_bench.mjs` is the harness: it serves `site/` (a copy of `ui/prism/web`, with `ui/shared/web` as
+`site/shared/` — qry 3, fflate and the icons are vendored there, nothing to rewrite), answers `/api/convert`
 and `/api/font` by shelling out to the engine, and exports `openPrism` / `drag` / `serve`.
 
 `inspect2.mjs` and `jexterapp.mjs` are the exception: they drive the OTHER two apps, which serve

@@ -49,16 +49,11 @@ Hard-won rules:
 
 ## Gating UI work (the JS side of the fidelity doctrine)
 
-**1 · Syntax gates** — rewrite CDN imports, then `node --check`:
-```sh
-sed -e "s#https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm#fflate#" \
-    -e "s#/shared/js/ocd.js#./ocd.mjs#" -e "s#/shared/js/book.js#./book.mjs#" \
-    -e "s#./backend.js#./stub.mjs#" \
-    -e "s#https://cdn.jsdelivr.net/gh/Bloechle/qry-js@1.3.0/qry.js#./stub.mjs#" \
-    -e "s#https://cdn.jsdelivr.net/gh/Bloechle/qry-js@1.3.0/qry-kit.js#./stub.mjs#" \
-    file.js > /tmp/jstest/file.mjs && node --check /tmp/jstest/file.mjs
-```
-(`npm i fflate linkedom` in /tmp/jstest; stub.mjs exports the imported names.)
+**1 · Syntax gates** — every client file is a module: `cp file.js /tmp/check.mjs && node --check
+/tmp/check.mjs` (what `build.yml` does for every `src/**/*.js`). Nothing is fetched any more: qry 3
+(`/shared/vendor/qry/qry-app.js`, which imports `./qry-web.js`) and fflate (`/shared/vendor/fflate.js`)
+are vendored, so a linkedom run maps those absolute paths onto the vendored files (or a stub that
+exports the imported names).
 
 **2 · Seam suite (linkedom)** — shim the chassis, run the tool flow, feed the
 result to the ENGINE (Conversion → PDF pixel check, write(read(x)) byte-stable):
@@ -80,9 +75,8 @@ linkedom pitfalls (bench-only artifacts, NOT bugs):
 sandbox at `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`:
 ```sh
 cd /tmp/jstest && PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npm i playwright-core
-# vendor deps from ALLOWED domains: qry.js/qry-kit.js/qry-ui.css from
-# raw.githubusercontent.com/Bloechle/qry-js/1.3.0/…; fflate esm via `npm pack
-# fflate@0.8.2` → package/esm/browser.js. Serve a bench.html + drive:
+# nothing to vendor: qry 3, fflate and the icons are in shared/web/vendor/ already —
+# copy ui/prism/web to site/ and ui/shared/web to site/shared/. Serve + drive:
 node server.mjs > /tmp/server.log 2>&1 & SRV=$!; sleep 1.5
 timeout 90 node drive.mjs; kill $SRV        # one shell — servers die between tool calls
 ```

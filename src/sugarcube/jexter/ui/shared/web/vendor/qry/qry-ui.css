@@ -19,14 +19,14 @@
  * Every other token is DERIVED (oklch relative colours + light-dark()): the dark variants, the
  * readable text on the accent and on the highlight, the greys, lines, shadows (tinted by the
  * greys' hue), backdrops. The mode is the native
- * `color-scheme`, through ONE hook — data-theme="dark|light" (on <html>, qry-web theme.set, or
+ * `color-scheme`, through ONE hook — data-theme="dark|light" (on <html>, qry-app theme.mode, or
  * on any element), else the OS.
  *
  * Cascade layers qry.tokens < qry.base < qry.components < qry.utilities: your own CSS
  * (unlayered) always wins, with no specificity games and no !important.
  * Targets Chromium 133+ and Safari 26+ (relative colours, light-dark, anchor positioning).
  *
- * @version 2.0.0
+ * @version 3.0.0
  * @author  Jean-Luc Bloechle with Claude.ai
  * @license MIT
  */
@@ -267,7 +267,8 @@ meter::-webkit-meter-even-less-good-value { background: var(--qry-danger); borde
 @keyframes qry-spin { to { rotate: 1turn; } }
 .qry-field-error { color: var(--qry-danger); font-size: .82rem; font-weight: 500; }
 .qry-field-error:empty { display: none; }
-.qry-form-error { padding: .6rem .8rem; border-radius: var(--qry-radius-sm); color: var(--qry-danger); background: color-mix(in srgb, var(--qry-danger) 8%, transparent); }
+.qry-form-error, .qry-dialog-error { padding: .6rem .8rem; border-radius: var(--qry-radius-sm); color: var(--qry-danger); background: color-mix(in srgb, var(--qry-danger) 8%, transparent); }
+.qry-dialog-error { margin: .6rem 0 0; }
 form[aria-busy="true"] { cursor: progress; }
 .qry-field:has([aria-invalid="true"]) :is(input, select, textarea) { border-color: var(--qry-danger); }
 
@@ -324,12 +325,15 @@ button.qry-card:disabled { opacity: .55; cursor: not-allowed; }
 .qry-icon-box.lg { width: 2.75rem; height: 2.75rem; }
 .qry-icon-box svg { width: 55%; height: 55%; }
 /* a message in the flow of the page: <div class="qry-callout warn">…</div> */
-.qry-callout { padding: .8rem 1rem; border-left: 4px solid var(--qry-tone, var(--qry-accent)); border-radius: var(--qry-radius-sm); background: var(--qry-soft); }
+/* The tone's bar is a BACKGROUND layer, not a border: the box's rounded corners clip it outside and
+   its inner edge stays straight (a border-left curves inward along the radius). */
+.qry-callout { padding: .8rem 1rem .8rem calc(1rem + 4px); border-radius: var(--qry-radius-sm);
+    background: linear-gradient(var(--qry-tone, var(--qry-accent)) 0 0) left / 4px 100% no-repeat, var(--qry-soft); }
 /* a dot before a status word */
 .qry-dot { --qry-stripe: var(--qry-tone, var(--qry-accent)); }
 .qry-dot::before { content: ''; display: inline-block; width: .55em; height: .55em; margin-right: .4em; border-radius: 50%; background: var(--qry-stripe); vertical-align: .08em; }
 
-/* charts (qry-web makeChart): plain SVG painted with the tokens — a theme change needs no redraw.
+/* charts (qry-app makeChart): plain SVG painted with the tokens — a theme change needs no redraw.
    A mark takes the element's tone (.ok .warn .danger .purple .accent .highlight), or .muted for background data. */
 .qry-chart { display: block; overflow: visible; font: 500 11px/1 var(--qry-font); }
 .qry-chart-grid line { stroke: var(--qry-line); }
@@ -405,7 +409,7 @@ button.qry-card:disabled { opacity: .55; cursor: not-allowed; }
 .qry-menu > .qry-label, .qry-menu > small { padding: .35rem .7rem .15rem; font-size: .72rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--qry-text-subtle); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   DIALOGS & TOASTS — qry-web alert / confirm / prompt / toast (native <dialog>)
+   DIALOGS & TOASTS — qry-app alert / confirm / prompt / toast (native <dialog>)
    ═══════════════════════════════════════════════════════════════════════════ */
 .qry-dialog {
     width: min(92vw, 30rem); padding: 1.3rem 1.4rem 1.1rem; border: 1px solid var(--qry-line); border-radius: var(--qry-radius-lg);
@@ -443,15 +447,21 @@ button.qry-card:disabled { opacity: .55; cursor: not-allowed; }
 
 .qry-toasts { position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); z-index: 1000; display: grid; gap: .5rem; max-width: min(92vw, 24rem); }
 .qry-toast {
-    padding: .7rem 1rem; border-radius: var(--qry-radius); border-left: 4px solid var(--qry-tone, var(--qry-accent));
-    background: var(--qry-surface); color: var(--qry-text); box-shadow: var(--qry-shadow-lg); cursor: pointer;
+    padding: .7rem 1rem .7rem calc(1rem + 4px); border-radius: var(--qry-radius);
+    background: linear-gradient(var(--qry-tone, var(--qry-accent)) 0 0) left / 4px 100% no-repeat, var(--qry-surface); color: var(--qry-text); box-shadow: var(--qry-shadow-lg); cursor: pointer;
     animation: qry-pop var(--qry-speed) var(--qry-ease); transition: opacity var(--qry-speed), transform var(--qry-speed);
 }
 .qry-toast { display: flex; align-items: start; gap: .6rem; }
+/* inside a modal dialog (toast() puts the stack there): above the dialog's own content, on the viewport */
+dialog > .qry-toasts { position: fixed; }
 .qry-toast-text { flex: 1; }
 .qry-toast-close { margin: -.2rem -.4rem -.2rem 0; padding: 0 .3rem; border: 0; border-radius: var(--qry-radius-sm); background: none; color: var(--qry-text-muted); font: 1.1rem/1.2 var(--qry-font); cursor: pointer; }
 .qry-toast-close:hover { color: var(--qry-text); background: var(--qry-tint); }
 .qry-toast.is-leaving { opacity: 0; transform: translateX(12px); }
+
+/* icons (qry-app.js icon / icons.render): stroked in the text's colour; a filled shape says so itself */
+.qry-icon { inline-size: 1.25em; block-size: 1.25em; flex: none; vertical-align: -.25em; fill: none; stroke: currentColor;
+            stroke-width: var(--qry-icon-stroke, 2); stroke-linecap: round; stroke-linejoin: round; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    NAVIGATION — tabs (makeTabs), sidebar (makeSidebar), header (makeAutoHideHeader)
@@ -480,9 +490,14 @@ button.qry-card:disabled { opacity: .55; cursor: not-allowed; }
 .qry-sidebar-head { display: flex; align-items: center; gap: .6rem; padding: .3rem .4rem .8rem; font-weight: 700; }
 .qry-sidebar-section { margin: .9rem .6rem .3rem; font-size: .72rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--qry-text-subtle); }
 .qry-sidebar-foot { margin-top: auto; padding-top: .6rem; border-top: 1px solid var(--qry-line); }
-.qry-sidebar.is-collapsed { flex-basis: 3.6rem; width: 3.6rem; }
-.qry-sidebar.is-collapsed .qry-sidebar-section { display: none; }
-.qry-sidebar.is-collapsed .qry-label { display: none; }
+/* collapsed = an icon rail — except a .mobile sidebar on a small screen: there it is a drawer, the full
+   menu, even when it was collapsed on a large screen (makeSidebar leaves is-collapsed as it was) */
+.qry-sidebar.is-collapsed:not(.mobile) { flex-basis: 3.6rem; width: 3.6rem; }
+.qry-sidebar.is-collapsed:not(.mobile) :is(.qry-sidebar-section, .qry-label) { display: none; }
+@media (min-width: 769px) {
+    .qry-sidebar.mobile.is-collapsed { flex-basis: 3.6rem; width: 3.6rem; }
+    .qry-sidebar.mobile.is-collapsed :is(.qry-sidebar-section, .qry-label) { display: none; }
+}
 .qry-overlay { position: fixed; inset: 0; z-index: 39; background: var(--qry-scrim); opacity: 0; pointer-events: none; transition: opacity var(--qry-speed); }
 .qry-overlay.is-visible { opacity: 1; pointer-events: auto; }
 @media (max-width: 768px) {
@@ -615,4 +630,22 @@ a.is-current { color: var(--qry-accent); }
     .qry-workspace { height: auto; overflow: visible; }
     body { background: #fff; color: #000; }
 }
+}
+
+/* qry-host.js's folder browser (a local app on QryHost.java) */
+@layer qry.components {
+    .qry-host-dialog { width: min(640px, 94vw); }
+    .qry-host-picker { display: grid; gap: .6rem; }
+    .qry-host-picker .qry-cluster { gap: .3rem; }
+    .qry-host-where { display: flex; align-items: center; gap: .4rem; }
+    .qry-host-where code { font: .85rem var(--qry-font-mono); overflow-wrap: anywhere; }
+    .qry-host-list { list-style: none; margin: 0; padding: .3rem; height: 260px; overflow-y: auto;
+                     border: 1px solid var(--qry-line); border-radius: var(--qry-radius-sm); }
+    .qry-host-list button { display: block; width: 100%; text-align: left; padding: .3rem .5rem; border: 0;
+                            border-radius: var(--qry-radius-sm); background: none; color: var(--qry-text); font: inherit; cursor: pointer; }
+    .qry-host-list button:hover { background: var(--qry-tint); }
+    .qry-host-list .qry-host-file { color: var(--qry-text-muted); }
+    .qry-host-list .qry-host-folder::before { content: '📁\a0'; }
+    .qry-host-list .qry-host-file::before { content: '📄\a0'; }
+    .qry-host-note:empty { display: none; }
 }

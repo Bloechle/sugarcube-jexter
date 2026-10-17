@@ -382,8 +382,17 @@ Refactored, public layout — all under `sugarcube.jexter`:
   CDN proxy + offline cache, sidecar MIME map, and the `/api/*` plumbing. `ui/shared/web/`
   serves the jexter mark, the shared base font library (`fonts/base.f.svg`) and the two
   client-side authorities `js/ocd.js` (the
-  grammar) and `js/book.js` (the document authority). Front-end stack from CDN: qry.js +
-  qry-ui + qry-kit, Shoelace, Lucide. **Three apps:**
+  grammar) and `js/book.js` (the document authority). Front-end stack VENDORED under
+  `shared/web/vendor/` (nothing is fetched): qry 3 (`qry/`: `qry.js` the classic core, `qry-ui.css`,
+  `qry-web.js` the website tier, `qry-app.js` the app tier that re-exports it — every module imports
+  `/shared/vendor/qry/qry-app.js`; refresh with qry2's `nimbus-qry2.cjs --run=vendor --app --to=<dir>`),
+  fflate (unzip + zipSync), Poppins; the line icons are Lucide drawings inlined in `js/icons.js`.
+  qry 3's names (2026-10-17): `toast(msg, { tone, duration })` (each app's `toast` wrapper maps its
+  words — success / warning / danger / neutral — to qry's tones), `boot({ theme: { persist } })` +
+  `theme.mode(m)`, `makeTabs('.jx-tab', { panels, attribute })` + `.selected(name)`,
+  `makeTable(columns, rows, { numbered, sort }).element` (columns `numeric`, `format`),
+  `makeDropZone({ overlayLabel })`, `makeDialog().isOpen()`, and every SSE stream is
+  `makeEvents(url)` (`.on('message', fn)` gets the JSON-parsed data). **Three apps:**
     - **`ui.prism.Prism`** — the document workbench (assets `ui/prism/web/`: `index.html` ·
       `prism.css` · `prism.js` the chassis · `prism-sw.js` the Service Worker · `engine.js`
       the engine seam · `analysis.js` · `augment.js` the augmentations tool · `editor.js` ·

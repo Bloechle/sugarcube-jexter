@@ -14,6 +14,7 @@
 // there), `bookBytes` (the container as it stands) and `pageIndexOf`.
 
 import { zipSync } from '/shared/vendor/fflate.js';
+import { makeEvents } from '/shared/vendor/qry/qry-app.js';
 import * as backend from './backend.js';
 import { parseFonts as parseFontsSvg, SVG_NS, inReadingOrder, readingRuns, runBox } from '/shared/js/ocd.js';
 import { book } from '/shared/js/book.js';
@@ -73,7 +74,7 @@ const engineReady = (async () => {
         // Heartbeat: the desktop server's lifetime is driven by this SSE stream —
         // without a connected client its watchdog exits after 30 s ("No window
         // connected"), killing every later conversion mid-session.
-        if (backend.aliveUrl) try { const es = new EventSource(backend.aliveUrl); es.onerror = () => {}; } catch { }
+        if (backend.aliveUrl) makeEvents(backend.aliveUrl);
     }
     wire();
     return engine;
@@ -115,11 +116,9 @@ function showStep(p) {
 /** Subscribe to the engine's side for the duration of one conversion. Returns a stop function. */
 function watchProgress() {
     if (!backend.progressUrl) return () => {};
-    let es;
-    try { es = new EventSource(backend.progressUrl); } catch { return () => {}; }
-    es.onerror = () => {};
-    es.onmessage = ev => { try { showStep(JSON.parse(ev.data)); } catch { } };
-    return () => { try { es.close(); } catch { } };
+    const events = makeEvents(backend.progressUrl);
+    events.on('message', p => { if (p && typeof p === 'object') showStep(p); });
+    return events.destroy;
 }
 
 P.hooks.openSource = async (buffer, name) => {
@@ -514,15 +513,13 @@ async function exportAs(to, opts = {}) {
 
 function wire() {
     $.opt('#m-fonts')?.addEventListener('click', () => { buildFontsDrawer(); P.dialog('fonts-drawer').open(); });
-    // F2 console, server pane: live JxLog events over SSE (EventSource reconnects itself)
+    // F2 console, server pane: live JxLog events over SSE (the stream reconnects itself)
     if (engine && backend.logStreamUrl) {
-        const es = new EventSource(backend.logStreamUrl);
-        es.onmessage = ev => {
-            try {
-                const e = JSON.parse(ev.data);   // {level, src, msg} — Prism's log bridge shape
-                P.logLine(e.level || 'info', (e.src ? e.src + ': ' : '') + e.msg, 'server');
-            } catch { /* malformed event — skip */ }
-        };
+        makeEvents(backend.logStreamUrl).on('message', e => {
+            if (!e || typeof e !== 'object') return;   // malformed event (not JSON) — skip
+            // {level, src, msg} — Prism's log bridge shape
+            P.logLine(e.level || 'info', (e.src ? e.src + ': ' : '') + e.msg, 'server');
+        });
     }
     $.all('#export-dialog .export-opt[data-to]').forEach(b => b.addEventListener('click', () => {
         P.dialog('export-dialog').close();

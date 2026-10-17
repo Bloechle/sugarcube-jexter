@@ -62,7 +62,7 @@ PDF ─[convert.PdfImporter]→ OCDDocument ─[write.*]→ PDF · EPUB · HTML 
 - **Font repair** — corrupt embedded TrueType `post` tables are patched so the
   real glyphs render instead of falling back to Arial.
 - **Three web apps** (zero-dependency, JDK HTTP server, no JavaFX) sharing one
-  front-end look — glass chrome, Poppins titles, the Sugarcube blue — on the qry 2 stack, vendored
+  front-end look — glass chrome, Poppins titles, the Sugarcube blue — on the qry 3 stack, vendored
   under `/shared/` with Poppins and the line icons: nothing is fetched, they work offline:
   - `Prism` — the jexter document workbench: open a PDF (the engine lifts it) or an
     OCD-EPUB (served as-is), pages render **natively** — the book is unzipped in the
@@ -240,7 +240,7 @@ The Typst source of the technical overview lives in
   [LICENSE-JJ2000](LICENSE-JJ2000). Its notice must be reproduced in every copy
   and derivative work, and its grant covers JPEG 2000 conforming products.
 - **BouncyCastle** (optional, runtime) — MIT-style Bouncy Castle license.
-- **qry 2** (MIT), **fflate** (MIT), **Poppins** (OFL) and **Lucide** drawings (ISC) — vendored in
+- **qry 3** (MIT), **fflate** (MIT), **Poppins** (OFL) and **Lucide** drawings (ISC) — vendored in
   `src/sugarcube/jexter/ui/shared/web/vendor/` with their licences; the web front-ends fetch nothing.
 
 ## License

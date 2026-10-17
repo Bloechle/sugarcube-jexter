@@ -12,12 +12,12 @@
  *   POST /api/open?name=…  → meta            GET /api/page?i&dpi[&src] → PNG
  *   GET  /api/tree?root=doc → [node…]         GET /api/content?page · /api/stream?obj · /api/render?obj · /api/text?page
  */
-import { boot, theme, toast as qryToast, makeTabs, makeMenu, makeDialog, infoRow as makeRow, sortableTable } from '/shared/vendor/qry/qry-web.js';
+import { boot, theme, toast as qryToast, makeTabs, makeMenu, makeDialog, infoRow as makeRow, makeTable, makeEvents } from '/shared/vendor/qry/qry-app.js';
 import { loadOcd, esc } from '/shared/js/ocd.js';   // the OCD-EPUB carries the fonts (pages/fonts.svg, the single representation)
 
 const R = Math.round;
-const TONE = { success: 'ok', warning: 'warn', danger: 'danger', neutral: 'info' };
-const toast = (msg, tone = 'info', ms) => qryToast(String(msg), TONE[tone] || tone, ms ? { duration: ms } : undefined);
+const TONE = { success: 'ok', warning: 'warn', danger: 'danger', neutral: '', info: '' };
+const toast = (msg, tone = 'info', ms) => qryToast(String(msg), { tone: TONE[tone] ?? tone, ...(ms ? { duration: ms } : {}) });
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const J = (p, opt) => fetch(p, opt).then(r => r.json());
 
@@ -91,7 +91,7 @@ async function openFile(file) {
 
     structBuilt = false; cache.ops = {}; cache.text = {}; $.opt('#tree')?.empty(); detail?.reset(); fontV = -1; fontDoc = null; resV = -1; resData = null;
     fillMeta(meta); buildPageList(); buildTables(meta);
-    tabsCtrl?.select('page'); selectPage(0);
+    tabsCtrl?.selected('page'); selectPage(0);
     status(`Loaded ${meta.name}`);
 }
 
@@ -110,16 +110,16 @@ function fillMeta(meta) {
 }
 function buildTables(meta) {
     const pages = meta.pages.map((p, i) => ({ i: i + 1, w: R(p.w), h: R(p.h), rot: p.rot, fonts: p.fonts, xobjects: p.xobjects }));
-    $('#pages-table').empty().add(sortableTable([
-        { key: 'i', label: 'Page', num: 1 }, { key: 'w', label: 'Width', num: 1 }, { key: 'h', label: 'Height', num: 1 },
-        { key: 'rot', label: 'Rotation', num: 1, fmt: v => (v ? v : 0) + '\u00B0' },
-        { key: 'fonts', label: 'Fonts', num: 1 }, { key: 'xobjects', label: 'XObjects', num: 1 },
-    ], pages, { sort: { key: 'i', dir: 'asc' } }));
+    $('#pages-table').empty().add(makeTable([
+        { key: 'i', label: 'Page', numeric: true }, { key: 'w', label: 'Width', numeric: true }, { key: 'h', label: 'Height', numeric: true },
+        { key: 'rot', label: 'Rotation', numeric: true, format: v => (v ? v : 0) + '\u00B0' },
+        { key: 'fonts', label: 'Fonts', numeric: true }, { key: 'xobjects', label: 'XObjects', numeric: true },
+    ], pages, { sort: { key: 'i', dir: 'asc' } }).element);
     const fonts = meta.fontList || [];
-    $('#fonts-table').empty().add(fonts.length ? sortableTable([
+    $('#fonts-table').empty().add(fonts.length ? makeTable([
         { key: 'name', label: 'Font' }, { key: 'subtype', label: 'Subtype' }, { key: 'type', label: 'Type' },
-        { key: 'embedded', label: 'Embedded', fmt: v => v ? '\u2713' : '\u2014' },
-    ], fonts, { index: true, sort: { key: 'name', dir: 'asc' } }) : $.create('div', { class: 'jx-empty', text: 'No fonts.' }));
+        { key: 'embedded', label: 'Embedded', format: v => v ? '\u2713' : '\u2014' },
+    ], fonts, { numbered: true, sort: { key: 'name', dir: 'asc' } }).element : $.create('div', { class: 'jx-empty', text: 'No fonts.' }));
     ensureStructure();
 }
 
@@ -415,7 +415,7 @@ function drawResources(list) {
         if (im.pages && im.pages.length) {
             const pages = im.pages.slice(0, 6).map(n => n + 1).join(', ') + (im.pages.length > 6 ? ` +${im.pages.length - 6}` : '');
             const pg = $.create('div', { class: 'res-pages', text: `p. ${pages}` });
-            pg.on('click', () => { tabsCtrl?.select('page'); selectPage(im.pages[0]); });
+            pg.on('click', () => { tabsCtrl?.selected('page'); selectPage(im.pages[0]); });
             meta.add(pg);
         }
         card.add(meta);
@@ -481,7 +481,7 @@ window.shell = {
 };
 
 function init() {
-    try { new EventSource('/api/alive'); } catch { /* keep server alive */ }
+    makeEvents('/api/alive');   // keep the server alive: its watchdog exits once this stream drops
 
     $('#file').on('change', e => { const f = e.target.files[0]; if (f) openFile(f); e.target.value = ''; });
     wireDrop();
@@ -501,7 +501,7 @@ function init() {
     $('#zoom-out').on('click', () => stageApi()?.zoomBy(1 / 1.25));
     $('#zoom-pct').text('100%');
 
-    tabsCtrl = makeTabs({ tabs: '.jx-tab', panels: '.pi-panel', attr: 'data-tab',
+    tabsCtrl = makeTabs('.jx-tab', { panels: '.pi-panel', attribute: 'data-tab',
         onChange: name => { tab = name;
             if (name === 'struct') ensureStructure().then(() => structureJumpTo(cur));
             else if (name === 'fonts') ensureFonts();
@@ -536,4 +536,4 @@ function init() {
 
     status('Ready'); openWelcome();
 }
-boot({ title: 'PDF Inspector', theme: { key: 'pdfinspector:theme' }, ready: () => { init(); syncThemeIcon(); } });
+boot({ title: 'PDF Inspector', theme: { persist: 'pdfinspector:theme' }, ready: () => { init(); syncThemeIcon(); } });

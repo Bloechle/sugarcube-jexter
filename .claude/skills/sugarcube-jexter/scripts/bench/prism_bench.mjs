@@ -5,22 +5,15 @@
 // hijacking a pointer gesture, a stretched grid column, a cache key that did not say what it cached.
 // They speak here and nowhere else.
 //
-// Setup (once), all from allowed domains:
+// Setup (once). Nothing to fetch: qry 3 (qry.js, qry-web.js, qry-app.js, qry-ui.css), fflate and the
+// icons are vendored in ui/shared/web — the site is the two web folders as they are.
 //
-//   mkdir -p /tmp/bench/vendor && cd /tmp/bench/vendor
-//   curl -sSLO https://raw.githubusercontent.com/Bloechle/qry-js/1.3.0/qry.js
-//   curl -sSLO https://raw.githubusercontent.com/Bloechle/qry-js/1.3.0/qry-ui.css
-//   curl -sSLO https://raw.githubusercontent.com/Bloechle/qry-js/1.3.0/qry-kit.js
-//   npm pack lucide@1.17.0 && tar xzf lucide-1.17.0.tgz && cp package/dist/umd/lucide.min.js .
-//   npm pack @shoelace-style/shoelace@2.20.1 && mkdir sl && tar xzf shoelace-*.tgz -C sl
-//   npm pack fflate@0.8.2 && tar xzf fflate-0.8.2.tgz && cp package/esm/browser.js fflate.js
-//   cd /tmp/bench && npm i playwright-core
+//   cd /tmp/bench && npm i playwright-core     # or a node_modules that has it (ESM ignores NODE_PATH: symlink it)
 //   cp -r <repo>/src/sugarcube/jexter/ui/prism/web site
 //   mkdir -p site/shared && cp -r <repo>/src/sugarcube/jexter/ui/shared/web/* site/shared/
 //   cp <a book>.ocd.epub site/sample.ocd.epub
 //   # a fixture with something to redact and pages the viewer TURNS (pikepdf: page.Rotate = 90 on a
 //   # PORTRAIT MediaBox — reportlab's setPageRotation swaps the box instead, a different case)
-//   # then rewrite the CDN URLs in site/index.html and the modules to /vendor/… (jsdelivr is blocked)
 //
 // Run:   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node prism_bench.mjs [scenario]
 //

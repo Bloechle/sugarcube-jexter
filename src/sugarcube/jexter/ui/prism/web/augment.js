@@ -9,7 +9,7 @@
 // edits panel, and the transient overlay renderer (never exported).
 
 import { book } from '/shared/js/book.js';
-import { ask, prompt, labels } from '/shared/vendor/qry/qry-web.js';
+import { ask, prompt, labels } from '/shared/vendor/qry/qry-app.js';
 import { SVG_NS } from '/shared/js/ocd.js';   // ONE spelling, ONE declaration: the grammar's
 
 const P = window.prism;

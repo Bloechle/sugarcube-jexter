@@ -5,14 +5,14 @@
  * Utilities live under $.* — one namespace, no global pollution.
  *
  * KISS · DRY · Zero dependencies · No ES module — the one classic script of the stack: it
- * defines the global `$`. Every layer (qry-web, qry-devtools, qry-bridge, qry-awesome) is an
+ * defines the global `$`. Every layer (qry-web, qry-app, qry-host, qry-devtools, qry-bridge, qry-awesome) is an
  * ES module that uses it.
  *
- * Every listener-based helper (on, delegate, onVisible, onResize, onSwipe, onDrag, $.tip) takes a
+ * Every listener-based helper (on, delegate, onVisible, onResize, onSwipe, onDrag, onOutside, $.tip) takes a
  * `signal` option: abort its AbortController and everything it wired goes away — ONE teardown
  * model. Setters given a signal or a function follow it (see SETTERS).
  *
- * @version 2.0.0
+ * @version 3.0.0
  * @author Jean-Luc Bloechle with Claude.ai
  * @license MIT
  */
@@ -48,12 +48,13 @@ const $ = (s) => {
     return el ?? _nil();
 };
 
-/** Select all matching elements as a real Array.
- *  @param {string} s  CSS selector
+/** All matching elements as a real Array. Also takes what an option may hold instead of a
+ *  selector: an element (→ [it]), a list (NodeList, Array), or nothing (→ []).
+ *  @param {string|Element|Iterable<Element>|null} s  CSS selector, element or list
  *  @returns {Element[]}
  *  @example $.all('.btn').forEach(btn => btn.cls('active'))
  */
-$.all = (s) => [...document.querySelectorAll(s)];
+$.all = (s) => (typeof s === 'string' ? [...document.querySelectorAll(s)] : s instanceof Element ? [s] : [...(s ?? [])]);
 
 /** Select an OPTIONAL element: the element, or undefined — no warning, no nil.
  *  For things that may legitimately be absent; pairs with optional chaining.
@@ -68,13 +69,17 @@ $.opt = (s) => s instanceof Element ? s
 const _some = (c) => c != null && c !== false;
 
 /** @private — props shared by $.create and $.svg: `on…` + a function → a listener; `text`,
- *  `html` → content; `value` / `checked` → the live form state (val() / the property);
- *  `style` (an object) → css(); everything else → attr() — so `true` / `false` / `null` and
- *  live values (a signal, a function) behave exactly as in the setters. */
+ *  `html` → content; `value` / `checked` → the live form state (val() / the property) — but on
+ *  a radio or a checkbox `value` is what it IS (its value attribute: the answer it stands for),
+ *  its state being `checked`; `style` (an object) → css(); everything else → attr() — so
+ *  `true` / `false` / `null` and live values (a signal, a function) behave exactly as in the
+ *  setters. `type` goes first, whatever its place in the object: the others depend on it. */
 const _build = (el, props, children) => {
-    for (const [k, v] of Object.entries(props ?? {})) {
+    const entries = Object.entries(props ?? {}).sort(([a], [b]) => (b === 'type') - (a === 'type'));
+    for (const [k, v] of entries) {
         if (k.startsWith('on') && typeof v === 'function') el.on(k.slice(2).toLowerCase(), v);
         else if (k === 'text' || k === 'html') el[k](v);
+        else if (k === 'value' && (el.type === 'radio' || el.type === 'checkbox')) el.attr('value', v);
         else if (k === 'value') el.val(v);
         else if (k === 'checked') _bind(el, 'checked', v, function (x) { this.checked = !!x; });
         else if (k === 'style' && v && typeof v === 'object') el.css(v);
@@ -495,8 +500,8 @@ Element.prototype.parent = function (s) {
 /** Next sibling element.      @example el.next() */
 Element.prototype.next = function () { return this.nextElementSibling; };
 
-/** Previous sibling element.  @example el.prev() */
-Element.prototype.prev = function () { return this.previousElementSibling; };
+/** Previous sibling element.  @example el.previous() */
+Element.prototype.previous = function () { return this.previousElementSibling; };
 
 /** querySelectorAll shortcut — returns a real Array.  @example el.find('li.active') */
 Element.prototype.find = function (s) { return [...this.querySelectorAll(s)]; };
@@ -649,16 +654,19 @@ $.debounce = (fn, ms = 200) => {
 };
 
 /** Call fn at most once every `ms` (scroll, pointer move); the last call is not lost.
+ *  The returned function has `.cancel()` (drop a pending call — on teardown), as $.debounce.
  *  @example window.on('scroll', $.throttle(update, 100))
  */
 $.throttle = (fn, ms = 100) => {
     let last = 0, t;
-    return function (...a) {
+    const d = function (...a) {
         const wait = ms - (Date.now() - last);
         clearTimeout(t);
         if (wait <= 0) { last = Date.now(); fn.apply(this, a); }
         else t = setTimeout(() => { last = Date.now(); fn.apply(this, a); }, wait);
     };
+    d.cancel = () => clearTimeout(t);
+    return d;
 };
 
 /** A prefixed, JSON-safe localStorage that never throws.
@@ -666,7 +674,7 @@ $.throttle = (fn, ms = 100) => {
  *  set(k, v) → true when written, false when the browser refused (quota full, private mode,
  *  storage blocked) — so an app can say « no room left » instead of losing data silently;
  *  remove(k) → nothing.
- *  @example const store = $.store('floop:'); if (!store.set('draft', text)) toast('No room left', 'danger')
+ *  @example const store = $.store('floop:'); if (!store.set('draft', text)) toast('No room left', { tone: 'danger' })
  */
 $.store = (prefix = '') => ({
     get(k, fallback = null) { try { const v = localStorage.getItem(prefix + k); return v === null ? fallback : JSON.parse(v); } catch { return fallback; } },
@@ -745,7 +753,7 @@ const _fetch = async (url, { body, headers, timeout, signal, ...init } = {}) => 
     }
     if (timeout) signal = signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout);
     const r = await fetch(url, { ...init, body, headers, signal }).catch((e) => {
-        throw e.name === 'TimeoutError' ? new Error(`$.load — no answer after ${timeout} ms — ${url}`) : e;
+        throw e.name === 'TimeoutError' ? Object.assign(new Error(`No answer after ${timeout} ms`), { status: 0, detail: '', code: 'timeout', url: String(url) }) : e;
     });
     if (!r.ok) {
         const text = (await r.text().catch(() => '')).trim();
@@ -755,8 +763,11 @@ const _fetch = async (url, { body, headers, timeout, signal, ...init } = {}) => 
             detail = typeof j === 'string' ? j : (typeof e === 'object' && e ? e.message : e) ?? j?.message ?? text;
             code = (typeof e === 'object' && e ? e.code : j?.code) ?? null;
         } catch { /* not JSON: the text */ }
+        // a page of markup (a proxy's 502, a container's 404) is no words to show: the status then
+        if (/^\s*</.test(detail) || /html|xml/i.test(r.headers.get('Content-Type') ?? '')) detail = '';
         detail = String(detail ?? '').slice(0, 300);
-        throw Object.assign(new Error(`$.load — ${r.status} ${r.statusText} — ${url}${detail ? ` — ${detail}` : ''}`), { status: r.status, detail, code });
+        // the message is what a person can read — the server's own words, else the status; the rest is data
+        throw Object.assign(new Error(detail || `${r.status} ${r.statusText}`.trim()), { status: r.status, detail, code, url: String(url) });
     }
     return r;
 };
@@ -850,17 +861,26 @@ $.load = {
  *  @param {Element} el
  *  @param {string|Function} title
  *  @param {string|Function} [content]
- *  @param {{enter?: Function, leave?: Function, signal?: AbortSignal}} [opts]
+ *  @param {{enter?: Function, leave?: Function, delay?: number, signal?: AbortSignal}} [opts]  delay: ms before it shows (a pass-through shows nothing)
  *  @example $.tip(circle, 'France', '67.4M inhabitants')
  *  @example $.tip(bar, () => d.name, () => $.html`<b>${d.value}</b> visits`, { enter: () => bar.cls('+hot'), leave: () => bar.cls('-hot') })
  *  Low level (e.g. suppress while dragging): $.tip.show(eventOrElement, title, content) · $.tip.move(e) · $.tip.hide()
  */
-$.tip = (el, title, content, { enter, leave, signal } = {}) => el
-    .on('mouseenter', (e) => { $.tip.show(e, title, content); enter?.(e); }, { signal })
-    .on('mousemove', (e) => $.tip.move(e), { signal })
-    .on('mouseleave', (e) => { $.tip.hide(); leave?.(e); }, { signal })
-    .on('focus', (e) => { if (el.matches(':focus-visible')) { $.tip.show(el, title, content); enter?.(e); } }, { signal })
-    .on('blur', (e) => { $.tip.hide(); leave?.(e); }, { signal });
+$.tip = (el, title, content, { enter, leave, delay = 0, signal } = {}) => {
+    let timer = 0, last = null, shown = false;
+    // the pointer as it was, kept for a delayed show (a dispatched event loses its currentTarget)
+    const at = (e) => ({ currentTarget: el, clientX: e.clientX, clientY: e.clientY });
+    const show = (where, e) => { shown = true; $.tip.show(where, title, content); enter?.(e); };
+    const later = (where, e) => { clearTimeout(timer); if (delay) timer = setTimeout(() => show(last ?? where, e), delay); else show(where, e); };
+    const leaveNow = (e) => { clearTimeout(timer); last = null; if (shown) { shown = false; $.tip.hide(); } leave?.(e); };
+    signal?.addEventListener('abort', () => { clearTimeout(timer); if (shown) { shown = false; $.tip.hide(); } }, { once: true });
+    return el
+        .on('mouseenter', (e) => { last = at(e); later(last, e); }, { signal })
+        .on('mousemove', (e) => { last = at(e); if (shown) $.tip.move(e); }, { signal })
+        .on('mouseleave', leaveNow, { signal })
+        .on('focus', (e) => { if (el.matches(':focus-visible')) later(el, e); }, { signal })
+        .on('blur', leaveNow, { signal });
+};
 {
     let box = null, head, body, owner = null, anchored = false;
     /** A stand-in pointer under an element's box (keyboard focus, a tap). */
@@ -873,7 +893,7 @@ $.tip = (el, title, content, { enter, leave, signal } = {}) => el
         document.head.add($.create('style', { text: '#qry-tooltip{position:fixed;left:0;top:0;pointer-events:none;opacity:0;transition:opacity .15s;z-index:1000}#qry-tooltip>p{margin:0}#qry-tooltip>p:empty{display:none}' }));
         head = $.create('p', { id: 'qry-tooltip-title' });
         body = $.create('p', { id: 'qry-tooltip-content' });
-        box = $.create('div', { id: 'qry-tooltip', role: 'tooltip' }, head, body).mount(document.body);
+        box = $.create('div', { id: 'qry-tooltip', role: 'tooltip' }, head, body);
         // the element under the pointer may be removed (a chart redraws): no mouseleave then
         document.on('pointermove', () => { if (owner && !owner.isConnected) $.tip.hide(); }, { passive: true });
         // the content moves under a fixed tip: a scroll (the page or a scrolling panel) or a resize hides a
@@ -888,6 +908,9 @@ $.tip = (el, title, content, { enter, leave, signal } = {}) => el
         anchored = e instanceof Element;
         if (anchored) e = under(e);
         owner = e.currentTarget instanceof Element ? e.currentTarget : e.target;
+        // inside an open modal dialog (the top layer), the tooltip lives in it — else the dialog covers it
+        const host = owner?.closest?.('dialog[open]') ?? document.body;
+        if (box.parentNode !== host) host.append(box);
         head.html(value(title));
         body.html(value(content));
         box.style.opacity = '1';
@@ -914,6 +937,19 @@ $.tip = (el, title, content, { enter, leave, signal } = {}) => el
  *  @example if (!$.reduced) el.cls('+animate')
  */
 Object.defineProperty($, 'reduced', { get: () => matchMedia('(prefers-reduced-motion: reduce)').matches });
+
+/** The stack's motion, ONE signature, read from the CSS tokens (qry-ui.css, or a site's :root) so
+ *  a script animates at the pace the stylesheet does: `$.motion('fast' | '' | 'slow')` → ms of
+ *  --qry-speed-fast, --qry-speed, --qry-speed-slow (else 120 / 200 / 500); `$.ease('' | 'move')` →
+ *  --qry-ease (arriving: a soft deceleration) or --qry-ease-move (crossing: in AND out).
+ *  @example el.animate(frames, { duration: $.motion('slow'), easing: $.ease() })
+ */
+const _MOTION = { fast: 120, '': 200, slow: 500 }, _EASE = { '': 'cubic-bezier(.2, .7, .2, 1)', move: 'cubic-bezier(.4, 0, .2, 1)' };
+$.motion = (k = '') => {
+    const v = getComputedStyle(document.documentElement).getPropertyValue('--qry-speed' + (k && '-' + k)).trim(), n = parseFloat(v);
+    return Number.isFinite(n) ? (v.endsWith('ms') ? n : n * 1000) : _MOTION[k];
+};
+$.ease = (k = '') => getComputedStyle(document.documentElement).getPropertyValue('--qry-ease' + (k && '-' + k)).trim() || _EASE[k];
 
 /** @private — an observer that stops when `signal` aborts. */
 const _watch = (observer, el, signal) => {
@@ -1008,6 +1044,19 @@ Element.prototype.onDrag = function (fn, { button = 0, signal } = {}) {
         id = null;
         fn(at(e, 'end'));
     }, { signal });
+    return this;
+};
+
+/** A press OUTSIDE the element: fn(event) — closing a menu, dropping a selection. Tested on the
+ *  event's composedPath(), not el.contains(event.target): a press that makes the element redraw
+ *  itself (a handle, a chip re-rendered on press) detaches its target before the document hears
+ *  it, and contains() would then answer "outside". Shadow roots count as inside too.
+ *  @param {Function} fn  (event) => void
+ *  @param {{event?: string, signal?: AbortSignal}} [opts]  event: 'pointerdown' (default) or 'click'
+ *  @example popup.onOutside(() => popup.hide(), { signal })
+ */
+Element.prototype.onOutside = function (fn, { event = 'pointerdown', signal } = {}) {
+    document.addEventListener(event, (e) => { if (!e.composedPath().includes(this)) fn(e); }, { signal });
     return this;
 };
 

@@ -29,7 +29,7 @@
 //   export     — bake the model into clean page copies (portable) + ship the
 //                sidecar, so the .epub is portable AND re-editable in PRISM.
 //   console    — F2 log panel capturing console.* + errors.
-import { boot, theme, toast as qryToast, makeDropZone, makeDialog, makeMenu, copy } from '/shared/vendor/qry/qry-web.js';
+import { boot, theme, toast as qryToast, makeDropZone, makeDialog, makeMenu, copy } from '/shared/vendor/qry/qry-app.js';
 import { unzip } from '/shared/vendor/fflate.js';
 
 // The chassis takes NO static /shared import: `book.js` reads `window.prism` at module scope, so the
@@ -84,14 +84,14 @@ function setStatus(html) {
 
 /** THE toast of the app and of every tool (P.toast): a qry toast, in the words the tools speak —
  *  success · warning · danger · neutral/info — and an optional duration in ms. */
-const TONE = { success: 'ok', warning: 'warn', danger: 'danger', neutral: 'info', info: 'info', primary: 'info' };
-const toast = (msg, tone = 'info', ms) => qryToast(String(msg), TONE[tone] || tone, ms ? { duration: ms } : undefined);
+const TONE = { success: 'ok', warning: 'warn', danger: 'danger', neutral: '', info: '', primary: '' };
+const toast = (msg, tone = 'info', ms) => qryToast(String(msg), { tone: TONE[tone] ?? tone, ...(ms ? { duration: ms } : {}) });
 
 /** The app's dialogs and sheets (native <dialog>, index.html), each made modal ONCE — backdrop, Escape,
  *  [data-close], focus back. P.dialog(id).open() / .close() for the tools. */
 const dialogs = new Map();
 function dialog(id) {
-  if (!dialogs.has(id)) { const el = $.opt('#' + id); dialogs.set(id, el ? makeDialog(el) : { open() {}, close() {}, isOpen: false }); }
+  if (!dialogs.has(id)) { const el = $.opt('#' + id); dialogs.set(id, el ? makeDialog(el) : { open() {}, close() {}, isOpen: () => false }); }
   return dialogs.get(id);
 }
 window.prism.dialog = dialog;
@@ -371,14 +371,14 @@ window.prism.setDevMode = setDevMode;
 window.prism.setTool = setTool;
 window.prism.tool = () => tool;
 
-boot({ title: 'Prism', theme: { key: 'prism:theme' }, ready: main });
+boot({ title: 'Prism', theme: { persist: 'prism:theme' }, ready: main });
 
 async function main() {
   ({ book }  = await import('/shared/js/book.js'));     // after the seam exists — see the note on top
   ({ shots } = await import('/shared/js/shot.js'));
   watchMembers();
   installLogCapture();                                              // capture console.* into the footer console
-  if (localStorage.getItem('prism:theme') == null) theme.set('dark'); // dark by default, like Prism
+  if (localStorage.getItem('prism:theme') == null) theme.mode('dark'); // dark by default, like Prism
   wireChrome();
   try { await initSW(); }
   catch (e) { toast(e.message, 'danger'); return; }   // no Service Worker → nothing can be served
@@ -1373,7 +1373,7 @@ function wireChrome() {
     if (file) openEpub(await file.arrayBuffer(), file.name);
     e.target.value = '';
   });
-  makeDropZone(document.body, { label: 'Drop your .epub', onFiles: async files => {
+  makeDropZone(document.body, { overlayLabel: 'Drop your .epub', onFiles: async files => {
     const doc = [...files].find(f => OPENABLE.test(f.name));
     if (doc) openEpub(await doc.arrayBuffer(), doc.name);
     else toast('Drop a .epub / .ocd.epub, a PDF or an image to open it.', 'warning');
