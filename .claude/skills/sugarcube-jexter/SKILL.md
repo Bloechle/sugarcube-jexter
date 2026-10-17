@@ -385,10 +385,10 @@ Refactored, public layout — all under `sugarcube.jexter`:
   grammar) and `js/book.js` (the document authority). Front-end stack VENDORED under
   `shared/web/vendor/` (nothing is fetched): qry 3 (`qry/`: `qry.js` the classic core, `qry-ui.css`,
   `qry-web.js` the website tier, `qry-app.js` the app tier that re-exports it — every module imports
-  `/shared/vendor/qry/qry-app.js`; refresh with qry2's `nimbus-qry2.cjs --run=vendor --app --to=<dir>`),
+  `/shared/vendor/qry/qry-app.js`; refresh with Qry's `nimbus-qry2.cjs --run=vendor --app --to=<dir>`),
   fflate (unzip + zipSync), Poppins; the line icons are Lucide drawings, the apps' ONE set in `js/icons.js` — it only
   calls qry's `icons.add`, and each app's entry module imports it before `boot()` (which starts `icons.watch()`).
-  Icons (2026-10-17, qry2 461e820): `<i data-icon="name">` STAYS and gets an `<svg class="qry-icon">` inside, redrawn
+  Icons (2026-10-17, Qry 461e820): `<i data-icon="name">` STAYS and gets an `<svg class="qry-icon">` inside, redrawn
   when `data-icon` changes; `i[data-icon] { display: contents }` + `.qry-icon { 1.15em, baseline }` in `sugarcube.css`
   keep the look the replaced `svg.lucide` had (A/B: every icon's box and stroke identical on 23 screens of the three
   apps). Size by context with `X .qry-icon` — never `X i` / `X svg`; a class on the `<i>` (`.tcaret`, `.ic`) reaches
