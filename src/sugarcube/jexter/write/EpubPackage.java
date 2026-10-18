@@ -183,8 +183,8 @@ final class EpubPackage {
      *
      * <p>This is not a better table of contents and is not the default: an EPUB nav is a table of
      * CONTENTS, and a page with nothing to say does not belong in it. It exists because some readers
-     * navigate by page and want an entry for each, which is what the MyLiveBook pipeline built by
-     * hand (its TOCBuilder emptied the nav and refilled it page by page). Here it is a projection
+     * navigate by page and want an entry for each, which some EPUB pipelines build by hand
+     * (emptying the nav and refilling it page by page). Here it is a projection
      * choice — the model is never touched, and no other target sees it.
      *
      * @param doc      the document, for its page count
