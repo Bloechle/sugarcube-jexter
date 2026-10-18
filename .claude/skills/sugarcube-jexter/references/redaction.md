@@ -1,7 +1,7 @@
 # REDACTION, PDF/UA, COMPARISON — the engineering notes (public half)
 
 Split out of the market audit on 2026-10-15, when the skill moved into this public repo: what
-buyers pay and the product decision stay PRIVATE (account skill `sugarcube-jexter`,
+buyers pay and the product decision stay PRIVATE (account skill `repo-skills`,
 `references/market.md`); what binds the CODE is here. `convert/` in the older lines is today's
 `pdfimport/` (renamed 2026-09-07).
 

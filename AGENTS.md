@@ -16,6 +16,12 @@ description: >
 
 # jexter — what it is, and how to work on it
 
+> **PUBLIC REPOSITORY (AGPL-3.0).** Everything committed here is public: code, docs, this
+> card, the skill and every commit message. Never write into it: hosting, servers, private
+> URLs, keys or tokens; customers (names, documents, contacts, prices) or market notes; the
+> content or names of private repos and services; personal data of anyone. Those stay
+> private, outside this repo. When in doubt, leave it out and ask Jean-Luc.
+
 `jexter` opens a PDF and lifts it into **one** normalized model — the **OCD**
 (Open Canonical Document) — then projects that single model to every output.
 Normalize once, export many; a round-trip stays faithful by construction.
@@ -71,16 +77,13 @@ moves a pixel.
 | DocTags / OCD-AI | `.claude/skills/docling/SKILL.md` |
 | Prism, PDFInspector, Jexter or any web UI | skill `qry`, in `Bloechle/Qry` (`.claude/skills/qry/`) |
 
-Private notes (market audit, who consumes the library) stay in the account skill
-`sugarcube-jexter`: this repo is public. Skill < this card < the source: a disagreement is a
-signal — fix the skill in the same commit.
+Skill < this card < the source: a disagreement is a signal — fix the skill in the same commit.
 
 ## Session setup
 
 - **Repo** — `git clone --depth 1 https://github.com/Bloechle/sugarcube-jexter` (public). The clone
   (this card + the skill) is the hand-off. Push straight to `main`; every push runs the CI
-  gate below, so reproduce it first. Write LF. No customer document, name or contact ever enters
-  the repo.
+  gate below, so reproduce it first. Write LF. Public: the banner above applies to every commit.
 - **Build** — `node nimbus-jexter.cjs` (deck) or `node nimbus-jexter.cjs --run=jar|build <abs path>`;
   CI is `.github/workflows/build.yml`: `javac --release 21 -Xlint:all -Werror` over the WHOLE tree
   (`src/jj2000` included) + doclint over **our** files only (`grep -v '^src/jj2000/'`, with

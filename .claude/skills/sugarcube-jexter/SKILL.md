@@ -28,8 +28,8 @@ fallback agree by construction. This skill has two facets over one engine:
 
 > **This skill lives in the repo** (`.claude/skills/sugarcube-jexter/`, since 2026-10-15) and is
 > updated BY COMMIT, never shipped as a `.skill` file — see *Maintaining this skill* at the end.
-> The repo is PUBLIC: the private notes (market audit, who consumes the library, customer
-> contacts) stay in the account skill `sugarcube-jexter`, never here.
+> The repo is PUBLIC (the card's banner): the private notes (market audit, who consumes the
+> library, customer contacts) stay in the account skill `repo-skills`, never here.
 
 For any **frontend / Prism UI** task (book.js seam, tools, persist, benches), read
 **`references/ui-seam.md`** first — it carries the tool architecture, the hard
@@ -279,7 +279,7 @@ Refactored, public layout — all under `sugarcube.jexter`:
     **no DOCTYPE accepted** (see XXE hardening, §7).
 - **Shipping a jar to a consumer is a CONTRACT check, not a build.** A package rename under `ui/`
   changes the documented launch line; `java -cp` answers a missing class, never a missing file, and
-  the consumer will suspect the jar. Read the consumer notes (account skill `sugarcube-jexter`,
+  the consumer will suspect the jar. Read the consumer notes (account skill `repo-skills`,
   private) before any delivery mail, and put the new command at the TOP of it.
 - **Before a release commit, sweep for what the compiler cannot see.** `javac` only reads `.java`:
   a vendored `.javaold` (82 KB of a dead package) sat in `src/` for months AND rode into every jar,
@@ -1917,7 +1917,7 @@ Verify touched classes in the shipped jar with `javap -cp _prod/sugarcube-jexter
   cannot open encrypted PDFs; Maven builds can. Drop the jars in `lib/` if the product
   needs it (then `KEEP_FILES`).
 
-**Consumers:** the private consumer notes (account skill `sugarcube-jexter`) — jexter is a LIBRARY first; `sugarcube-cloud` compiles
+**Consumers:** the private consumer notes (account skill `repo-skills`) — jexter is a LIBRARY first; `sugarcube-cloud` compiles
 against `write.Conversion`, `core.ConvertOptions`, `core.JxProgress`, `OCDReader`, `PdfImporter` and
 `OCDMeta`. Read it before renaming or moving anything public; the CI compiles jexter, not its
 consumers, so a break surfaces on their machine.
@@ -2354,7 +2354,7 @@ keep `--jq` filters quote-free; `1MB` is a PowerShell literal, not jq.
 ## 9 · Roadmap (engineering half)
 
 The market audit (2026-09-02: who pays for PDF/UA retro-tagging, comparison and redaction, the
-legal deadlines, the prices) is PRIVATE: account skill `sugarcube-jexter`, `references/market.md`.
+legal deadlines, the prices) is PRIVATE: account skill `repo-skills`, `references/jexter-market.md`.
 Read it before proposing or prioritising a product feature. What binds the code is here:
 
 - **Chosen sequence**: redaction checker (demo) → PDF/UA writer + veraPDF CI gate → a
@@ -2500,7 +2500,7 @@ straight to `main`; Jean-Luc runs `git pull` before touching his copy (`C:\Proje
   a red `main` is a red badge on a public repo.
 - **The repo is PUBLIC.** No customer document, name, contact or price ever enters it — not in
   code, docs, commit messages or this skill. Customer cases are named by what they show ("a press
-  cover", doc-A…); the private notes live in the account skill `sugarcube-jexter`.
+  cover", doc-A…); the private notes live in the account skill `repo-skills`.
 - A shallow clone pushes a thin pack only after `git fetch origin main` (else HTTP 413).
 - Write LF (his Windows checks out CRLF; `.gitattributes` has `* text=auto`).
 - Commit titles follow §8: never open with lowercase `jexter`. A skill change is committed with
@@ -2509,7 +2509,7 @@ straight to `main`; Jean-Luc runs `git pull` before touching his copy (`C:\Proje
 
 ## Maintaining this skill
 
-It lives in the repo since 2026-10-15 (the account keeps a pointer plus the private notes). Update
+It lives in the repo since 2026-10-15 (the account index `repo-skills` keeps the pointer and the private notes). Update
 it by commit, once per session when a session taught something durable (a trap, a gate, a
 convention, a measured number) — diff each claim against the code first, and put a correction
 where the wrong claim was. The frontmatter `description` stays under 1024 characters. Dated
