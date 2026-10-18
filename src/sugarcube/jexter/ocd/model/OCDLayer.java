@@ -22,7 +22,7 @@ public final class OCDLayer {
 
     /** How a recognition layer's text was obtained: the OCR {@code engine} that read it (e.g. {@code azure-read}),
      *  and the {@code prep} the picture went through before the engine saw it ({@code null} = the picture as
-     *  stored; {@code zigzag-gray}). Two readings that differ in either are two layers.
+     *  stored; {@code zigzag-gray}, {@code zigzag-gray-despeckle}). Two readings that differ in either are two layers.
      *  FORMAT §B4b. */
     public record Recognition(String engine, String prep) {
         public Recognition {

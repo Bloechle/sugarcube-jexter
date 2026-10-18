@@ -186,31 +186,33 @@ public final class ImageImporter {
         return g;
     }
 
-    /** The one preparation: ZigZag in GRAY mode — the background flattened, the ink kept in its grey levels.
-     *  Binary would throw away the anti-aliasing an engine reads, colour keeps the printed background it is
-     *  meant to remove. The name the option and the layer both use. */
-    static final String ZIGZAG_GRAY = "zigzag-gray";
+    /** The preparations, each a name the option and the layer both use: ZigZag in GRAY mode — the background
+     *  flattened, the ink kept in its grey levels (binary would throw away the anti-aliasing an engine reads,
+     *  colour keeps the printed background it is meant to remove) — without, then with, ZigZag's despeckle
+     *  (ink specks under its automatic area become paper). Two names because they are two readings. */
+    static final String ZIGZAG_GRAY = "zigzag-gray", ZIGZAG_GRAY_DESPECKLE = "zigzag-gray-despeckle";
+    static final List<String> PREPS = List.of(ZIGZAG_GRAY, ZIGZAG_GRAY_DESPECKLE);
 
-    /** {@code null} for none, the preparation when it is the one this importer knows; anything else is
-     *  refused, in those words — a misspelt option must not silently mean "none". */
+    /** {@code null} for none, the preparation when it is one this importer knows; anything else is refused,
+     *  in those words — a misspelt option must not silently mean "none". */
     static String knownPrep(String p) {
         if (p == null || p.isBlank()) return null;
-        if (p.equals(ZIGZAG_GRAY)) return p;
-        throw new IllegalArgumentException("unknown OCR preparation \"" + p + "\" (expected " + ZIGZAG_GRAY + ")");
+        if (PREPS.contains(p)) return p;
+        throw new IllegalArgumentException("unknown OCR preparation \"" + p + "\" (expected " + String.join(" or ", PREPS) + ")");
     }
 
     /** The frame as the ENGINE will see it: ZigZag gray at the frame's own size (nothing is upsampled), so every
      *  box the engine answers is a box on the original picture. The window is ZigZag's automatic size
      *  ({@code clamp(floor(diagonal / 45 + 0.5), 20, 250)}: a fixed 30 is too small for a phone photograph,
-     *  whose shadows are wider than the window and taken for ink). No despeckle: what {@code zigzag-gray}
-     *  names on the recognition layer is the reading of 1.1, which the despeckle of 1.2 would change. */
+     *  whose shadows are wider than the window and taken for ink). {@code zigzag-gray} has no despeckle
+     *  (the reading it has always named); {@code zigzag-gray-despeckle} takes ZigZag's automatic one. */
     static byte[] prepared(byte[] frame, String prep) throws IOException {
         BufferedImage img = ImageIO.read(new ByteArrayInputStream(frame));
         if (img == null) throw new IOException("unreadable frame");
         ZigZag.Options o = new ZigZag.Options();
         o.mode = "gray";
         o.size = ZigZag.AUTO;
-        o.despeckle = 0;
+        o.despeckle = prep.equals(ZIGZAG_GRAY_DESPECKLE) ? ZigZag.AUTO : 0;
         o.upsample = false;
         return png(ZigZag.process(img, o).image);
     }

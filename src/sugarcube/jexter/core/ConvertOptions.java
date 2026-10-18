@@ -69,7 +69,8 @@ public final class ConvertOptions {
             "OCR preparation",
             "What the picture goes through before the OCR engine reads it, when the source is an image: "
                     + "\"zigzag-gray\" (ZigZag background removal — uneven lighting, shadows and printed "
-                    + "backgrounds flattened, the ink kept in its grey levels, with a window sized from the image). "
+                    + "backgrounds flattened, the ink kept in its grey levels, with a window sized from the image), or "
+                    + "\"zigzag-gray-despeckle\" (the same, then ink specks too small to be text removed). "
                     + "Empty = the picture as is. Only the engine's input changes: the page keeps the original "
                     + "picture, and the recognition layer states the preparation.",
             Type.STRING, "", Group.CONVERSION);

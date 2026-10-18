@@ -638,7 +638,8 @@ is invented for it — the page, the layer, the run and the paragraph all keep t
 - **The picture is the page's base stratum**, stored byte for byte. The reading never touches it.
 - **The registry entry says WHO read, and from WHAT** — `ocr.engine`, and `ocr.prep` when the engine was
   given a prepared picture rather than the stored one (`zigzag-gray`: ZigZag background removal in grey
-  levels, its window sized from the image, which moves no pixel, so the boxes still land on the stored
+  levels, its window sized from the image; `zigzag-gray-despeckle`: the same, then ink specks too small to
+  be text removed — neither moves a pixel, so the boxes still land on the stored
   picture). Provenance lives once, on
   the layer, because it is a property of the reading and not of a page or a word. A layer without `ocr`
   is any other layer.
