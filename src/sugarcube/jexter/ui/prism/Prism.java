@@ -7,15 +7,13 @@ import sugarcube.jexter.core.JxStringer;
 import sugarcube.jexter.core.JxLog;
 import sugarcube.jexter.core.JxJson;
 import sugarcube.jexter.core.LlmClient;
-import sugarcube.jexter.core.OcrClient;
 import sugarcube.jexter.ui.WebApp;
 import sugarcube.jexter.write.Conversion;
 import sugarcube.jexter.ocd.io.OCDReader;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.tool.HttpLlmClient;
-import sugarcube.jexter.tool.AzureOcrClient;
-import sugarcube.jexter.tool.TesseractOcrClient;
+import sugarcube.jexter.tool.OcrEngines;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -74,7 +72,7 @@ public final class Prism extends WebApp {
     @Override protected void routes(HttpServer server) {
         installLogBridge();                                   // mirror JxLog → /api/log (in-page console)
         bindModel();                                          // bind an LLM iff a key is in env or saved config
-        bindOcr();                                            // bind an OCR engine iff the environment names one
+        OcrEngines.bindFromEnv();                             // bind an OCR engine iff the environment names one
         server.createContext("/api/convert",  this::convert); // the one engine route: bytes (+ to/opts) → artifact bytes
         server.createContext("/api/options",  this::options); // the ConvertOptions registry (+ bound-model status)
         server.createContext("/api/targets",  this::targets); // valid `to` ids
@@ -237,18 +235,6 @@ public final class Prism extends WebApp {
     }
 
     // ── AI: bind a language model (env key wins, else the saved panel config) ──
-    /** The OCR engine an imported image is read with — named by the environment ({@code JEXTER_OCR}:
-     *  {@code azure} or {@code tesseract}), none by default: an image then imports as a page with no text
-     *  layer. A named engine that cannot be built says why and stays unbound. */
-    private void bindOcr() {
-        if (OcrClient.isBound()) return;
-        try {
-            OcrClient c = AzureOcrClient.fromEnv();
-            if (c == null) c = TesseractOcrClient.fromEnv();
-            if (c != null) { OcrClient.bind(c); JxLog.info(this, "OCR bound from environment \u2014 " + c.engine()); }
-        } catch (RuntimeException e) { JxLog.warn(this, "OCR not bound: " + e.getMessage()); }
-    }
-
     private void bindModel() {
         if (LlmClient.isBound()) return;
         String key = System.getenv("JEXTER_LLM_KEY");
