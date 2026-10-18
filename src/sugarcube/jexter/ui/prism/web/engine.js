@@ -45,9 +45,11 @@ async function loadOptions() {
     let d; try { d = await backend.options(); } catch { return; }
     for (const o of d.options || []) conv.defs[o.key] = o.def;
     // A switch normally drives a BOOLEAN option. One with `data-value` drives a STRING option instead: on
-    // sends that value, off sends nothing (the engine's default) — the OCR preparation is one.
+    // sends that value, off sends nothing (the engine's default) — the OCR preparation is one. A value kept
+    // from before the switch's value changed (zigzag-gray → zigzag-gray-despeckle) still means "on".
     $.all('.cv-opt').forEach(sw => {
         const k = sw.getAttribute('data-opt'), val = sw.getAttribute('data-value');
+        if (val && k in conv.diffs && conv.diffs[k] !== val) { conv.diffs[k] = val; localStorage.setItem('prism_conv', JSON.stringify(conv.diffs)); }
         const isOn = (v) => val ? v === val : !!v;
         sw.checked = isOn(k in conv.diffs ? conv.diffs[k] : conv.defs[k]);
         sw.addEventListener('change', e => {
