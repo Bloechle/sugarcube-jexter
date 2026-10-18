@@ -199,23 +199,18 @@ public final class ImageImporter {
         throw new IllegalArgumentException("unknown OCR preparation \"" + p + "\" (expected " + ZIGZAG_GRAY + ")");
     }
 
-    /** ZigZag's window, from the image: {@code clamp(floor(diagonal / 45 + 0.5), 20, 250)} pixels — the rule
-     *  measured and agreed for ZigZag's automatic size (no resolution collapses it, where a fixed 30 is too
-     *  small for a phone photograph: a shadow is wider than the window and is taken for ink). Written
-     *  {@code floor(x + 0.5)} on purpose: it is the form all three ZigZag ports round with, so the day the
-     *  upstream ships the rule, this call site can hand it over without moving a pixel. */
-    static int zigzagSize(int w, int h) {
-        return Math.max(20, Math.min(250, (int) Math.floor(Math.hypot(w, h) / 45 + 0.5)));
-    }
-
-    /** The frame as the ENGINE will see it: ZigZag gray, window sized from the frame, at the frame's own size
-     *  (nothing is upsampled), so every box the engine answers is a box on the original picture. */
+    /** The frame as the ENGINE will see it: ZigZag gray at the frame's own size (nothing is upsampled), so every
+     *  box the engine answers is a box on the original picture. The window is ZigZag's automatic size
+     *  ({@code clamp(floor(diagonal / 45 + 0.5), 20, 250)}: a fixed 30 is too small for a phone photograph,
+     *  whose shadows are wider than the window and taken for ink). No despeckle: what {@code zigzag-gray}
+     *  names on the recognition layer is the reading of 1.1, which the despeckle of 1.2 would change. */
     static byte[] prepared(byte[] frame, String prep) throws IOException {
         BufferedImage img = ImageIO.read(new ByteArrayInputStream(frame));
         if (img == null) throw new IOException("unreadable frame");
         ZigZag.Options o = new ZigZag.Options();
         o.mode = "gray";
-        o.size = zigzagSize(img.getWidth(), img.getHeight());
+        o.size = ZigZag.AUTO;
+        o.despeckle = 0;
         o.upsample = false;
         return png(ZigZag.process(img, o).image);
     }

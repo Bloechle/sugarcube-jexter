@@ -9,10 +9,11 @@
  * Two-pass local mean filtering: Pass A classifies likely background pixels
  * against the weighted local mean; Pass B normalizes each pixel against the
  * local mean of background-only pixels, equalizing illumination before a
- * single global Otsu threshold.
+ * single global Otsu threshold; ink specks below an area that scales with the
+ * window are then removed (despeckle).
  *
- * Single file, no dependencies, separable rolling sums (O(n)), parallel.
- * Run directly with Java 11+ (no compilation step):
+ * Single file, no dependencies, separable rolling sums (O(n)) on integers,
+ * parallel across rows. Runs directly with Java (no compilation step):
  *
  *     java ZigZag.java photo.jpg --mode=binary
  *
@@ -20,30 +21,54 @@
  */
 package sugarcube.zigzag;
 
-
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.IOException;
 import java.util.Locale;
 import java.util.stream.IntStream;
 
 public class ZigZag {
 
+    public static final String VERSION = "1.3.5";
     public static final int OTSU_CAP = 250;
+    /** Options.size / Options.despeckle value that selects the automatic rule. */
+    public static final int AUTO = -1;
+    /** Largest window: keeps 255 * (size + 1)^2 inside the integer box sums
+     *  (the automatic size stops at 250). */
+    public static final int MAX_SIZE = 2048;
     static final java.util.List<String> MODES = java.util.List.of("binary", "gray", "color");
 
     /** Pipeline options. */
     public static class Options {
         public String mode = "binary";     // binary | gray | color
-        public int size = 30;
+        public int size = AUTO;            // window in px, or AUTO (from the image diagonal)
         public int weight = 90;
         public boolean upsample = true;
         public int thresholdOffset = 0;    // manual shift of the auto Otsu threshold
+        public int despeckle = AUTO;       // smallest ink component kept (px), 0 = keep all
     }
 
     /** Parameters used, auto Otsu and applied threshold. */
     public static class Info {
-        public int size, weight, otsu, threshold;
+        public int size, weight, otsu, threshold, despeckle;
+        public boolean autoSize;
+    }
+
+    /** Automatic window size: one window per 45 px of image diagonal, clamped
+     *  to [20, 250]. sqrt (correctly rounded, unlike hypot) and an explicit
+     *  floor(x + 0.5) keep the three ports in agreement on every input. */
+    public static int autoSize(int w, int h) {
+        double diag = Math.sqrt((double) w * w + (double) h * h);
+        return (int) Math.min(250, Math.max(20, Math.floor(diag / 45 + 0.5)));
+    }
+
+    /** Automatic despeckle area: ink specks smaller than round(size^2 / 225)
+     *  pixels are removed (an area, so it scales as the square of the window:
+     *  2 px at size 20, 4 at 30, 26 at 77). Integer arithmetic, identical in
+     *  every port. */
+    public static int autoDespeckle(int size) {
+        return (int) ((2L * size * size + 225) / 450);
     }
 
     public static class Result {
@@ -53,15 +78,32 @@ public class ZigZag {
 
     // -- helpers --------------------------------------------------------------
 
-    /** Rec. 601 luma, round-half-up, from 0xRRGGBB pixels. */
-    static double[] grayImage(int[] rgb) {
-        double[] gray = new double[rgb.length];
-        IntStream.range(0, rgb.length).parallel().forEach(i -> {
-            int p = rgb[i];
-            int r = (p >> 16) & 0xFF, g = (p >> 8) & 0xFF, b = p & 0xFF;
-            gray[i] = Math.floor(r * 0.299 + g * 0.587 + b * 0.114 + 0.5);
+    /** Rec. 601 luma, round-half-up, one byte per pixel (read back with
+     *  {@code & 0xFF}). Straight from the raster bytes in the common packed-BGR
+     *  case (every JPEG), otherwise from readRgb. */
+    static byte[] grayImage(BufferedImage img) {
+        byte[] bgr = bgrBytesOrNull(img);
+        if (bgr == null) return grayImage(readRgb(img));
+        byte[] gray = new byte[img.getWidth() * img.getHeight()];
+        IntStream.range(0, gray.length).parallel().forEach(i -> {
+            int o = i * 3;
+            gray[i] = luma(bgr[o + 2] & 0xFF, bgr[o + 1] & 0xFF, bgr[o] & 0xFF);
         });
         return gray;
+    }
+
+    /** Same, from 0xRRGGBB pixels. */
+    static byte[] grayImage(int[] rgb) {
+        byte[] gray = new byte[rgb.length];
+        IntStream.range(0, rgb.length).parallel().forEach(i -> {
+            int p = rgb[i];
+            gray[i] = luma((p >> 16) & 0xFF, (p >> 8) & 0xFF, p & 0xFF);
+        });
+        return gray;
+    }
+
+    static byte luma(int r, int g, int b) {
+        return (byte) Math.floor(r * 0.299 + g * 0.587 + b * 0.114 + 0.5);
     }
 
     /** Raw BGR bytes when the raster is the standard packed layout, else null. */
@@ -115,33 +157,60 @@ public class ZigZag {
         return px;
     }
 
-    /** 2D box sum over [x-r..x+r]^2, zero-padded (truncated window), O(n). */
-    static double[] boxSum(double[] src, int w, int h, int r) {
-        double[] tmp = new double[w * h];
-        IntStream.range(0, h).parallel().forEach(y -> {   // horizontal pass
+    /** 2D box sum over [x-r..x+r]^2, zero-padded (truncated window), O(n).
+     *  The inputs are bytes (gray levels, 0/1 flags) and the sums integers:
+     *  exact in any order, a quarter of the memory traffic of doubles, and they
+     *  convert to exactly the doubles a floating-point sum would give. Bounded
+     *  by 255 * (2r + 1)^2, which MAX_SIZE keeps inside an int. */
+    static int[] boxSum(byte[] src, int w, int h, int r, int[] tmp, int[] dst) {
+        // horizontal pass, into tmp: the x loop is split where the window enters
+        // and leaves the row, so the inner loops carry no bounds tests
+        int initR = Math.min(r, w - 1);
+        int addEnd = Math.max(1, w - r);      // x < addEnd  <=>  x + r < w
+        int remBeg = r + 1;                   // x >= remBeg <=>  x - r - 1 >= 0
+        IntStream.range(0, h).parallel().forEach(y -> {
             int base = y * w;
-            double sum = 0;
-            int initR = Math.min(r, w - 1);
-            for (int x = 0; x <= initR; x++) sum += src[base + x];
+            int sum = 0;
+            for (int x = 0; x <= initR; x++) sum += src[base + x] & 0xFF;
             tmp[base] = sum;
-            for (int x = 1; x < w; x++) {
-                int add = x + r, rem = x - r - 1;
-                if (add < w) sum += src[base + add];
-                if (rem >= 0) sum -= src[base + rem];
+            int x = 1;
+            for (int end = Math.min(addEnd, remBeg); x < end; x++) {        // add only
+                sum += src[base + x + r] & 0xFF;
+                tmp[base + x] = sum;
+            }
+            for (; x < addEnd; x++) {                                       // add and remove
+                sum += (src[base + x + r] & 0xFF) - (src[base + x - r - 1] & 0xFF);
+                tmp[base + x] = sum;
+            }
+            for (; x < remBeg && x < w; x++) tmp[base + x] = sum;           // neither
+            for (; x < w; x++) {                                            // remove only
+                sum -= src[base + x - r - 1] & 0xFF;
                 tmp[base + x] = sum;
             }
         });
-        double[] dst = new double[w * h];
-        IntStream.range(0, w).parallel().forEach(x -> {   // vertical pass
-            double sum = 0;
-            int initB = Math.min(r, h - 1);
-            for (int y = 0; y <= initB; y++) sum += tmp[y * w + x];
-            dst[x] = sum;
+        // vertical pass, into dst: row y is row y-1 plus the row entering the
+        // window minus the row leaving it, over strips of columns (one strip per
+        // task) - memory read row by row, and loops simple enough for C2 to
+        // vectorize on its own
+        int strip = 256, strips = (w + strip - 1) / strip;
+        int initB = Math.min(r, h - 1);
+        IntStream.range(0, strips).parallel().forEach(s -> {
+            int x0 = s * strip, x1 = Math.min(w, x0 + strip);
+            System.arraycopy(tmp, x0, dst, x0, x1 - x0);
+            for (int y = 1; y <= initB; y++) {
+                for (int x = x0, b = y * w; x < x1; x++) dst[x] += tmp[b + x];
+            }
             for (int y = 1; y < h; y++) {
-                int add = y + r, rem = y - r - 1;
-                if (add < h) sum += tmp[add * w + x];
-                if (rem >= 0) sum -= tmp[rem * w + x];
-                dst[y * w + x] = sum;
+                int o = y * w, p = o - w, add = (y + r) * w, rem = (y - r - 1) * w;
+                if (y + r < h && y - r - 1 >= 0) {
+                    for (int x = x0; x < x1; x++) dst[o + x] = dst[p + x] + tmp[add + x] - tmp[rem + x];
+                } else if (y + r < h) {
+                    for (int x = x0; x < x1; x++) dst[o + x] = dst[p + x] + tmp[add + x];
+                } else if (y - r - 1 >= 0) {
+                    for (int x = x0; x < x1; x++) dst[o + x] = dst[p + x] - tmp[rem + x];
+                } else {
+                    System.arraycopy(dst, p + x0, dst, o + x0, x1 - x0);
+                }
             }
         });
         return dst;
@@ -182,35 +251,31 @@ public class ZigZag {
         return Math.min(OTSU_CAP, thr);
     }
 
-    /** Center-aligned 2x bilinear upsampling fused with thresholding:
-     *  vertical interpolation pass, then the horizontal pass writes the
-     *  binary bytes directly (no full-resolution float buffer). */
+    /** Center-aligned 2x bilinear upsampling fused with thresholding. At
+     *  exactly 2x every output sample sits at -0.25 / +0.25 of a source pixel,
+     *  so each source row yields two output rows from constant 0.25 / 0.75
+     *  weights - the same samples as coverage(), written as pixels instead of
+     *  being counted. */
     static byte[] upsampleBinarize(double[] src, int w, int h, int thr) {
-        int W = w * 2, H = h * 2;
-        double[] rows = new double[H * w];
-        IntStream.range(0, H).parallel().forEach(y2 -> {
-            double sy = (y2 + 0.5) * 0.5 - 0.5;
-            int y0 = (int) Math.floor(sy);
-            double fy = sy - y0;
-            int ya = Math.min(h - 1, Math.max(0, y0)) * w;
-            int yb = Math.min(h - 1, Math.max(0, y0 + 1)) * w;
-            int base = y2 * w;
-            for (int x = 0; x < w; x++) rows[base + x] = src[ya + x] * (1 - fy) + src[yb + x] * fy;
-        });
-        byte[] out = new byte[H * W];
-        IntStream.range(0, H).parallel().forEach(y2 -> {
-            int base = y2 * w, ob = y2 * W;
-            for (int x2 = 0; x2 < W; x2++) {
-                double sx = (x2 + 0.5) * 0.5 - 0.5;
-                int x0 = (int) Math.floor(sx);
-                double fx = sx - x0;
-                int xa = Math.min(w - 1, Math.max(0, x0));
-                int xb = Math.min(w - 1, Math.max(0, x0 + 1));
-                double v = rows[base + xa] * (1 - fx) + rows[base + xb] * fx;
-                out[ob + x2] = (byte) (v >= thr ? 255 : 0);
-            }
+        int W = w * 2;
+        byte[] out = new byte[W * h * 2];
+        IntStream.range(0, h).parallel().forEach(y -> {
+            double[] rowA = new double[w], rowB = new double[w];
+            verticalRows(src, w, h, y, rowA, rowB);
+            binarizeRow(rowA, w, thr, out, 2 * y * W);
+            binarizeRow(rowB, w, thr, out, (2 * y + 1) * W);
         });
         return out;
+    }
+
+    /** The two horizontal 2x samples of each row pixel, thresholded into
+     *  out[o + 2x] and out[o + 2x + 1]; x = 0 and x = w-1 clamp their neighbour. */
+    static void binarizeRow(double[] row, int w, int thr, byte[] out, int o) {
+        for (int x = 0; x < w; x++) {
+            int xa = Math.max(0, x - 1), xb = Math.min(w - 1, x + 1);
+            out[o + 2 * x]     = (row[xa] * 0.25 + row[x] * 0.75) >= thr ? (byte) 255 : 0;
+            out[o + 2 * x + 1] = (row[x] * 0.75 + row[xb] * 0.25) >= thr ? (byte) 255 : 0;
+        }
     }
 
     /** Antialiased cleanup coverage: threshold the 2x-upsampled foreground and
@@ -220,23 +285,33 @@ public class ZigZag {
     static double[] coverage(double[] src, int w, int h, int thr) {
         double[] cov = new double[w * h];
         IntStream.range(0, h).parallel().forEach(y -> {
-            double[] rowA = new double[w];   // y2 = 2y   (sy = y - 0.25)
-            double[] rowB = new double[w];   // y2 = 2y+1 (sy = y + 0.25)
-            int ya = Math.max(0, y - 1) * w, yc = y * w, yb = Math.min(h - 1, y + 1) * w;
-            for (int x = 0; x < w; x++) {
-                rowA[x] = src[ya + x] * 0.25 + src[yc + x] * 0.75;
-                rowB[x] = src[yc + x] * 0.75 + src[yb + x] * 0.25;
-            }
-            for (int x = 0; x < w; x++) {
-                int xa = Math.max(0, x - 1), xb = Math.min(w - 1, x + 1);
-                int tl = (rowA[xa] * 0.25 + rowA[x] * 0.75) >= thr ? 1 : 0;
-                int tr = (rowA[x] * 0.75 + rowA[xb] * 0.25) >= thr ? 1 : 0;
-                int bl = (rowB[xa] * 0.25 + rowB[x] * 0.75) >= thr ? 1 : 0;
-                int br = (rowB[x] * 0.75 + rowB[xb] * 0.25) >= thr ? 1 : 0;
-                cov[yc + x] = (tl + tr + bl + br) * 0.25;
-            }
+            double[] rowA = new double[w], rowB = new double[w];
+            verticalRows(src, w, h, y, rowA, rowB);
+            coverageRow(rowA, rowB, w, thr, cov, y * w);
         });
         return cov;
+    }
+
+    /** White coverage of each row pixel (its four 2x samples, counted). */
+    static void coverageRow(double[] rowA, double[] rowB, int w, int thr, double[] cov, int o) {
+        for (int x = 0; x < w; x++) {
+            int xa = Math.max(0, x - 1), xb = Math.min(w - 1, x + 1);
+            int tl = (rowA[xa] * 0.25 + rowA[x] * 0.75) >= thr ? 1 : 0;
+            int tr = (rowA[x] * 0.75 + rowA[xb] * 0.25) >= thr ? 1 : 0;
+            int bl = (rowB[xa] * 0.25 + rowB[x] * 0.75) >= thr ? 1 : 0;
+            int br = (rowB[x] * 0.75 + rowB[xb] * 0.25) >= thr ? 1 : 0;
+            cov[o + x] = (tl + tr + bl + br) * 0.25;
+        }
+    }
+
+    /** The vertical pass of the 2x upsampling for source row y: rowA holds
+     *  output row 2y (sy = y - 0.25), rowB output row 2y+1 (sy = y + 0.25). */
+    static void verticalRows(double[] src, int w, int h, int y, double[] rowA, double[] rowB) {
+        int ya = Math.max(0, y - 1) * w, yc = y * w, yb = Math.min(h - 1, y + 1) * w;
+        for (int x = 0; x < w; x++) {
+            rowA[x] = src[ya + x] * 0.25 + src[yc + x] * 0.75;
+            rowB[x] = src[yc + x] * 0.75 + src[yb + x] * 0.25;
+        }
     }
 
     // -- core pipeline (Algorithm 1 of the paper) -----------------------------
@@ -247,44 +322,57 @@ public class ZigZag {
                     "invalid mode: " + opts.mode + " (expected binary, gray or color)");
         }
         int w = img.getWidth(), h = img.getHeight(), n = w * h;
-        int r = opts.size / 2;
+        boolean auto = opts.size == AUTO;
+        int size = auto ? autoSize(w, h) : opts.size;
+        if (size < 2 || size > MAX_SIZE) {
+            throw new IllegalArgumentException(
+                    "invalid size: " + opts.size + " (expected 2.." + MAX_SIZE + ", or AUTO)");
+        }
+        if (opts.weight <= 0) {
+            throw new IllegalArgumentException("invalid weight: " + opts.weight + " (expected > 0)");
+        }
+        int minArea = opts.despeckle == AUTO ? autoDespeckle(size) : opts.despeckle;
+        if (minArea < 0) {
+            throw new IllegalArgumentException("invalid despeckle: " + opts.despeckle + " (expected >= 0, or AUTO)");
+        }
+        int r = size / 2;
         double wf = opts.weight / 100.0;
-        int[] rgb = readRgb(img);          // decoded once, reused by color mode
-        double[] gray = grayImage(rgb);
+        byte[] gray = grayImage(img);
+        int[] tmp = new int[n];             // the box sums' scratch, shared
 
         // Pass A - background classification against the weighted local mean
-        double[] sumAll = boxSum(gray, w, h, r);
-        double[] maskVal = new double[n];   // gray value where background, else 0
-        double[] maskCnt = new double[n];   // 1 where background, else 0
+        int[] sumAll = boxSum(gray, w, h, r, tmp, new int[n]);
+        byte[] maskVal = new byte[n];       // gray value where background, else 0
+        byte[] maskCnt = new byte[n];       // 1 where background, else 0
         IntStream.range(0, h).parallel().forEach(y -> {
             int cy = Math.min(h - 1, y + r) - Math.max(0, y - r) + 1;
-            for (int x = 0; x < w; x++) {
-                int i = y * w + x;
-                int cx = Math.min(w - 1, x + r) - Math.max(0, x - r) + 1;
-                if (gray[i] >= wf * sumAll[i] / (cx * cy)) {
-                    maskVal[i] = gray[i];
-                    maskCnt[i] = 1;
-                }
-            }
+            background(gray, sumAll, wf, w, r, cy, maskVal, maskCnt, y * w);
         });
 
         // Pass B - normalization against the local mean of background-only pixels
-        double[] cntBg = boxSum(maskCnt, w, h, r);
+        int[] cntBg = boxSum(maskCnt, w, h, r, tmp, new int[n]);
 
         Info info = new Info();
-        info.size = opts.size;
+        info.size = size;
+        info.autoSize = auto;
         info.weight = opts.weight;
         Result res = new Result();
         res.info = info;
 
-        double[] fg = normalize(gray, maskVal, cntBg, w, h, r);
+        double[] fg = normalize(gray, boxSum(maskVal, w, h, r, tmp, sumAll), cntBg, w, h);
 
         // Otsu threshold on the foreground histogram (10% margin crop),
         // optionally shifted by the manual offset
-        int auto = otsu(histogram(fg, w, h, 10));
-        int thr = Math.min(255, Math.max(0, auto + opts.thresholdOffset));
-        info.otsu = auto;
+        int otsuThr = otsu(histogram(fg, w, h, 10));
+        int thr = (int) Math.min(255, Math.max(0, (long) otsuThr + opts.thresholdOffset));
+        info.otsu = otsuThr;
         info.threshold = thr;
+        info.despeckle = minArea;
+
+        // Despeckle: ink components smaller than the area become paper. Done on
+        // the 1x foreground, before any output: a removed speck's neighbours are
+        // all paper, so every 2x sample around it is paper too, in every mode.
+        if (minArea > 1) despeckle(fg, w, h, thr, minArea);
 
         if (opts.mode.equals("gray")) {
             // antialiased background cleanup: blend toward white with the 2x2
@@ -304,9 +392,10 @@ public class ZigZag {
             // luminance-guided: normalize once on luma, re-apply the original
             // colors, then the same antialiased white blend as gray mode
             double[] cov = coverage(fg, w, h, thr);
+            int[] rgb = readRgb(img);
             int[] px = new int[n];
             IntStream.range(0, n).parallel().forEach(i -> {
-                double ratio = fg[i] / Math.max(1, gray[i]);
+                double ratio = fg[i] / Math.max(1, gray[i] & 0xFF);
                 double c = cov[i], k = 1.0 - c;
                 int p = rgb[i], v = 0;
                 for (int ch = 0; ch < 3; ch++) {
@@ -317,7 +406,7 @@ public class ZigZag {
                 px[i] = v;
             });
             BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
-            out.setRGB(0, 0, w, h, px, 0, w);
+            out.getRaster().setDataElements(0, 0, w, h, px);   // packed RGB, no colour conversion
             res.image = out;
             return res;
         }
@@ -337,61 +426,163 @@ public class ZigZag {
         return res;
     }
 
-    /** fg = 255 if v >= mean_bg else v*256/mean_bg; all-foreground windows -> 255. */
-    static double[] normalize(double[] channel, double[] masked, double[] cntBg,
-                              int w, int h, int r) {
-        double[] sumBg = boxSum(masked, w, h, r);
+    /** Turn 8-connected ink components (fg < thr) smaller than minArea into
+     *  paper (255). Union-find over runs: each horizontal run of ink is one
+     *  node, joined to the runs of the row above that touch it (8-connectivity:
+     *  overlapping once widened by a pixel); a root holds its component's size
+     *  as a negative number. Components are unique, so the result is the same
+     *  as any other labelling - a run per node just makes far fewer unions. */
+    static void despeckle(double[] fg, int w, int h, int thr, int minArea) {
+        int[] parent = new int[w * h];   // at a run's first pixel: parent run, or -size
+        int[][] above = { new int[w], new int[w] }, row = { new int[w], new int[w] };
+        int na = 0;
+        for (int y = 0; y < h; y++) {
+            int base = y * w, nr = 0;
+            for (int x = 0, k = 0; x < w;) {
+                if (fg[base + x] >= thr) { x++; continue; }
+                int s = x;
+                while (x < w && fg[base + x] < thr) x++;
+                parent[base + s] = s - x;                   // a run of x - s pixels
+                row[0][nr] = s;
+                row[1][nr++] = x;
+                while (k < na && above[1][k] < s) k++;      // ends left of column s - 1
+                for (int j = k; j < na && above[0][j] <= x; j++) union(parent, base + s, base - w + above[0][j]);
+            }
+            int[][] t = above; above = row; row = t;
+            na = nr;
+        }
+        for (int y = 0; y < h; y++) {
+            int base = y * w;
+            for (int x = 0; x < w;) {
+                if (fg[base + x] >= thr) { x++; continue; }
+                int s = x;
+                while (x < w && fg[base + x] < thr) x++;
+                if (-parent[find(parent, base + s)] < minArea) java.util.Arrays.fill(fg, base + s, base + x, 255);
+            }
+        }
+    }
+
+    static int find(int[] parent, int i) {
+        while (parent[i] >= 0) {
+            int p = parent[i];
+            if (parent[p] >= 0) parent[i] = parent[p];   // path halving
+            i = p;
+        }
+        return i;
+    }
+
+    static void union(int[] parent, int a, int b) {
+        int ra = find(parent, a), rb = find(parent, b);
+        if (ra == rb) return;
+        if (parent[ra] > parent[rb]) { int t = ra; ra = rb; rb = t; }   // ra = larger
+        parent[ra] += parent[rb];
+        parent[rb] = ra;
+    }
+
+    /** Pass A for the row at base: background where the gray level reaches the
+     *  weighted mean of its (clamped) window. */
+    static void background(byte[] gray, int[] sumAll, double wf, int w, int r, int cy,
+                           byte[] maskVal, byte[] maskCnt, int base) {
+        for (int x = 0; x < w; x++) {
+            int i = base + x;
+            int cx = Math.min(w - 1, x + r) - Math.max(0, x - r) + 1;
+            if ((gray[i] & 0xFF) >= wf * sumAll[i] / (cx * cy)) {
+                maskVal[i] = gray[i];
+                maskCnt[i] = 1;
+            }
+        }
+    }
+
+    /** Pass B: fg = 255 if v >= mean_bg else v*256/mean_bg; all-foreground
+     *  windows -> 255. */
+    static double[] normalize(byte[] gray, int[] sumBg, int[] cntBg, int w, int h) {
         double[] fg = new double[w * h];
-        IntStream.range(0, w * h).parallel().forEach(i -> {
-            double meanBg = cntBg[i] > 0.5 ? sumBg[i] / cntBg[i] : 0;
-            double v = channel[i];
-            fg[i] = (v >= meanBg || cntBg[i] < 0.5)
-                    ? 255
-                    : Math.min(255, v * 256 / Math.max(1, meanBg));
+        IntStream.range(0, h).parallel().forEach(y -> {
+            foreground(gray, sumBg, cntBg, fg, y * w, (y + 1) * w);
         });
         return fg;
+    }
+
+    /** Pass B for pixels from..to-1. */
+    static void foreground(byte[] gray, int[] sumBg, int[] cntBg, double[] fg, int from, int to) {
+        for (int i = from; i < to; i++) {
+            int cnt = cntBg[i];
+            double meanBg = cnt > 0 ? (double) sumBg[i] / cnt : 0;
+            double v = gray[i] & 0xFF;
+            fg[i] = (v >= meanBg || cnt == 0) ? 255 : Math.min(255, v * 256 / Math.max(1, meanBg));
+        }
     }
 
     // -- CLI ------------------------------------------------------------------
 
     static final String USAGE = "Usage: java ZigZag.java <inputs...> [--output=path|dir] "
-            + "[--mode=binary|gray|color] [--size=N] [--weight=N] [--threshold-offset=N] "
-            + "[--no-upsample] [--time] [--csv=path]";
+            + "[--mode=binary|gray|color] [--size=N|auto] [--weight=N] [--threshold-offset=N] "
+            + "[--despeckle=N|auto] "
+            + "[--no-upsample] [--time] [--csv=path] [--version]";
 
+    /** Exit status: 0 success, 1 an input failed, 2 bad command line. */
     public static void main(String[] args) throws Exception {
+        int status = run(args);
+        if (status != 0) System.exit(status);
+    }
+
+    /** Integer option value in [min, max], or null after printing why it is not one. */
+    static Integer intArg(String name, String v, int min, int max) {
+        try {
+            int n = Integer.parseInt(v);
+            if (n >= min && n <= max) return n;
+        } catch (NumberFormatException e) { /* reported below */ }
+        String range = max == Integer.MAX_VALUE ? ">= " + min : min + ".." + max;
+        System.err.println("Invalid " + name + "=" + v + " (expected an integer " + range + ")");
+        return null;
+    }
+
+    static int run(String[] args) throws Exception {
         java.util.List<String[]> inputs = new java.util.ArrayList<>();
         String output = null, csvPath = null;
         boolean showTime = false;
         Options opts = new Options();
         for (String a : args) {
+            Integer v = 0;
             if (a.startsWith("--mode=")) opts.mode = a.substring(7);
-            else if (a.startsWith("--size=")) opts.size = Integer.parseInt(a.substring(7));
-            else if (a.startsWith("--weight=")) opts.weight = Integer.parseInt(a.substring(9));
-            else if (a.startsWith("--threshold-offset=")) opts.thresholdOffset = Integer.parseInt(a.substring(19));
+            else if (a.equals("--size=auto")) opts.size = AUTO;
+            else if (a.startsWith("--size=")) { if ((v = intArg("--size", a.substring(7), 2, MAX_SIZE)) != null) opts.size = v; }
+            else if (a.startsWith("--weight=")) { if ((v = intArg("--weight", a.substring(9), 1, Integer.MAX_VALUE)) != null) opts.weight = v; }
+            else if (a.equals("--despeckle=auto")) opts.despeckle = AUTO;
+            else if (a.startsWith("--despeckle=")) { if ((v = intArg("--despeckle", a.substring(12), 0, Integer.MAX_VALUE)) != null) opts.despeckle = v; }
+            else if (a.startsWith("--threshold-offset=")) {
+                if ((v = intArg("--threshold-offset", a.substring(19), Integer.MIN_VALUE, Integer.MAX_VALUE)) != null) opts.thresholdOffset = v;
+            }
             else if (a.startsWith("--output=")) output = a.substring(9);
             else if (a.equals("--no-upsample")) opts.upsample = false;
             else if (a.equals("--time")) showTime = true;
             else if (a.startsWith("--csv=")) csvPath = a.substring(6);
+            else if (a.equals("--version")) {
+                System.out.println("ZigZag " + VERSION);
+                return 0;
+            }
             else if (a.equals("--help") || a.equals("-h")) {
                 System.out.println(USAGE);
-                return;
+                return 0;
             }
             else if (a.startsWith("--")) {
-                System.out.println("Unknown option: " + a);
-                return;
+                System.err.println("Unknown option: " + a);
+                return 2;
             }
             else inputs.addAll(expand(a));
+            if (v == null) return 2;
         }
         if (!MODES.contains(opts.mode)) {
-            System.out.println("Invalid --mode=" + opts.mode + " (expected binary, gray or color)");
-            return;
+            System.err.println("Invalid --mode=" + opts.mode + " (expected binary, gray or color)");
+            return 2;
         }
         if (inputs.isEmpty()) {
             boolean hadPatterns = java.util.Arrays.stream(args).anyMatch(a -> !a.startsWith("--"));
-            System.out.println(hadPatterns ? "No input images found." : USAGE);
-            return;
+            System.err.println(hadPatterns ? "No input images found." : USAGE);
+            return hadPatterns ? 1 : 2;
         }
 
+        ImageIO.setUseCache(false);         // encode in memory, not through a temp file
         File outDir = null;
         if (output != null && (inputs.size() > 1 || new File(output).isDirectory()
                 || output.endsWith(File.separator) || output.endsWith("/"))) {
@@ -400,21 +591,23 @@ public class ZigZag {
         }
 
         StringBuilder csv = new StringBuilder(
-                "input,output,mode,size,weight,otsu,threshold,backend,in_width,in_height,"
+                "input,output,mode,size,weight,otsu,threshold,despeckle,backend,in_width,in_height,"
                 + "out_width,out_height,load_ms,proc_ms,save_ms\n");
         double totLoad = 0, totProc = 0, totSave = 0;
-        int count = 0;
+        int count = 0, failed = 0;
         for (String[] entry : inputs) {
             String input = entry[0], rel = entry[1];
             File in = new File(input);
             if (!in.exists()) {
-                System.out.println("File not found: " + input);
+                System.err.println("File not found: " + input);
+                failed++;
                 continue;
             }
             long t0 = System.nanoTime();
             BufferedImage img = ImageIO.read(in);
             if (img == null) {
-                System.out.println("Cannot read image: " + input);
+                System.err.println("Cannot read image: " + input);
+                failed++;
                 continue;
             }
             double tLoad = (System.nanoTime() - t0) / 1e6;
@@ -432,7 +625,14 @@ public class ZigZag {
                         : new File(input.replaceFirst("\\.[^.]+$", "") + "_ZZ.png");
             }
             t0 = System.nanoTime();
-            ImageIO.write(res.image, "png", dst);
+            // our own stream: ImageIO.write(img, fmt, File) prints a stack trace on a bad path
+            try (java.io.OutputStream out = new java.io.BufferedOutputStream(new java.io.FileOutputStream(dst))) {
+                ImageIO.write(res.image, "png", out);
+            } catch (IOException e) {
+                System.err.println("Cannot write image: " + dst);
+                failed++;
+                continue;
+            }
             double tSave = (System.nanoTime() - t0) / 1e6;
 
             totLoad += tLoad;
@@ -440,17 +640,18 @@ public class ZigZag {
             totSave += tSave;
             count++;
             Info f = res.info;
-            csv.append(String.format(Locale.ROOT, "%s,%s,%s,%d,%d,%d,%d,cpu,%d,%d,%d,%d,%.1f,%.1f,%.1f\n",
+            csv.append(String.format(Locale.ROOT, "%s,%s,%s,%d,%d,%d,%d,%d,cpu,%d,%d,%d,%d,%.1f,%.1f,%.1f\n",
                     csvField(input), csvField(dst.getPath()), opts.mode, f.size, f.weight,
-                    f.otsu, f.threshold, img.getWidth(), img.getHeight(),
+                    f.otsu, f.threshold, f.despeckle, img.getWidth(), img.getHeight(),
                     res.image.getWidth(), res.image.getHeight(), tLoad, tProc, tSave));
+            String sizeS = f.autoSize ? f.size + " (auto)" : String.valueOf(f.size);
             String otsuS = f.threshold != f.otsu
                     ? " thr=" + f.threshold + " (otsu=" + f.otsu + ")" : " otsu=" + f.otsu;
             String timing = showTime
                     ? String.format(Locale.ROOT, "load %.0f | proc %.0f | save %.0f ms", tLoad, tProc, tSave)
                     : String.format(Locale.ROOT, "%.0f ms", tProc);
-            System.out.printf(Locale.ROOT, "%s -> %s  [size=%d weight=%d%s | %s]%n",
-                    input, dst, f.size, f.weight, otsuS, timing);
+            System.out.printf(Locale.ROOT, "%s -> %s  [size=%s weight=%d despeckle=%d%s | %s]%n",
+                    input, dst, sizeS, f.weight, f.despeckle, otsuS, timing);
         }
         if (csvPath != null && count > 0) {
             java.nio.file.Files.writeString(java.nio.file.Paths.get(csvPath), csv.toString());
@@ -461,6 +662,7 @@ public class ZigZag {
                     "-- %d images | load %.2f s | proc %.2f s (%.0f ms/image) | save %.2f s%n",
                     count, totLoad / 1000, totProc / 1000, totProc / count, totSave / 1000);
         }
+        return failed > 0 ? 1 : 0;
     }
 
     /** Quote a CSV field if it contains a comma or a quote. */
@@ -477,26 +679,38 @@ public class ZigZag {
             return java.util.List.<String[]>of(new String[]{ pattern, new File(pattern).getName() });
         }
         java.util.List<String[]> out = new java.util.ArrayList<>();
-        if (pattern.contains("**")) {
-            int wc = pattern.indexOf('*');
-            int q = pattern.indexOf('?');
-            if (q >= 0 && q < wc) wc = q;
-            int slash = Math.max(pattern.lastIndexOf('/', wc), pattern.lastIndexOf('\\', wc));
+        int wc = pattern.indexOf('*');
+        int q = pattern.indexOf('?');
+        if (wc < 0 || (q >= 0 && q < wc)) wc = q;
+        int slash = Math.max(pattern.lastIndexOf('/', wc), pattern.lastIndexOf('\\', wc));
+        boolean wildDir = pattern.indexOf('/', wc) >= 0 || pattern.indexOf('\\', wc) >= 0;
+        if (wildDir) {     // ** or a wildcard in a directory name ("scans/*/p*.jpg")
             java.nio.file.Path root = java.nio.file.Paths.get(slash >= 0 ? pattern.substring(0, slash) : ".");
+            // without **, the walk never needs to go deeper than the pattern
+            int depth = Integer.MAX_VALUE;
+            if (!pattern.contains("**")) {
+                depth = 0;
+                for (char c : pattern.substring(slash + 1).toCharArray()) if (c == '/' || c == '\\') depth++;
+                depth++;
+            }
             // Java's glob requires ** to span at least one directory; Python's
             // recursive glob lets it span zero, so also try the collapsed form
             var deep = java.nio.file.FileSystems.getDefault().getPathMatcher("glob:" + pattern);
             var flat = java.nio.file.FileSystems.getDefault()
-                    .getPathMatcher("glob:" + pattern.replace("/**/", "/").replace("\\**\\", "\\"));
-            try (var st = java.nio.file.Files.walk(root)) {
+                    .getPathMatcher("glob:" + pattern.replace("/**/", "/").replace("\\**\\", "\\")
+                            .replaceFirst("^\\*\\*[/\\\\]", ""));   // leading **/ too
+            if (!java.nio.file.Files.isDirectory(root)) return out;
+            java.nio.file.Path base = root.normalize();     // "." -> "", so rel has no "../"
+            try (var st = java.nio.file.Files.walk(root, depth)) {
                 st.filter(java.nio.file.Files::isRegularFile)
                   .map(java.nio.file.Path::normalize)
                   .filter(f -> deep.matches(f) || flat.matches(f))
-                  .forEach(f -> out.add(new String[]{ f.toString(), root.relativize(f).toString() }));
+                  .forEach(f -> out.add(new String[]{ f.toString(), base.relativize(f).toString() }));
             }
         } else {
             java.nio.file.Path p = java.nio.file.Paths.get(pattern);
             java.nio.file.Path dir = p.getParent() == null ? java.nio.file.Paths.get(".") : p.getParent();
+            if (!java.nio.file.Files.isDirectory(dir)) return out;
             try (var ds = java.nio.file.Files.newDirectoryStream(dir, p.getFileName().toString())) {
                 for (java.nio.file.Path f : ds) out.add(new String[]{ f.toString(), f.getFileName().toString() });
             }
