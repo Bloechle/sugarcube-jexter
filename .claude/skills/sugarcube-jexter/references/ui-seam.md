@@ -372,8 +372,7 @@ not survive between tool calls. And their controls are Shoelace CUSTOM ELEMENTS:
 silently clicks nothing and reports the app stuck. Measured once each: the Inspector opens a PDF and
 answers on all four tabs (COS trailer, `Helvetica Type1 54 glyphs not embedded`, no image XObjects, the
 four rasterizers), Jexter normalises one (`1.9 KB → 9.8 KB (+429%) · selectable text READY`), 0 console
-errors either side. `welcome.pdf` 404s in a bundle-built tree — the zip drops binaries; that is the
-BUNDLE, not the repo.
+errors either side.
 
 **A toast is TRANSIENT — watch for it, do not look for it.** Querying the toast (`sl-alert` then, `.qry-toast` now) after the fact found an
 empty document and reported "no message" for a message that had been shown and dismissed. Install a

@@ -99,7 +99,6 @@ const DEFAULTS = {
 
 // Comma lists in .env (LAUNCHERS, JAR_PACKAGES): one splitter.
 const list = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
-// Glob → regex body: `**` crosses folders, `*` and `?` stay inside one segment.
 // Resources copied from src/ onto the classpath (UI web assets ride along; .java,
 // the big source archives and notes do not).
 const RESOURCE_SKIP_EXT = ['.java', '.zip', '.md'];

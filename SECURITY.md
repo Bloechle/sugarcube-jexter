@@ -28,8 +28,7 @@ format, and the parser is the attack surface. In scope:
   nested structures, pathological font or path data.
 - Anything that lets embedded content reach a viewer with more privilege than it
   should have, including through the OCD-EPUB output.
-- Any credential or key leaking into an output document, a log, or an
-  `_ai-*` context bundle.
+- Any credential or key leaking into an output document or a log.
 
 Out of scope: vulnerabilities in Apache PDFBox itself — report those to the
 [Apache PDFBox project](https://pdfbox.apache.org/) — and findings that require

@@ -78,7 +78,7 @@ signal — fix the skill in the same commit.
 ## Session setup
 
 - **Repo** — `git clone --depth 1 https://github.com/Bloechle/sugarcube-jexter` (public). The clone
-  is the hand-off: there is no AI bundle any more. Push straight to `main`; every push runs the CI
+  (this card + the skill) is the hand-off. Push straight to `main`; every push runs the CI
   gate below, so reproduce it first. Write LF. No customer document, name or contact ever enters
   the repo.
 - **Build** — `node nimbus-jexter.cjs` (deck) or `node nimbus-jexter.cjs --run=jar|build <abs path>`;

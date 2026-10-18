@@ -141,7 +141,7 @@ compiled into the same output tree instead of launched from source.
 
 ## 1 · Get the project
 
-The repo IS the hand-off (no AI bundle since 2026-10-15 — the deck's `context` action is gone):
+The repo IS the hand-off: this card (AGENTS.md) and this skill travel with every clone.
 
 ```bash
 git clone --depth 1 https://github.com/Bloechle/sugarcube-jexter   # public; ~15 MB with lib/
@@ -1074,8 +1074,8 @@ projection, an audit that says *we* redacted this — but it is a format decisio
 ### `ConvertOptions` lives in `core` (2026-09-05) — a BREAKING change for consumers
 
 It sat in `convert`, which forced `Refiner` and `AnalysisStages` to import upward: the only two
-backward edges in the graph. Moving it to `core` removed both — the Dependencies table of a fresh
-bundle now reads `ocd.analysis | ocd.model · core`, nothing else.
+backward edges in the graph. Moving it to `core` removed both — the package graph now reads
+`ocd.analysis | ocd.model · core`, nothing else.
 
 **But jexter is a LIBRARY with consumers**, and moving a public class between packages breaks every
 one of them. `sugarcube-cloud`'s `ConvertServlet` stopped compiling, and it was found by a failed
@@ -2288,8 +2288,7 @@ now on a release is a commit ON TOP of `main` plus a new tag; the orphan recipe 
 kept for the record and for a not-yet-public repo.
 
 **1. Start from `main`.** Since 2026-10-15 the work happens in a clone and is pushed, so the
-tree IS `main` — there is no delta to rebuild (on 2026-09-02 it was diffed by hand against an AI
-bundle; that is history). Still check line endings on files Jean-Luc edited on Windows: on
+tree IS `main` — there is no delta to rebuild. Still check line endings on files Jean-Luc edited on Windows: on
 2026-09-02 `.gitattributes` came in **CRLF**, and `file` (not `grep $'\r'`, which misses it) is
 the detector; renormalize to LF.
 
