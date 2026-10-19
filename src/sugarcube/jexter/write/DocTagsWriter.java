@@ -73,7 +73,7 @@ public final class DocTagsWriter {
                 }
                 case TOC      -> block(s, "document_index");
                 case HEADING  -> { block(s, "section_header_level_" + s.headingLevel());
-                                   for (OCDStructNode c : s.children()) walk(c); }   // heading = label + sub-blocks
+                                   for (OCDStructNode c : s.children()) if (!c.isInline()) walk(c); }   // heading = label + sub-blocks (its words are the label)
                 case PARAGRAPH, QUOTE -> block(s, "text");
                 case CAPTION  -> block(s, "caption");
                 case CODE     -> block(s, "code");

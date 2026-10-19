@@ -454,8 +454,25 @@ public final class Gates {
             refs(pdfTree.root(), seen, bad);
             if (!pdfTree.id().equals(model.defaultStructureId())) bad.add("default structure is " + model.defaultStructureId() + ", not the PDF's own");
             if (model.outline().isEmpty()) headingRoles(pdfTree.root(), model, bad);   // no nav to win: the tags decide
+            headingWords(pdfTree.root(), OCDIndex.of(model), bad);
+            int heads = headings(pdfTree.root());
+            int chapters = sugarcube.jexter.write.HtmlWriter.chapters(model, null).size();
+            if (heads > 1 && chapters < 2) bad.add(heads + " headings, but the reflow book is " + chapters + " chapter");
         }
         return bad;
+    }
+
+    /** Every heading reads as its words, whatever wraps them: a heading whose text sits in a Div (as Typst
+     *  writes them) read as nothing, and the contents of every EPUB said « Heading 1 ». */
+    private static void headingWords(OCDStructNode n, OCDIndex ix, List<String> bad) {
+        if (n.type() == OCDStructNode.Type.HEADING && ix.text(n).isBlank()) bad.add("an H" + n.level() + " reads as nothing");
+        for (OCDStructNode c : n.children()) headingWords(c, ix, bad);
+    }
+
+    private static int headings(OCDStructNode n) {
+        int k = n.type() == OCDStructNode.Type.HEADING ? 1 : 0;
+        for (OCDStructNode c : n.children()) k += headings(c);
+        return k;
     }
 
     /** Every paragraph a PDF/UA heading references carries that heading's role. */

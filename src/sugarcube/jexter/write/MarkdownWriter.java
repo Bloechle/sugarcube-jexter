@@ -56,7 +56,7 @@ public final class MarkdownWriter {
                 case HEADING -> {
                     String t = text(s);
                     if (!t.isEmpty()) block("#".repeat(s.headingLevel()) + " " + t);
-                    for (OCDStructNode c : s.children()) walk(c);
+                    for (OCDStructNode c : s.children()) if (!c.isInline()) walk(c);   // its words are in the title
                 }
                 case PARAGRAPH -> { String t = text(s); if (!t.isEmpty()) block(t); }
                 case QUOTE -> { String t = text(s); if (!t.isEmpty()) block("> " + t.replace("\n", "\n> ")); }

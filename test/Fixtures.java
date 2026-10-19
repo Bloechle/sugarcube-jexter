@@ -938,16 +938,24 @@ final class Fixtures {
         // The title is a producer's OWN type ("Titre"), standard only through the RoleMap — what Word and
         // InDesign write for every style.
         root.setRoleMap(Map.of("Titre", "H1"));
-        var document = new PDStructureElement("Document", root);
-        root.appendKid(document);
+        var top = new PDStructureElement("Document", root);
+        root.appendKid(top);
+        // Everything sits in one Sect, as Typst writes a document: a wrapper that only groups — the chapters
+        // are below it, not one chapter called « Content ».
+        var document = new PDStructureElement("Sect", top);
+        top.appendKid(document);
         COSArray byMcid = new COSArray();
         Object[][] groups = { { "Titre", new int[] { 0 } }, { "P", new int[] { 1 } }, { "H2", new int[] { 2 } }, { "P", new int[] { 3, 4 } } };
         for (Object[] g : groups) {
             var e = new PDStructureElement((String) g[0], document);
             e.setPage(page);
+            // The H2 holds its words through a Div, as Typst writes every heading: a grouping element inside a
+            // heading groups nothing — the heading's text is still its words.
+            var owner = "H2".equals(g[0]) ? new PDStructureElement("Div", e) : e;
+            if (owner != e) { owner.setPage(page); e.appendKid(owner); }
             for (int mcid : (int[]) g[1]) {
-                e.appendKid(mcid);
-                byMcid.add(e);
+                owner.appendKid(mcid);
+                byMcid.add(owner);
             }
             document.appendKid(e);
         }

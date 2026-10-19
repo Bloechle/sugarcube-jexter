@@ -44,7 +44,7 @@ public final class TaggedStructureBuilder {
 
         OCDStructNode rootStruct = new OCDStructNode(OCDStructNode.Type.DOCUMENT);
         for (Object kid : root.getKids())
-            if (kid instanceof PDStructureElement e) rootStruct.add(t.element(e, -1));
+            if (kid instanceof PDStructureElement e) rootStruct.add(t.element(e, -1, false));
         doc.addStructure(new OCDStructure("pdf", "PDF (tagged)", OCDStructure.Source.PDF)
                 .by("TaggedStructureBuilder").at(JxClock.millis()).how("PDF/UA tag tree").root(rootStruct));
     }
@@ -53,25 +53,30 @@ public final class TaggedStructureBuilder {
 
         /** An element, typed by its STANDARD type: a producer's own types (Word's, InDesign's) reach one through
          *  the RoleMap, which {@code getStandardStructureType} follows — the raw type made them all OTHER. */
-        OCDStructNode element(PDStructureElement e, int inheritedPage) {
+        OCDStructNode element(PDStructureElement e, int inheritedPage, boolean inText) {
             String type = e.getStandardStructureType();
-            OCDStructNode s = new OCDStructNode(mapType(type)).level(level(type));
+            OCDStructNode.Type kind = mapType(type);
+            // Inside a heading, a paragraph or a caption, a grouping element (Div, Sect…) groups nothing: the block
+            // holds words, so it is an inline span of them. Typst wraps every heading's words in a Div; kept as a
+            // SECTION, the heading read as nothing — and every EPUB's contents said « Heading 1 ».
+            if (inText && kind == OCDStructNode.Type.SECTION) kind = OCDStructNode.Type.SPAN;
+            OCDStructNode s = new OCDStructNode(kind).level(level(type));
             String alt = e.getAlternateDescription() != null ? e.getAlternateDescription()
                        : e.getActualText() != null ? e.getActualText() : e.getTitle();
             if (alt != null)             s.alt(alt);
             if (e.getLanguage() != null) s.lang(e.getLanguage());
-            kids(s, e, pageOf(e.getPage(), pageIndex, inheritedPage));
+            kids(s, e, pageOf(e.getPage(), pageIndex, inheritedPage), inText || TEXT_BLOCKS.contains(kind));
             return s;
         }
 
         /** The element's kids into {@code s}. An {@code LBody} is not a node of its own: its content IS the
          *  item's body, beside the item's label — kept as an ITEM, it nested an item in an item and the
          *  writers lost the body or wrote {@code <li>} in {@code <li>}. */
-        void kids(OCDStructNode s, PDStructureElement e, int page) {
+        void kids(OCDStructNode s, PDStructureElement e, int page, boolean inText) {
             for (Object kid : e.getKids()) {
                 if (kid instanceof PDStructureElement child) {
-                    if ("LBody".equals(child.getStandardStructureType())) kids(s, child, pageOf(child.getPage(), pageIndex, page));
-                    else s.add(element(child, page));
+                    if ("LBody".equals(child.getStandardStructureType())) kids(s, child, pageOf(child.getPage(), pageIndex, page), inText);
+                    else s.add(element(child, page, inText));
                 } else if (kid instanceof PDMarkedContentReference mcr) {
                     COSStream stm = mcr.getCOSObject().getCOSStream(STM);
                     refs(s, pageOf(mcr.getPage(), pageIndex, page), new Mcid(stm, mcr.getMCID()));
@@ -89,6 +94,10 @@ public final class TaggedStructureBuilder {
             if (nodes != null) for (OCDNode n : nodes) if (n.id() != null) s.addRef(page, n.id());
         }
     }
+
+    /** The blocks that hold words, not other blocks: inside one, grouping elements fold into spans. */
+    private static final java.util.Set<OCDStructNode.Type> TEXT_BLOCKS =
+            java.util.EnumSet.of(OCDStructNode.Type.HEADING, OCDStructNode.Type.PARAGRAPH, OCDStructNode.Type.CAPTION);
 
     private static int pageOf(PDPage p, Map<COSDictionary, Integer> idx, int fallback) {
         if (p == null) return fallback;

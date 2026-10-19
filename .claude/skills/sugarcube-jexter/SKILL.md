@@ -256,6 +256,9 @@ Import (`pdfimport`)
   non-vertical, non-standard-14, `/Widths` declares the code, both widths non-zero). Symptom when missing:
   text spaced out, glyphs narrower than their advances.
 - JPEG 2000 hides in a SOFT MASK too, and the declared filter lies: `JpxImage` checks the BYTES.
+- A tagged PDF's grouping element (Div, Sect) INSIDE a heading, paragraph or caption groups nothing: it
+  folds into a SPAN (`TaggedStructureBuilder`). Typst writes every heading as H1 › Div › Span: kept as a
+  SECTION, the heading read as nothing and every EPUB's contents said « Heading 1 » (TAGS checks it).
 - Layers are read at DOCUMENT level (`/OCProperties /D /OFF`), never discovered lazily from content —
   a hidden stratum painted on every surface while the layer COUNT round-tripped.
 - Pattern fills: a shading pattern's ramp is sampled; grey (128,128,128) is the fallback showing through.
@@ -313,6 +316,9 @@ Writers (`write`)
   glyph for a letter has no cmap entry, and writing its LETTERS draws other glyphs — « fi » showed as « f » and
   a gap in every replica EPUB. `OCDFont.drawCodepoints()` gives every glyph one (its letter if free, the
   presentation form ﬁ, else the Private Use Area) and the font builders compile `drawCmap()`; gate DRAWN.
+- A heading's INLINE children are its words — already in its title: the structure writers walk only its
+  block children (they wrote « 1 What jexter is » twice). Reflow chapters split below a wrapper that only
+  groups (Document › Sect: one chapter « Content » before; TAGS checks the chapter count).
 - PDFBox cannot embed CFF: `GlyfOtf` for PDF, `CffOtf` for web/EPUB. The per-format font table
   constants are tuned per upem grid — do not unify them.
 - Invisible text is text: render mode 3 is written by every text projection (`Tr 3` in PDF, zero

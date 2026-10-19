@@ -104,7 +104,7 @@ public final class HtmlWriter {
         }
         var cur = new StringBuilder();
         String curTitle = null;
-        for (OCDStructNode c : root.children()) {
+        for (OCDStructNode c : body(root).children()) {
             if (c.type() == OCDStructNode.Type.HEADING && cur.length() > 0) {
                 out.add(new Chapter("chapter-" + (out.size() + 1), curTitle != null ? curTitle : "Content", cur.toString()));
                 cur = new StringBuilder();
@@ -121,6 +121,15 @@ public final class HtmlWriter {
         return out;
     }
 
+    /** Where the chapters are: the root, or — through a wrapper that only groups (a tagged PDF's Document › Sect,
+     *  as Typst writes it) — the first node that holds more than one thing. Split at the root alone, such a
+     *  book was one chapter called « Content », its contents a single line. */
+    private static OCDStructNode body(OCDStructNode root) {
+        OCDStructNode n = root;
+        while (n.children().size() == 1 && n.refs().isEmpty() && n.children().get(0).type() == OCDStructNode.Type.SECTION) n = n.children().get(0);
+        return n;
+    }
+
     // ── structure → HTML ─────────────────────────────────────────────────────
 
     private static void render(OCDStructNode s, OCDDocument doc, OCDIndex ix, StringBuilder sb, Assets assets) {
@@ -128,7 +137,8 @@ public final class HtmlWriter {
             case HEADING -> {
                 int lv = s.headingLevel();
                 line(sb, "h" + lv, content(s, ix));
-                for (OCDStructNode c : s.children()) render(c, doc, ix, sb, assets);   // HTML5 outline: children are siblings
+                for (OCDStructNode c : s.children())                    // HTML5 outline: children are siblings —
+                    if (!c.isInline()) render(c, doc, ix, sb, assets);   // its words are already in the <h>
             }
             case SECTION   -> wrap(s, doc, ix, sb, "section", null, assets);
             case PARAGRAPH -> line(sb, "p", content(s, ix));
