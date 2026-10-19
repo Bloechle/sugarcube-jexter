@@ -1,5 +1,6 @@
 package sugarcube.jexter.tool;
 
+import sugarcube.jexter.core.Args;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.redact.RedactionAudit;
@@ -28,35 +29,37 @@ public final class Redact {
     private Redact() {}
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 2) usage();
-        switch (args[0]) {
-            case "audit" -> audit(args);
-            case "apply" -> apply(args);
+        Args a = Args.parse(args);
+        if (a.positional().size() < 2) usage();
+        switch (a.positional(0)) {
+            case "audit" -> audit(a);
+            case "apply" -> apply(a);
             default -> usage();
         }
     }
 
-    private static void audit(String[] args) throws Exception {
-        boolean json = args.length > 2 && "--json".equals(args[2]);
-        RedactionAudit.Report rep = RedactionAudit.audit(Conversion.load(new File(args[1]), ConvertOptions.defaults()));
+    private static void audit(Args a) throws Exception {
+        boolean json = a.takeSwitch("json");
+        RedactionAudit.Report rep = RedactionAudit.audit(Conversion.load(new File(a.positional(1)), ConvertOptions.defaults()));
         System.out.println(json ? rep.toJson() : rep.toText());
         System.exit(rep.clean() ? 0 : 1);
     }
 
-    private static void apply(String[] args) throws Exception {
-        if (args.length < 3) usage();
-        Map<String, String> opts = Conversion.parse(args, 3);
+    private static void apply(Args a) throws Exception {
+        String outPath = a.positional(2);
+        if (outPath == null) usage();
+        Map<String, String> opts = a.flags();
         opts.putIfAbsent("redact", "audit");
         opts.putIfAbsent("selectable", "true");                // a redacted PDF should stay searchable
         ConvertOptions o = ConvertOptions.fromMap(opts);
-        OCDDocument doc = Conversion.load(new File(args[1]), o);
-        Conversion.Target target = Conversion.Target.ofFilename(args[2]);
+        OCDDocument doc = Conversion.load(new File(a.positional(1)), o);
+        Conversion.Target target = Conversion.Target.ofFilename(outPath);
         if (target == null) target = Conversion.Target.PDF;
         try {
             Conversion.Output out = Conversion.convert(doc, target.id, o);   // redacts, proves the zones, then projects
-            Files.write(new File(args[2]).toPath(), out.bytes());
+            Files.write(new File(outPath).toPath(), out.bytes());
             RedactionAudit.Report rest = RedactionAudit.audit(doc);          // pre-existing leaks outside the zones, if any
-            System.out.println("REDACTED " + args[2] + " (" + out.bytes().length + " bytes) — zones proven clean"
+            System.out.println("REDACTED " + outPath + " (" + out.bytes().length + " bytes) — zones proven clean"
                     + (rest.clean() ? "; document clean" : "; NOTE " + rest.findings().size() + " pre-existing item(s) elsewhere — run audit"));
             System.exit(0);
         } catch (IllegalStateException refused) {

@@ -55,12 +55,13 @@ public final class HttpLlmClient implements LlmClient {
     private final String provider, wire, endpoint, key, model, version, effort;
     private final int maxTokens;
 
-    public HttpLlmClient() {
-        this(env("JEXTER_LLM_PROVIDER", "anthropic"),
-             env("JEXTER_LLM_ENDPOINT", ""),
-             env("JEXTER_LLM_KEY", env("ANTHROPIC_API_KEY", env("OPENAI_API_KEY", ""))),
-             env("JEXTER_LLM_MODEL", ""),
-             env("JEXTER_LLM_EFFORT", ""));
+    /** The client the {@code JEXTER_LLM_*} variables describe, or {@code null} when they name no usable
+     *  model: no key, and a provider that needs one (every provider but {@code ollama}). */
+    public static HttpLlmClient fromEnv() {
+        String provider = env("JEXTER_LLM_PROVIDER", "anthropic");
+        String key = env("JEXTER_LLM_KEY", env("ANTHROPIC_API_KEY", env("OPENAI_API_KEY", "")));
+        if (key.isBlank() && !provider.trim().equalsIgnoreCase("ollama")) return null;
+        return new HttpLlmClient(provider, env("JEXTER_LLM_ENDPOINT", ""), key, env("JEXTER_LLM_MODEL", ""), env("JEXTER_LLM_EFFORT", ""));
     }
 
     /** Build a client with the default effort (env {@code JEXTER_LLM_EFFORT}, else none = deterministic). */

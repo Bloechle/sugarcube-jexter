@@ -1,5 +1,6 @@
 package sugarcube.jexter.write;
 
+import sugarcube.jexter.core.JxBlend;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -530,7 +531,8 @@ public final class PdfWriter {
             if (t.hasStrokePaint()) strokeA = na * a(t.stroke());
         }
         String blend = n.blend();
-        BlendMode bm = (blend != null && !blend.isEmpty()) ? BLEND.get(blend) : null;
+        JxBlend mode = JxBlend.of(blend);
+        BlendMode bm = mode == JxBlend.NORMAL ? null : BlendMode.getInstance(COSName.getPDFName(mode.pdf));
         if (fillA < 1f || strokeA < 1f || bm != null) {
             PDExtendedGraphicsState gs = new PDExtendedGraphicsState();
             gs.setNonStrokingAlphaConstant(fillA);
@@ -538,18 +540,6 @@ public final class PdfWriter {
             if (bm != null) gs.setBlendMode(bm);
             cs.setGraphicsStateParameters(gs);
         }
-    }
-
-    private static final Map<String, BlendMode> BLEND = new HashMap<>();
-    static {
-        BLEND.put("Normal", BlendMode.NORMAL);          BLEND.put("Multiply", BlendMode.MULTIPLY);
-        BLEND.put("Screen", BlendMode.SCREEN);          BLEND.put("Overlay", BlendMode.OVERLAY);
-        BLEND.put("Darken", BlendMode.DARKEN);          BLEND.put("Lighten", BlendMode.LIGHTEN);
-        BLEND.put("ColorDodge", BlendMode.COLOR_DODGE); BLEND.put("ColorBurn", BlendMode.COLOR_BURN);
-        BLEND.put("HardLight", BlendMode.HARD_LIGHT);   BLEND.put("SoftLight", BlendMode.SOFT_LIGHT);
-        BLEND.put("Difference", BlendMode.DIFFERENCE);  BLEND.put("Exclusion", BlendMode.EXCLUSION);
-        BLEND.put("Hue", BlendMode.HUE);                BLEND.put("Saturation", BlendMode.SATURATION);
-        BLEND.put("Color", BlendMode.COLOR);            BLEND.put("Luminosity", BlendMode.LUMINOSITY);
     }
 
     // ── geometry emission (quad → cubic for TrueType glyph outlines) ─────────

@@ -1,5 +1,6 @@
 package sugarcube.jexter.write;
 
+import sugarcube.jexter.core.Args;
 import sugarcube.jexter.ocd.analysis.Analysis;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.core.JxProgress;
@@ -253,20 +254,17 @@ public final class Conversion {
             System.exit(2);
             return;
         }
-        // Flags are position-independent: '--to=x out.md' and 'out.md --to=x' both work,
-        // and a flag can never be mistaken for the output path.
-        java.util.List<String> positional = new java.util.ArrayList<>();
-        java.util.List<String> flags = new java.util.ArrayList<>();
-        for (String a : args) (a.startsWith("--") ? flags : positional).add(a);
-        if (positional.size() != 2) {
+        // Flags are position-independent: '--to=x out.md' and 'out.md --to=x' both work.
+        Args a = Args.parse(args);
+        if (a.positional().size() != 2) {
             System.err.println("usage: <in.pdf|in.ocd.epub|in.png|in.jpg|in.tif> <out.ext> [--to=" + String.join("|", Target.ids())
                     + "] [--key=value | --flag] …   (no args → window)");
             System.exit(2);
             return;
         }
-        File in = new File(positional.get(0));
-        Path out = Path.of(positional.get(1));
-        Map<String, String> opts = parse(flags.toArray(String[]::new), 0);
+        File in = new File(a.positional(0));
+        Path out = Path.of(a.positional(1));
+        Map<String, String> opts = a.flags();
 
         String to = opts.remove("to");
         Target target = (to != null) ? Target.of(to) : Target.ofFilename(out.getFileName().toString());
@@ -297,18 +295,6 @@ public final class Conversion {
         // structurally invalid shell (empty spine, dangling nav).
         if (doc.pages().isEmpty()) throw new java.io.IOException("Document has no pages: " + in.getName());
         return doc;
-    }
-
-    /** Parse {@code --key=value} and bare {@code --flag} (⇒ "true") into a flat map. */
-    public static Map<String, String> parse(String[] args, int from) {
-        Map<String, String> m = new LinkedHashMap<>();
-        for (int i = from; i < args.length; i++) {
-            String a = args[i].startsWith("--") ? args[i].substring(2) : args[i];
-            int eq = a.indexOf('=');
-            if (eq >= 0) m.put(a.substring(0, eq), a.substring(eq + 1));
-            else m.put(a, "true");
-        }
-        return m;
     }
 
     private static String status(File in, Path out, OCDDocument doc, Target t, Output o) {

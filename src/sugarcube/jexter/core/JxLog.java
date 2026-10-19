@@ -11,7 +11,7 @@ import java.lang.System.Logger.Level;
  * falls back to {@code java.util.logging}.
  *
  * <p>The conversion engine logs diagnostics through here. CLI / UI surfaces
- * ({@code PdfNormalizer}, {@code WebApp}) keep {@code System.out} / {@code System.err}
+ * ({@code Conversion}, {@code JexterCli}, {@code WebApp}) keep {@code System.out} / {@code System.err}
  * as their user-facing output — that is program output, not logging.
  *
  * <p>Levels are {@link Level}; filtering is per-logger and lives in the

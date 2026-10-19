@@ -343,7 +343,7 @@ If the OCDRenderer PNG matches PDFBox but the EPUB does not (or vice-versa), the
 bug is in that projection, not in the model — the shared reference isolates which
 stage to fix.
 
-## Validating a written PDF (`PdfWriter` / `tool.PdfNormalizer` output)
+## Validating a written PDF (`PdfWriter` / `Jexter` output)
 
 Validate with engines *independent* of PDFBox — don't let PDFBox re-read its own
 output be the only check: `qpdf --check`, `pdfinfo`, and `pdftoppm` (poppler)

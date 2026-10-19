@@ -1,5 +1,6 @@
 package sugarcube.jexter.pdfimport;
 
+import sugarcube.jexter.core.JxBlend;
 import org.apache.pdfbox.cos.COSArray;
 import org.apache.pdfbox.cos.COSBoolean;
 import org.apache.pdfbox.pdmodel.common.function.PDFunction;
@@ -33,7 +34,7 @@ final class PdfColors {
     private PdfColors() {}
 
     /** PDF blend-mode name for a PDFBox {@link BlendMode} (null for Normal/unmapped). */
-    static String blendName(BlendMode bm) { return BLEND.get(bm); }
+    static String blendName(BlendMode bm) { return bm == null ? null : JxBlend.model(bm.getCOSName().getName()); }
 
     /**
      * DeviceCMYK as it is; a Separation or DeviceN whose ALTERNATE is DeviceCMYK through its own tint
@@ -117,23 +118,4 @@ final class PdfColors {
     }
 
     static float[] toArr(COSArray a) { return a == null ? null : a.toFloatArray(); }
-
-    private static final Map<BlendMode, String> BLEND = new IdentityHashMap<>();
-    static {
-        BLEND.put(BlendMode.MULTIPLY, "Multiply");
-        BLEND.put(BlendMode.SCREEN, "Screen");
-        BLEND.put(BlendMode.OVERLAY, "Overlay");
-        BLEND.put(BlendMode.DARKEN, "Darken");
-        BLEND.put(BlendMode.LIGHTEN, "Lighten");
-        BLEND.put(BlendMode.COLOR_DODGE, "ColorDodge");
-        BLEND.put(BlendMode.COLOR_BURN, "ColorBurn");
-        BLEND.put(BlendMode.HARD_LIGHT, "HardLight");
-        BLEND.put(BlendMode.SOFT_LIGHT, "SoftLight");
-        BLEND.put(BlendMode.DIFFERENCE, "Difference");
-        BLEND.put(BlendMode.EXCLUSION, "Exclusion");
-        BLEND.put(BlendMode.HUE, "Hue");
-        BLEND.put(BlendMode.SATURATION, "Saturation");
-        BLEND.put(BlendMode.COLOR, "Color");
-        BLEND.put(BlendMode.LUMINOSITY, "Luminosity");
-    }
 }

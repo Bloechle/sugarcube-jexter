@@ -94,8 +94,8 @@ final class BlockSignals {
         String text = JxText.collapse(sig.sb.toString());
 
         OCDFont f = doc.font(sig.domFontId);
-        boolean bold   = sig.anyBold || (f != null && "bold".equalsIgnoreCase(f.weight()));
-        boolean italic = f != null && f.style() != null && !"normal".equalsIgnoreCase(f.style());
+        boolean bold   = sig.anyBold || (f != null && f.isBold());
+        boolean italic = f != null && f.isItalic();
         String  family = f != null && f.family() != null ? f.family() : (f != null ? f.name() : "");
 
         Block b = new Block();
@@ -161,7 +161,7 @@ final class BlockSignals {
                         if (tr != null) { s.domA = tr.a(); s.domC = tr.b(); }
                     }
                     OCDFont f = doc.font(t.fontId());
-                    if (f != null && "bold".equalsIgnoreCase(f.weight())) s.anyBold = true;
+                    if (f != null && f.isBold()) s.anyBold = true;
                 }
                 if (t.id() != null && !t.id().isEmpty()) s.leaves.add(t.id());
             } else if (n instanceof OCDBreak) {

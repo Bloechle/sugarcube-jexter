@@ -1,5 +1,6 @@
 package sugarcube.jexter.ocd.io;
 
+import sugarcube.jexter.core.JxBlend;
 import sugarcube.jexter.core.JxXml;
 import sugarcube.jexter.core.JxCmyk;
 import sugarcube.jexter.core.JxColor;
@@ -639,7 +640,7 @@ public final class OCDReader {
         if (el.hasAttribute("opacity")) im.alpha((float) dbl(el.getAttribute("opacity"), 1));
         String style = el.getAttribute("style");
         if (style != null && style.contains("mix-blend-mode:"))
-            im.blend(blendName(style.substring(style.indexOf("mix-blend-mode:") + 15).replace(";", "").trim()));
+            im.blend(JxBlend.model(style.substring(style.indexOf("mix-blend-mode:") + 15).replace(";", "").trim()));
         return im;
     }
 
@@ -660,16 +661,7 @@ public final class OCDReader {
 
     private static void blend(Map<String, String> d, OCDNode n) {
         String bl = d.get("mix-blend-mode");
-        if (bl != null) n.blend(blendName(bl));
-    }
-
-    private static String blendName(String cssName) {
-        var sb = new StringBuilder(); boolean up = true;
-        for (char c : cssName.trim().toCharArray()) {
-            if (c == '-') { up = true; continue; }
-            sb.append(up ? Character.toUpperCase(c) : c); up = false;
-        }
-        return sb.toString();
+        if (bl != null) n.blend(JxBlend.model(bl));
     }
 
     // ── SVG plumbing ─────────────────────────────────────────────────────────────

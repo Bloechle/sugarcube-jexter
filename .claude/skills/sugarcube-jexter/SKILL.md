@@ -373,10 +373,10 @@ Refactored, public layout — all under `sugarcube.jexter`:
   never declared** (`%PDF` ⇒ import + export, `PK` ⇒ OCD-EPUB re-export). `OCDIndex` is the
   read-out: plain concatenation of run text + soft-hyphen rejoin, nothing else.
   A **pageless document is refused** at `Conversion.load` («Document has no pages»).
-- **`tool`** — runnable entry points built on the library. `PdfNormalizer`
-  (PDF → OCD → PDF) regenerates a *normalized* PDF — repaired fonts, dropped glyph
-  self-clips, regular structure — with a selectable text layer or outlined glyphs;
-  its CLI auto-exposes every `ConvertOptions` setting as `--key=value`.
+- **`tool`** — runnable entry points built on the library: `Redact` (the audit/apply
+  CLI), the OCR and LLM host bindings. Normalizing a PDF (PDF → OCD → PDF) is
+  `ui.jx.Jexter`: with arguments it is the headless `JexterCli`, whose
+  `--key=value` reaches every `ConvertOptions` setting.
 - **`ui`** — local browser-driven apps (zero-dep JDK `com.sun.net.httpserver`;
   **100% JavaFX-free**). **`JexLab` is gone** — the workbench is now **`ui.prism.Prism`**.
   `WebApp` is the shared base: single-instance static-file server with a `/shared/` root,
@@ -464,7 +464,7 @@ java -cp "$JEXTER_CP:$PDFBOX_JAR" sugarcube.jexter.write.Conversion in.pdf page.
 
 # normalize a PDF through OCD (PDF → OCD → PDF); --outline = vectorized glyphs,
 # --<key>=<value> for any ConvertOptions setting (e.g. --mergeGlyphClips=false)
-java -cp "$JEXTER_CP:$PDFBOX_JAR" sugarcube.jexter.tool.PdfNormalizer in.pdf out.pdf
+java -cp "$JEXTER_CP:$PDFBOX_JAR" sugarcube.jexter.ui.jx.Jexter in.pdf out.pdf
 ```
 
 In code: `PdfImporter.convert(file)` (or `convert(file, ConvertOptions)`) →
@@ -541,7 +541,7 @@ resolve. `/api/alive` is SSE (curl would hang) — probe `/` or an app `/api/*` 
 route instead.
 
 Engine note: `Conversion.convert(byte[] pdf, "pdf", opts)` is the bytes→bytes path
-behind a `/api/convert` route (and `PdfNormalizer`) — it imports the PDF *with*
+behind a `/api/convert` route (and `Jexter`) — it imports the PDF *with*
 `opts`, then re-exports, so `ConvertOptions` toggles genuinely take effect.
 
 ---

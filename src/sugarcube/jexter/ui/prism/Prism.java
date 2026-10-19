@@ -12,6 +12,7 @@ import sugarcube.jexter.ocd.io.OCDReader;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.tool.HttpLlmClient;
+import sugarcube.jexter.tool.LlmEngines;
 import sugarcube.jexter.tool.OcrEngines;
 
 import java.io.ByteArrayOutputStream;
@@ -112,9 +113,7 @@ public final class Prism extends WebApp {
                 // Per conversion, never global — the engine's concurrency contract is one document per thread.
                 sugarcube.jexter.core.ConvertOptions co =
                         sugarcube.jexter.core.ConvertOptions.fromMap(opts).progress(p -> pushProgress(p.toJson()));
-                Conversion.Output out = isOcd(body)
-                        ? Conversion.convert(readOcd(body), to, co)     // OCD-EPUB → re-export
-                        : Conversion.convert(body, to, co);            // PDF or image → import + export
+                Conversion.Output out = Conversion.convert(body, to, co);   // PDF, image or OCD-EPUB: the engine sniffs
                 pushProgress(new sugarcube.jexter.core.JxProgress(
                         sugarcube.jexter.core.JxProgress.Stage.WRITE, 0, 0, "done").toJson());
                 send(x, out);
@@ -187,16 +186,7 @@ public final class Prism extends WebApp {
         } catch (Exception e) { error(x, e); }
     }
 
-    // ── input handling: PDF vs OCD-EPUB, URL fetch, response ──────────────────
-    /** An OCD-EPUB is a ZIP ("PK"); a PDF starts with "%PDF". */
-    private static boolean isOcd(byte[] b) { return b.length > 1 && b[0] == 'P' && b[1] == 'K'; }
-
-    private static OCDDocument readOcd(byte[] body) throws Exception {
-        Path tmp = Files.createTempFile("prism-", ".ocd.epub");
-        try { Files.write(tmp, body); return OCDReader.read(tmp.toFile()); }
-        finally { Files.deleteIfExists(tmp); }
-    }
-
+    // ── input handling: URL fetch, response ──────────────────
     private static void send(HttpExchange x, Conversion.Output o) throws IOException {
         x.getResponseHeaders().set("Content-Type", o.mediaType());
         x.getResponseHeaders().set("Content-Disposition", (o.inline() ? "inline" : "attachment") + "; filename=\"" + o.filename() + "\"");
@@ -234,13 +224,7 @@ public final class Prism extends WebApp {
     // ── AI: bind a language model (env key wins, else the saved panel config) ──
     private void bindModel() {
         if (LlmClient.isBound()) return;
-        String key = System.getenv("JEXTER_LLM_KEY");
-        if (key == null || key.isBlank()) key = System.getenv("ANTHROPIC_API_KEY");
-        if (key != null && !key.isBlank()) {
-            try { LlmClient.bind(new HttpLlmClient()); JxLog.info(this, "LLM bound from environment \u2014 structure refinement available"); }
-            catch (Exception e) { JxLog.warn(this, "LLM bind failed", e); }
-            return;
-        }
+        if (LlmEngines.bindFromEnv() != null) return;
         AiCfg saved = loadAiConfig();
         if (saved != null && (saved.keyless() || !saved.key().isBlank())) {
             try {

@@ -89,7 +89,7 @@ Acrobat, so spend their clicks carefully:
 
 1. **Split by page first.** `PDDocument.importPage` into one file per page. One page failing out of
    24 turns 447 fonts into 33.
-2. **Cut by feature, with the switch the engine already has.** `PdfNormalizer.normalize(..., false)`
+2. **Cut by feature, with the switch the engine already has.** `Jexter <in.pdf> --outline`
    writes every glyph as an outline: text without a single embedded font. Clean file + failing file
    = the defect is in the text path.
 3. **Then bisect inside the feature** with a temporary env switch in `PdfWriter.loadFont`

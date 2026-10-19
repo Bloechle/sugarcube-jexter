@@ -83,8 +83,9 @@ PDF ─[convert.PdfImporter]→ OCDDocument ─[write.*]→ PDF · EPUB · HTML 
   - `PDFInspector` — see exactly what PDFBox produces: the **COS** object tree,
     the reference raster (with **PDFBox · Direct · OCD · OCD-reread** rasterizers
     side by side), and text extraction — with no Jexter conversion in between.
-- **`PdfNormalizer`** — regenerate a clean, normalized PDF (repaired fonts,
-  regular structure) with a selectable text layer or outlined glyphs.
+- **`Jexter`** — regenerate a clean, normalized PDF (repaired fonts, regular
+  structure) with a selectable text layer or outlined glyphs: a window, a CLI over a
+  file or a folder, and a hot-folder daemon.
 - **Redaction, proven** (`sugarcube.jexter.redact`) — two verbs on one model.
   **Audit** — *is this PDF actually redacted?* A geometric query, no rendering: an
   opaque box painted **over** text or an image (paint order is the test) is
@@ -166,7 +167,7 @@ java -cp "$CP" sugarcube.jexter.write.Conversion book.ocd.epub out.ocd.epub --pa
 
 # Normalize a PDF through OCD (PDF → OCD → PDF); --outline = vectorized glyphs,
 # --<key>=<value> for any ConvertOptions setting (e.g. --mergeGlyphClips=false)
-java -cp "$CP" sugarcube.jexter.tool.PdfNormalizer in.pdf out.pdf
+java -cp "$CP" sugarcube.jexter.ui.jx.Jexter in.pdf out.pdf
 
 # Redaction — audit (exit 1 = recoverable) and apply (written only when the result audits clean)
 java -cp "$CP" sugarcube.jexter.tool.Redact audit in.pdf [--json]
@@ -202,7 +203,7 @@ it with `node nimbus-jexter.cjs`. Everything else is the engine, all under
 | `trace` | From-scratch **Potrace** raster→vector tracer (`Potrace`, `MedianCut`, `Bitmap`, `TracedShape`, `TraceOptions`, `Tracer`): a raster image → `OCDGraphic`, no PDFBox. See [doc/TRACER.md](doc/TRACER.md). |
 | `write` | `Conversion` — the one entry point + target registry (PDF · EPUB · EPUB-reflow · HTML · Markdown · SVG · DocTags) and CLI; every writer shares one contract (`write(doc, OutputStream, ConvertOptions)`). `PdfWriter`, `EpubWriter` (fixed-layout) + `ReflowEpubWriter` (reflowable) over shared `EpubPackage`, `HtmlWriter` (reflowable), `SvgWriter`, `MarkdownWriter` + `DocTagsWriter` (LLM/RAG), `OCDIndex`, `WriterCli` (the drop-a-file launcher). |
 | `redact` | `RedactionAudit` — what is still under the boxes (the `audit` target); `Redactor` — remove it, then prove it with the audit (the `redact` option, applied before any projection). |
-| `tool` | `PdfNormalizer` — runnable PDF → OCD → PDF normalizer (CLI; the GUI for this job is the `Jexter` web app); `Redact` — the audit/apply CLI with exit codes; `HttpLlmClient` — the LLM client for AI structure refinement (OpenAI / Anthropic wires, thinking minimized so the structure JSON isn't truncated). |
+| `tool` | `Redact` — the audit/apply CLI with exit codes; `HttpLlmClient` — the LLM client for AI structure refinement (OpenAI / Anthropic wires, thinking minimized so the structure JSON isn't truncated). |
 | `ui` | `WebApp` — shared zero-dep HTTP-server base (single-instance, sidecar MIME, the `/shared/` root); `ui.shared/web` — what the three apps share, served at `/shared/`: the Sugarcube mark, `sugarcube.css` (the one look: qry knobs, Poppins, dialog signature), `js/icons.js` (the apps' line icons: Lucide drawings registered with qry's `icons.add`), the client OCD grammar and document authority (`js/ocd.js`, `js/book.js`, `js/shot.js`), and `vendor/` (qry 3, fflate, Poppins). Pages render natively — there is no client renderer. |
 | `ui.prism` | `Prism` — the document workbench: fixed-layout reader (Service-Worker-served pages), editor (media augmentations), Pages (light table: order, insert, duplicate, delete; crop as the page window, rotation as page metadata), Redact, Analysis mode (bounds/flow overlays, page DOM tree, Inspect), search, TTS, exports. |
 | `ui.pdf` | `PDFInspector` — the raw PDFBox web inspector (standalone, same look as Prism). |

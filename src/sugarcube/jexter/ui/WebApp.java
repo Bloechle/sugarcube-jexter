@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
+import sugarcube.jexter.core.Args;
 import sugarcube.jexter.core.JxStringer;
 
 import java.awt.Desktop;
@@ -98,23 +99,21 @@ public abstract class WebApp {
     /** Register the app's {@code /api/*} routes (handlers live in the subclass); each one is guarded. */
     protected abstract void routes(Routes routes);
 
+    /** The launcher flags that take the next argument as their value: {@code --port N}, {@code --web DIR}. */
+    public static final String[] VALUED = { "port", "web" };
+
     /** How a subclass adds a route: always through the guard, never on the raw server. */
     @FunctionalInterface
     protected interface Routes { void add(String path, HttpHandler handler); }
 
     // ── Bootstrap ───────────────────────────────────────────────────────────────
     protected final void launch(String[] args) throws Exception {
-        int port = defaultPort();
-        boolean open = true;
-        Path web = null;
-        for (int i = 0; i < args.length; i++) {
-            switch (args[i]) {
-                case "--port"               -> port = Integer.parseInt(args[++i]);
-                case "--web"                -> web = Path.of(args[++i]);
-                case "--no-open", "--serve" -> open = false;
-                default                     -> { }
-            }
-        }
+        Args a = Args.parse(args, VALUED);
+        String p = a.take("port"), w = a.take("web");
+        int port = p != null ? Integer.parseInt(p) : defaultPort();
+        Path web = w != null ? Path.of(w) : null;
+        boolean serve = a.takeSwitch("serve"), noOpen = a.takeSwitch("no-open");
+        boolean open = !serve && !noOpen;
         webDir = web != null ? web : findWebDir(webCandidates());
         if (webDir != null && Files.isDirectory(webDir)) {
             sharedDir = resolveSharedDir(webDir);                 // disk mode (dev / source tree)

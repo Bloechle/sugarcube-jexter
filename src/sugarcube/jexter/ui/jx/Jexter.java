@@ -1,5 +1,6 @@
 package sugarcube.jexter.ui.jx;
 
+import sugarcube.jexter.core.Args;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
@@ -126,14 +127,8 @@ public final class Jexter extends WebApp {
         else new Jexter().launch(args);
     }
     private static boolean isHeadless(String[] args) {
-        for (int i = 0; i < args.length; i++) {
-            String a = args[i];
-            if (a.equals("--hotfolder")) return true;
-            if (a.equals("--port") || a.equals("--web")) { i++; continue; }   // window flags carry a value
-            if (a.startsWith("--")) continue;
-            return true;                                                       // a positional → headless conversion
-        }
-        return false;
+        Args a = Args.parse(args, WebApp.VALUED);                              // window flags carry a value
+        return a.flags().containsKey("hotfolder") || !a.positional().isEmpty(); // a positional → headless conversion
     }
 
     // ── WebApp contract ──────────────────────────────────────────────────────────

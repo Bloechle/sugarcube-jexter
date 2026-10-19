@@ -1,5 +1,6 @@
 package sugarcube.jexter.write;
 
+import sugarcube.jexter.core.JxBlend;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.core.JxColor;
 import sugarcube.jexter.core.JxLog;
@@ -174,12 +175,8 @@ public final class SvgWriter {
         if (sa < 1f) css.append(";stroke-opacity:").append(fmt(sa));
     }
 
-    /** A PDF blend-mode name as CSS spells it: {@code ColorDodge} → {@code color-dodge}. Lower-casing
-     *  alone gave {@code colordodge}, which no browser knows — it dropped the declaration and painted
-     *  the four two-word modes (ColorDodge, ColorBurn, HardLight, SoftLight) as Normal. */
-    static String cssBlend(String pdfName) {
-        return pdfName.replaceAll("(?<=[a-z])(?=[A-Z])", "-").toLowerCase(Locale.US);
-    }
+    /** A model blend name as CSS spells it ({@link JxBlend#css}). */
+    static String cssBlend(String pdfName) { return JxBlend.of(pdfName).css(); }
 
     // ── Text: one <text> per run, placed via pageFlip · transform · flipY ─────
 

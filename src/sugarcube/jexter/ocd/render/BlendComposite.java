@@ -1,5 +1,6 @@
 package sugarcube.jexter.ocd.render;
 
+import sugarcube.jexter.core.JxBlend;
 import java.awt.*;
 import java.awt.image.ColorModel;
 import java.awt.image.DataBuffer;
@@ -23,27 +24,19 @@ import java.awt.image.WritableRaster;
  */
 public final class BlendComposite implements Composite {
 
-    // ── Blend modes (PDF spec Table 136) ────────────────────────
-
-    public enum Mode {
-        NORMAL, MULTIPLY, SCREEN, OVERLAY, DARKEN, LIGHTEN,
-        COLOR_DODGE, COLOR_BURN, HARD_LIGHT, SOFT_LIGHT,
-        DIFFERENCE, EXCLUSION, HUE, SATURATION, COLOR, LUMINOSITY
-    }
-
     /** Normal at full alpha: the composite that needs no blending. */
-    public static final BlendComposite Normal     = new BlendComposite(Mode.NORMAL);
+    public static final BlendComposite Normal     = new BlendComposite(JxBlend.NORMAL);
 
-    private final Mode mode;
+    private final JxBlend mode;
     private final float alpha;
 
     // ── Constructors ────────────────────────────────────────────
 
-    private BlendComposite(Mode mode) {
+    private BlendComposite(JxBlend mode) {
         this(mode, 1.0f);
     }
 
-    private BlendComposite(Mode mode, float alpha) {
+    private BlendComposite(JxBlend mode, float alpha) {
         this.mode = mode;
         this.alpha = Math.clamp(alpha, 0f, 1f);
     }
@@ -55,38 +48,13 @@ public final class BlendComposite implements Composite {
      * Unknown modes fall back to Normal.
      */
     public static BlendComposite getInstance(String pdfName, float alpha) {
-        Mode m = parseMode(pdfName);
-        if (m == Mode.NORMAL && alpha >= 1f) return Normal;
+        JxBlend m = JxBlend.of(pdfName);
+        if (m == JxBlend.NORMAL && alpha >= 1f) return Normal;
         return new BlendComposite(m, alpha);
     }
 
-    public Mode mode() { return mode; }
+    public JxBlend mode() { return mode; }
     public float alpha() { return alpha; }
-
-    // ── PDF name → Mode ─────────────────────────────────────────
-
-    private static Mode parseMode(String name) {
-        if (name == null || name.isEmpty() || "Normal".equals(name) || "Compatible".equals(name))
-            return Mode.NORMAL;
-        return switch (name) {
-            case "Multiply"   -> Mode.MULTIPLY;
-            case "Screen"     -> Mode.SCREEN;
-            case "Overlay"    -> Mode.OVERLAY;
-            case "Darken"     -> Mode.DARKEN;
-            case "Lighten"    -> Mode.LIGHTEN;
-            case "ColorDodge" -> Mode.COLOR_DODGE;
-            case "ColorBurn"  -> Mode.COLOR_BURN;
-            case "HardLight"  -> Mode.HARD_LIGHT;
-            case "SoftLight"  -> Mode.SOFT_LIGHT;
-            case "Difference" -> Mode.DIFFERENCE;
-            case "Exclusion"  -> Mode.EXCLUSION;
-            case "Hue"        -> Mode.HUE;
-            case "Saturation" -> Mode.SATURATION;
-            case "Color"      -> Mode.COLOR;
-            case "Luminosity" -> Mode.LUMINOSITY;
-            default           -> Mode.NORMAL;
-        };
-    }
 
     // ── AWT Composite interface ─────────────────────────────────
 
@@ -118,7 +86,7 @@ public final class BlendComposite implements Composite {
             int w = Math.min(src.getWidth(), dstIn.getWidth());
             int h = Math.min(src.getHeight(), dstIn.getHeight());
             float alpha = composite.alpha;
-            Mode mode = composite.mode;
+            JxBlend mode = composite.mode;
 
             int[] srcPx = new int[4];
             int[] dstPx = new int[4];
@@ -156,7 +124,7 @@ public final class BlendComposite implements Composite {
 
     // ── Per-pixel blend functions ───────────────────────────────
 
-    private static void blend(Mode mode, int[] src, int[] dst, int[] out) {
+    private static void blend(JxBlend mode, int[] src, int[] dst, int[] out) {
         switch (mode) {
             case NORMAL -> {
                 out[0] = src[0]; out[1] = src[1]; out[2] = src[2];

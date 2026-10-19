@@ -1,5 +1,7 @@
 package sugarcube.jexter.ui.jx;
 
+import sugarcube.jexter.ui.WebApp;
+import sugarcube.jexter.core.Args;
 import sugarcube.jexter.ocd.model.OCDDocument;
 
 import java.io.File;
@@ -274,22 +276,23 @@ final class JexterCli {
 
         static Opts parse(String[] args) {
             Opts o = new Opts();
-            for (int i = 0; i < args.length; i++) {
-                String a = args[i];
-                if      (a.equals("--hotfolder"))                  o.hot = true;
-                else if (a.equals("--recursive") || a.equals("-r")) o.recursive = true;
-                else if (a.equals("--outline"))                    o.selectable = false;
-                else if (a.equals("--selectable"))                 o.selectable = true;
-                else if (a.equals("--done"))                       o.done = "Done";
-                else if (a.startsWith("--done="))                  o.done = a.substring(7).isBlank() ? "Done" : a.substring(7);
-                else if (a.startsWith("--suffix="))                o.suffix = Jexter.suffix(a.substring(9));
-                else if (a.equals("--port") || a.equals("--web"))  i++;                       // window flags carry a value
-                else if (a.startsWith("--threads="))  o.threads    = Math.max(1, Integer.parseInt(a.substring(10)));
-                else if (a.startsWith("--interval=")) o.intervalMs = Math.max(500L, (long) (Double.parseDouble(a.substring(11)) * 1000));
-                else if (a.startsWith("--")) { int eq = a.indexOf('='); if (eq > 2) o.map.put(a.substring(2, eq), a.substring(eq + 1)); }
-                else if (o.in == null)  o.in  = new File(a);
-                else if (o.out == null) o.out = new File(a);
-            }
+            for (int i = 0; i < args.length; i++) if (args[i].equals("-r")) args[i] = "--recursive";
+            Args a = Args.parse(args, WebApp.VALUED);
+            a.take("port"); a.take("web");                                   // the window's flags, not ours
+            o.hot = a.takeSwitch("hotfolder");
+            o.recursive = a.takeSwitch("recursive");
+            boolean outline = a.takeSwitch("outline");
+            a.take("selectable");
+            o.selectable = !outline;
+            String done = a.take("done");
+            if (done != null) o.done = done.isBlank() || done.equals("true") ? "Done" : done;
+            String v;
+            if ((v = a.take("suffix")) != null)   o.suffix = Jexter.suffix(v);
+            if ((v = a.take("threads")) != null)  o.threads = Math.max(1, Integer.parseInt(v));
+            if ((v = a.take("interval")) != null) o.intervalMs = Math.max(500L, (long) (Double.parseDouble(v) * 1000));
+            o.map.putAll(a.flags());                                         // the rest: ConvertOptions
+            if (a.positional(0) != null) o.in  = new File(a.positional(0));
+            if (a.positional(1) != null) o.out = new File(a.positional(1));
             return o;
         }
     }
