@@ -87,6 +87,7 @@ final class Fixtures {
         FEATURES.put("doc_outline_links", (Whole) Fixtures::outlineLinks);
         FEATURES.put("doc_metadata", (Whole) Fixtures::metadata);
         FEATURES.put("doc_running_heads", (Whole) Fixtures::runningHeads);
+        FEATURES.put("doc_page_break", (Whole) Fixtures::pageBreak);
         FEATURES.put("rich", (Whole) Fixtures::rich);
         FEATURES.put("tagged", (Whole) Fixtures::tagged);
     }
@@ -821,6 +822,26 @@ final class Fixtures {
                 for (int l = 0; l < 8; l++, y -= 6 * MM)
                     text(cs, d.sans(), 11, 20 * MM, y, "Page " + i + ", line " + (l + 1) + ": the body text that changes on every page.");
                 text(cs, d.sans(), 9, A4.getWidth() / 2, 12 * MM, String.valueOf(i));
+            }
+    }
+
+    /**
+     * A paragraph the press cut: its lines run the full column to the foot of page 1 and carry on at the head
+     * of page 2 — one paragraph to a reader. The pages are numbered by a BARE folio (« 1 », « 2 », « 3 »), which
+     * no edit distance sees as stable. A short last line ends a paragraph; an indented first line starts one.
+     */
+    private static void pageBreak(Doc d) throws IOException {
+        PDFont mono = new PDType1Font(Standard14Fonts.FontName.COURIER);
+        String full = "the river ran on past the old mill and the bridge where";    // every body line: the same width
+        String[][] pages = {
+            { "First paragraph, short and complete in itself.", "", full, full, full, full, full, "and so this one long sentence of ours is carried over the" },
+            { "page break and ends here, its last line short.", "", "    A new paragraph opens with an indent.", full, "and ends." },
+            { "A third page, a paragraph of its own, ends.", "", full, "and ends too." } };
+        for (int i = 0; i < pages.length; i++)
+            try (var cs = d.page(A4)) {
+                float y = H - 30 * MM;
+                for (String line : pages[i]) { if (!line.isEmpty()) text(cs, mono, 11, 20 * MM, y, line); y -= 5 * MM; }
+                text(cs, mono, 9, A4.getWidth() / 2, 12 * MM, String.valueOf(i + 1));
             }
     }
 

@@ -52,11 +52,12 @@ public final class StructureBuilder {
         FontProfile fp = FontProfile.of(doc);            // document-wide style alphabet — defines headings unambiguously
         OCDStructNode root = new OCDStructNode(OCDStructNode.Type.DOCUMENT);
         Deque<OCDStructNode> headings = new ArrayDeque<>();
+        Paragraphs paragraphs = new Paragraphs();
         for (Block b : blocks) {
             OCDStructNode container = headings.isEmpty() ? root : headings.peek();
             if (isFurniture(b))   continue;                       // running heads and folios are no part of the text
-            if (isHeading(b, fp, doc)) addHeading(b.page, level(b, fp, doc), headingIds(b), headings, root);
-            else                  addParagraph(container, b);
+            if (isHeading(b, fp, doc)) { addHeading(b.page, level(b, fp, doc), headingIds(b), headings, root); paragraphs.interrupt(b); }
+            else                  paragraphs.add(container, b);
         }
         doc.structures().removeIf(st -> "heuristic".equals(st.id()));     // idempotent re-run / generate-outline
         doc.addStructure(new OCDStructure("heuristic", "Heuristic", OCDStructure.Source.HEURISTIC)
@@ -113,13 +114,57 @@ public final class StructureBuilder {
         return byPage;
     }
 
-    /** Wrap one text block as a PARAGRAPH under {@code container} — THE wrapping authority,
-     *  shared with {@link BookmarkStructureBuilder} so both trees reference blocks identically. */
-    static void addParagraph(OCDStructNode container, Block b) {
-        OCDStructNode p = new OCDStructNode(OCDStructNode.Type.PARAGRAPH);
-        for (String nid : b.nodeIds) p.addRef(b.page, nid);
-        container.add(p);
+    /**
+     * THE wrapping authority, shared with {@link BookmarkStructureBuilder} so both trees reference blocks
+     * identically: each text block becomes a PARAGRAPH — except a block that carries on, over a page break,
+     * the paragraph before it, which joins it. A page break is the press's, not the author's: a paragraph it cut
+     * came out of every reflowable book, Markdown and DocTags as two, the second starting mid-sentence.
+     *
+     * <p>Geometry decides ({@link #continues}): the paragraph was the last text of its page and its last line
+     * runs the column's full width (a paragraph's own end leaves its last line short); the block is the first
+     * text of the next page, in the same column, its first line not indented. One instance per tree walk; a
+     * heading or anything else between the two ({@link #interrupt}) keeps them apart.
+     */
+    static final class Paragraphs {
+        private Block last;
+        private OCDStructNode lastP;
+        private int page = -1;
+
+        void add(OCDStructNode container, Block b) {
+            boolean first = b.page != page;
+            page = b.page;
+            List<OCDStructNode> kids = container.children();
+            if (first && last != null && b.page == last.page + 1 && !kids.isEmpty() && kids.get(kids.size() - 1) == lastP && continues(last, b)) {
+                for (String nid : b.nodeIds) lastP.addRef(b.page, nid);
+            } else {
+                lastP = new OCDStructNode(OCDStructNode.Type.PARAGRAPH);
+                for (String nid : b.nodeIds) lastP.addRef(b.page, nid);
+                container.add(lastP);
+            }
+            last = b;
+        }
+
+        /** A block that is not a paragraph (a heading): what follows it never joins what came before it. */
+        void interrupt(Block b) { page = b.page; last = null; lastP = null; }
     }
+
+    /** Whether {@code b}, the first text of its page, carries on {@code a}, the last text of the page before. */
+    static boolean continues(Block a, Block b) {
+        if (a.lines.isEmpty() || b.lines.isEmpty()) return false;
+        double col = 0;
+        for (Segmenter.Line l : a.lines) col = Math.max(col, l.bounds.width());
+        for (Segmenter.Line l : b.lines) col = Math.max(col, l.bounds.width());
+        if (col <= 0) return false;
+        Segmenter.Line end = a.lines.get(a.lines.size() - 1), start = b.lines.get(0);
+        if (end.bounds.width() < FULL_LINE * col) return false;                          // a short last line ends a paragraph
+        if (Math.abs(a.bounds.x() - b.bounds.x()) > COLUMN_SLACK * col) return false;   // another column
+        if (b.lines.size() > 1 && start.bounds.x() - b.lines.get(1).bounds.x() > INDENT * Math.max(1, b.size)) return false;   // indented: a new paragraph
+        return true;
+    }
+
+    private static final double FULL_LINE    = 0.90;   // × the column: a line this long ran out of room, it did not end
+    private static final double COLUMN_SLACK = 0.10;   // × the column: two blocks this close at the left are one column
+    private static final double INDENT       = 0.5;    // × the text size: a first line further in is an indented new paragraph
 
     /** A block is a heading when it is not running furniture / pure numbering and its document-wide
      *  typographic style ({@link FontProfile}) ranks as a recurring title. Always a short label. */

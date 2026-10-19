@@ -119,7 +119,7 @@ public final class Furniture {
         for (int off : new int[]{-span, span}) {
             int q = p + off; if (q < 0 || q >= pg.size()) continue;
             String o = lineAt(pg.get(q), top, depth);
-            sum += (o == null || o.isEmpty()) ? 0.0 : sim(me, o);   // missing line on the neighbour → similarity 0
+            sum += (o == null || o.isEmpty()) ? 0.0 : Math.max(sim(me, o), counts(me, o, off));   // missing line → 0
             cnt++;
         }
         return cnt == 0 ? 0.0 : sum / cnt;
@@ -130,6 +130,39 @@ public final class Furniture {
     private static String lineAt(Page pa, boolean top, int depth) {
         int n = pa.raw.length, i = top ? depth : n - 1 - depth;
         return (i < 0 || i >= n) ? null : pa.raw[i];
+    }
+
+    /** A folio is a number that COUNTS the pages: the same line on the page {@code off} pages away reads the
+     *  same, but for one number that is larger by exactly {@code off} (« 3 » two pages after « 1 », « Page 7 of
+     *  40 » after « Page 5 of 40 »). Then the line is as stable as a line can be: 1. Self-reference, no lexicon —
+     *  and the case edit distance misses: a bare « 1 » and « 3 » differ in their only character (similarity 0),
+     *  so every bare folio stayed in the text of every reflowable book. */
+    static double counts(String a, String b, int off) {
+        List<Long> na = new ArrayList<>(), nb = new ArrayList<>();
+        if (!shape(a, na).equals(shape(b, nb)) || na.size() != nb.size()) return 0.0;
+        int counting = 0;
+        for (int i = 0; i < na.size(); i++) {
+            long d = nb.get(i) - na.get(i);
+            if (d == off) counting++;
+            else if (d != 0) return 0.0;
+        }
+        return counting == 1 ? 1.0 : 0.0;
+    }
+
+    /** The line with each run of digits as one {@code #}, its numbers into {@code out}; a run longer than six
+     *  digits is an amount or an id, never a folio, and keeps the line from counting. */
+    private static String shape(String s, List<Long> out) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < s.length(); ) {
+            int j = i;
+            while (j < s.length() && s.charAt(j) >= '0' && s.charAt(j) <= '9') j++;
+            if (j == i) { b.append(s.charAt(i++)); continue; }
+            if (j - i > 6) return "\u0000" + s;
+            out.add(Long.parseLong(s.substring(i, j)));
+            b.append('#');
+            i = j;
+        }
+        return b.toString();
     }
 
     /** Normalised Levenshtein similarity in {@code [0,1]}: {@code 1 − dist/max(len)}. 1 = identical strings. */

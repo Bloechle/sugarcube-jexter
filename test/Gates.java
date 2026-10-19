@@ -420,6 +420,12 @@ public final class Gates {
             furnitureRefs(st.root(), model, hits);
             if (!hits.isEmpty()) bad.add(st.id() + " reads running furniture: " + hits);
         }
+        if (current.equals("doc_page_break.pdf")) {                  // a bare folio, and a paragraph the press cut
+            String md = sugarcube.jexter.write.MarkdownWriter.toMarkdown(model);
+            if (md.lines().anyMatch(l -> l.strip().matches("\\d+"))) bad.add("a bare folio is read as text");
+            if (md.lines().noneMatch(l -> l.contains("carried over the page break"))) bad.add("the paragraph the page break cut is still two");
+            if (md.lines().anyMatch(l -> l.contains("short.") && l.contains("A new paragraph"))) bad.add("an indented paragraph was joined to the one before");
+        }
         return bad;
     }
 

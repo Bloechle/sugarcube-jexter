@@ -337,6 +337,12 @@ Analysis (`ocd.analysis`)
 - Font NAME is not a cut signal in `Segmenter` (an italic word would split a paragraph).
 - Three structures coexist, priority `pdf` (PDF/UA, built at import) > `outline` > `heuristic`.
   Nav-guided alignment is self-reference: the matched strings come from the document itself.
+- A bare folio (« 1 », « 3 ») differs from its neighbour in its only character: edit distance calls it
+  unstable. `Furniture.counts` reads a line that COUNTS the pages (same shape, one number larger by the page
+  offset) as fully stable — self-reference, no lexicon. Folios sat in every reflowable book before.
+- A paragraph the press cut is joined back by geometry alone (`StructureBuilder.Paragraphs`, both builders):
+  last text of its page, its last line the column's full width; first text of the next page, same column,
+  not indented. A heading between them keeps them apart. Fixture `doc_page_break`, gate FURNITURE.
 - Figures, tables, captions, lists, code are deferred to `Refiner` — do not re-add a heuristic.
 - Word spaces are judged against PDFBox's extractor in BOTH directions: glued (our long words the reference
   never has) and lost (its long words we never produce). A gate change that improves one and is not

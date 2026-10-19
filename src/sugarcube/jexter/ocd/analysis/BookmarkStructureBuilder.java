@@ -32,7 +32,7 @@ import java.util.Map;
  * structure-projecting writer (Markdown, DocTags, reflowable HTML/EPUB) walks this tree as its sole content
  * source. So after the skeleton is built, the remaining text blocks are attached in reading order as
  * {@link OCDStructNode.Type#PARAGRAPH} under the heading that precedes them (the document root before the first
- * one) — same wrapping authority as the heuristic pass ({@link StructureBuilder#addParagraph}).
+ * one) — same wrapping authority as the heuristic pass ({@link StructureBuilder.Paragraphs}).
  *
  * <p>It is the second rung of the structure-priority chain: a tagged PDF/UA tree ({@code pdf}) wins; with no
  * tags but bookmarks present, this resolves them <b>immediately</b> at import so the document still has a real
@@ -59,11 +59,12 @@ public final class BookmarkStructureBuilder {
         // Walk the blocks in reading order; an anchor block IS its heading (switch container),
         // every other block becomes a PARAGRAPH under the heading that precedes it.
         OCDStructNode current = root;
+        StructureBuilder.Paragraphs paragraphs = new StructureBuilder.Paragraphs();
         for (List<Block> pageBlocks : byPage.values())
             for (Block b : pageBlocks) {
                 OCDStructNode h = anchored.get(b);
-                if (h != null) current = h;
-                else if (!StructureBuilder.isFurniture(b)) StructureBuilder.addParagraph(current, b);
+                if (h != null) { current = h; paragraphs.interrupt(b); }
+                else if (!StructureBuilder.isFurniture(b)) paragraphs.add(current, b);
             }
         sugarcube.jexter.core.JxLog.info(BookmarkStructureBuilder.class,
                 "anchors: " + stats[0] + " exact, " + stats[1] + " fuzzy, " + stats[2] + " nearest-y");
