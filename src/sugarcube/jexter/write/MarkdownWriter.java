@@ -48,7 +48,7 @@ public final class MarkdownWriter {
         void walk(OCDStructNode s) {
             if (s == null) return;
             switch (s.type()) {
-                case DOCUMENT, SECTION, TOC -> { for (OCDStructNode c : s.children()) walk(c); }
+                case DOCUMENT, SECTION, TOC -> { for (OCDStructNode c : OCDStructNode.flow(s.children())) walk(c); }
                 case SPAN, OTHER -> {                       // inline under a text block is folded into its text(); at block position, emit it
                     if (s.hasBlockChild()) { for (OCDStructNode c : s.children()) walk(c); }
                     else { String t = text(s); if (!t.isEmpty()) block(t); }

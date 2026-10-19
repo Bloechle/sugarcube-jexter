@@ -85,7 +85,7 @@ public final class HtmlWriter {
         OCDIndex ix = OCDIndex.of(doc);
         var sb = new StringBuilder(16384);
         OCDStructNode root = doc.structure();
-        if (root != null) for (OCDStructNode c : root.children()) render(c, doc, ix, sb, assets);
+        if (root != null) for (OCDStructNode c : OCDStructNode.flow(root.children())) render(c, doc, ix, sb, assets);
         else fallback(doc, sb);
         return sb.toString();
     }
@@ -104,7 +104,7 @@ public final class HtmlWriter {
         }
         var cur = new StringBuilder();
         String curTitle = null;
-        for (OCDStructNode c : body(root).children()) {
+        for (OCDStructNode c : OCDStructNode.flow(body(root).children())) {
             if (c.type() == OCDStructNode.Type.HEADING && cur.length() > 0) {
                 out.add(new Chapter("chapter-" + (out.size() + 1), curTitle != null ? curTitle : "Content", cur.toString()));
                 cur = new StringBuilder();
@@ -140,7 +140,11 @@ public final class HtmlWriter {
                 for (OCDStructNode c : s.children())                    // HTML5 outline: children are siblings —
                     if (!c.isInline()) render(c, doc, ix, sb, assets);   // its words are already in the <h>
             }
-            case SECTION   -> wrap(s, doc, ix, sb, "section", null, assets);
+            case SECTION   -> {
+                sb.append("<section").append(s.lang().isEmpty() ? "" : " lang=\"" + attr(s.lang()) + "\"").append(">\n");
+                for (OCDStructNode c : OCDStructNode.flow(s.children())) render(c, doc, ix, sb, assets);
+                sb.append("</section>\n");
+            }
             case PARAGRAPH -> line(sb, "p", content(s, ix));
             case LIST      -> wrap(s, doc, ix, sb, s.ordered() ? "ol" : "ul", null, assets);
             case ITEM      -> wrap(s, doc, ix, sb, "li", content(s, ix), assets);

@@ -319,6 +319,9 @@ Writers (`write`)
 - A heading's INLINE children are its words — already in its title: the structure writers walk only its
   block children (they wrote « 1 What jexter is » twice). Reflow chapters split below a wrapper that only
   groups (Document › Sect: one chapter « Content » before; TAGS checks the chapter count).
+- Loose inline nodes at block position (a tagged Div of Spans, one per styled piece — a Typst callout) are
+  ONE paragraph to a reader: the structure writers walk containers through `OCDStructNode.flow`, which
+  views each run of them as a transient PARAGRAPH. The tree is not changed (TAGS compares it to the source).
 - PDFBox cannot embed CFF: `GlyfOtf` for PDF, `CffOtf` for web/EPUB. The per-format font table
   constants are tuned per upem grid — do not unify them.
 - Invisible text is text: render mode 3 is written by every text projection (`Tr 3` in PDF, zero

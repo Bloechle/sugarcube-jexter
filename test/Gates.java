@@ -458,6 +458,11 @@ public final class Gates {
             int heads = headings(pdfTree.root());
             int chapters = sugarcube.jexter.write.HtmlWriter.chapters(model, null).size();
             if (heads > 1 && chapters < 2) bad.add(heads + " headings, but the reflow book is " + chapters + " chapter");
+            if (pdf.getName().equals("tagged.pdf")) {                // its callout: two loose Spans, one paragraph
+                String md = new String(to(Files.readAllBytes(pdf.toPath()), "md"), StandardCharsets.UTF_8);
+                if (md.lines().noneMatch(l -> l.contains("Un encadre ecrit en deux morceaux")))
+                    bad.add("the callout's two pieces are not one paragraph");
+            }
         }
         return bad;
     }

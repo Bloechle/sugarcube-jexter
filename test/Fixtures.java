@@ -903,7 +903,9 @@ final class Fixtures {
                               { "P", font, 10f, 248f, "Second paragraphe. La structure vient du PDF, pas de la geometrie." },
                               { "P", font, 10f, 228f, "Sa suite, sur une autre ligne, mais le MEME element P." },
                               { "Lbl", font, 10f, 200f, "1." },
-                              { "LBody", font, 10f, 186f, "Le corps de l'item, dans son LBody." } };
+                              { "LBody", font, 10f, 186f, "Le corps de l'item, dans son LBody." },
+                              { "Span", font, 10f, 160f, "Un encadre ecrit en" },
+                              { "Span", bold, 10f, 148f, "deux morceaux" } };
         // A form XObject that numbers its OWN marked content (/StructParents): its MCID 0 is not the page's.
         PDFormXObject note = new PDFormXObject(d.pdf);
         note.setBBox(new PDRectangle(400, 400));
@@ -973,6 +975,17 @@ final class Fixtures {
         item.appendKid(body);
         list.appendKid(item);
         document.appendKid(list);
+        // A callout as Typst writes one: a Div of loose Spans, one per styled piece — ONE paragraph to a reader.
+        var callout = new PDStructureElement("Div", document);
+        callout.setPage(page);
+        for (int mcid : new int[] { 7, 8 }) {
+            var span = new PDStructureElement("Span", callout);
+            span.setPage(page);
+            span.appendKid(mcid);
+            byMcid.add(span);
+            callout.appendKid(span);
+        }
+        document.appendKid(callout);
         // The note reaches its MCID through a reference that names the form's stream.
         var noteP = new PDStructureElement("P", document);
         noteP.setPage(page);

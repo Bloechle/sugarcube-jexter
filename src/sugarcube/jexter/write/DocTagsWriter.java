@@ -66,7 +66,7 @@ public final class DocTagsWriter {
         void walk(OCDStructNode s) {
             if (s == null) return;
             switch (s.type()) {
-                case DOCUMENT, SECTION -> { for (OCDStructNode c : s.children()) walk(c); }  // containers
+                case DOCUMENT, SECTION -> { for (OCDStructNode c : OCDStructNode.flow(s.children())) walk(c); }  // containers
                 case SPAN, OTHER -> {                           // inline under a text block is folded into its text(); at block position, emit it
                     if (s.hasBlockChild()) { for (OCDStructNode c : s.children()) walk(c); }
                     else block(s, "text");

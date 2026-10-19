@@ -77,6 +77,41 @@ public final class OCDStructNode {
     /** Whether any child is a block — a container to walk, where a node with only inline children (or
      *  none) carries its own text. */
     public boolean    hasBlockChild()     { return children.stream().anyMatch(c -> !c.isInline()); }
+
+    /**
+     * A container's children as a reader meets them: each run of consecutive loose inline nodes (a SPAN or
+     * OTHER at block position, the words a producer wraps piece by piece — Typst writes a callout as « Two
+     * layers, kept apart A document carries a » · « presentation » · « layer (what paints)… ») becomes ONE
+     * transient PARAGRAPH holding all their refs, so the structure writers read one paragraph, not a block
+     * per styled word. A lone CODE stays itself (a code block); block children pass through. Nothing in the
+     * tree changes: the paragraphs are views, built for one walk.
+     */
+    public static List<OCDStructNode> flow(List<OCDStructNode> kids) {
+        List<OCDStructNode> out = new ArrayList<>(), run = new ArrayList<>();
+        for (OCDStructNode c : kids) {
+            if (c.isInline() && !c.hasBlockChild()) { run.add(c); continue; }
+            flush(run, out);
+            out.add(c);
+        }
+        flush(run, out);
+        return out;
+    }
+
+    private static void flush(List<OCDStructNode> run, List<OCDStructNode> out) {
+        if (run.isEmpty()) return;
+        if (run.size() == 1 && run.get(0).type() == Type.CODE) out.add(run.get(0));
+        else {
+            OCDStructNode p = new OCDStructNode(Type.PARAGRAPH);
+            for (OCDStructNode c : run) refsOf(c, p);
+            if (p.refs().isEmpty()) out.addAll(run); else out.add(p);   // no content to read: as they were
+        }
+        run.clear();
+    }
+
+    private static void refsOf(OCDStructNode n, OCDStructNode into) {
+        into.refs().addAll(n.refs());
+        for (OCDStructNode c : n.children()) refsOf(c, into);
+    }
     public OCDStructNode  level(int v)        { this.level = v; return this; }
     public int        colSpan()           { return colSpan; }
     public OCDStructNode  colSpan(int v)      { this.colSpan = Math.max(1, v); return this; }
