@@ -59,25 +59,6 @@ public final class JxPath extends Path2D.Double {
         }
     }
 
-    /** One path segment: an op plus its raw coordinates. */
-    public static final class Seg {
-        public final Op op;
-        public final double[] p;
-        public Seg(Op op, double... p) { this.op = op; this.p = p; }
-
-        public double x()   { return p[p.length - 2]; }
-        public double y()   { return p[p.length - 1]; }
-        public double c0x() { return p[0]; }
-        public double c0y() { return p[1]; }
-        public double c1x() { return p[2]; }
-        public double c1y() { return p[3]; }
-
-        // point-valued convenience (endpoint, first/second control) — used by the OTF glyf builder
-        public JxPoint p()  { return new JxPoint(x(), y()); }
-        public JxPoint c0() { return new JxPoint(c0x(), c0y()); }
-        public JxPoint c1() { return new JxPoint(c1x(), c1y()); }
-    }
-
     // ── Construction ─────────────────────────────────────────────────────────
 
     public JxPath()          { super(); }
@@ -182,72 +163,6 @@ public final class JxPath extends Path2D.Double {
         return path;
     }
 
-    // ── Segment extraction ───────────────────────────────────────────────────
-
-    public Seg[] segments() {
-        List<Seg> segs = new ArrayList<>();
-        PathIterator it = getPathIterator(null);
-        double[] p = new double[6];
-        double ox = 0, oy = 0;
-        while (!it.isDone()) {
-            switch (Op.type(it.currentSegment(p))) {
-                case MOVE  -> segs.add(new Seg(Op.MOVE, ox = p[0], oy = p[1]));
-                case LINE  -> segs.add(new Seg(Op.LINE, p[0], p[1]));
-                case QUAD  -> segs.add(new Seg(Op.QUAD, p[0], p[1], p[2], p[3]));
-                case CUBIC -> segs.add(new Seg(Op.CUBIC, p[0], p[1], p[2], p[3], p[4], p[5]));
-                case CLOSE -> segs.add(new Seg(Op.CLOSE, ox, oy));
-                case null  -> { }
-            }
-            it.next();
-        }
-        return segs.toArray(new Seg[0]);
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  Font helpers — used by the OTF writer (harmless on any path)
-    // ══════════════════════════════════════════════════════════════════════════
-
-    /** Mirror the Y axis (glyph space vs font space). */
-    public JxPath reverseY() { return reverse(false, true); }
-
-    public JxPath reverse(boolean bx, boolean by) {
-        JxPath path = new JxPath(getWindingRule());
-        PathIterator it = getPathIterator(null);
-        double[] p = new double[6];
-        while (!it.isDone()) {
-            switch (Op.type(it.currentSegment(p))) {
-                case MOVE  -> path.moveTo(sx(bx, p[0]), sy(by, p[1]));
-                case LINE  -> path.lineTo(sx(bx, p[0]), sy(by, p[1]));
-                case QUAD  -> path.quadTo(sx(bx, p[0]), sy(by, p[1]), sx(bx, p[2]), sy(by, p[3]));
-                case CUBIC -> path.curveTo(sx(bx, p[0]), sy(by, p[1]), sx(bx, p[2]), sy(by, p[3]), sx(bx, p[4]), sy(by, p[5]));
-                case CLOSE -> path.closePath();
-                case null  -> { }
-            }
-            it.next();
-        }
-        return path;
-    }
-
-    private static double sx(boolean flip, double v) { return flip ? -v : v; }
-    private static double sy(boolean flip, double v) { return flip ? -v : v; }
-
-    public JxPath closeSubpaths() {
-        JxPath norm = new JxPath(getWindingRule());
-        PathIterator it = getPathIterator(null);
-        double[] p = new double[6];
-        boolean firstMove = true;
-        while (!it.isDone()) {
-            int type = it.currentSegment(p);
-            if (type == PathIterator.SEG_MOVETO) {
-                if (firstMove) firstMove = false; else norm.closePath();
-            }
-            append(norm, type, p);
-            it.next();
-        }
-        if (!firstMove) norm.closePath();   // close last subpath only if one was opened
-        return norm;
-    }
-
     private static void append(JxPath path, int type, double[] p) {
         switch (Op.type(type)) {
             case MOVE  -> path.moveTo(p[0], p[1]);
@@ -315,7 +230,7 @@ public final class JxPath extends Path2D.Double {
     }
 
     @Override
-    public String toString() { return String.format(Locale.US, "JxPath[%d segs]", segments().length); }
+    public String toString() { return "JxPath[" + toSvg() + "]"; }
 
     // ── Minimal SVG path-data tokenizer ──────────────────────────────────────
 

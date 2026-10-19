@@ -53,22 +53,15 @@ public final class FontProfile {
     /** A typographic signature: point size (rounded to ½ pt) and weight. The unit of the style alphabet. */
     public record Style(double size, boolean bold) {}
 
-    private final Style body;
     private final Map<Style, Integer> level;   // heading signature → 1-based level (1 = largest)
-    private final int levels;
     private final Style title;                  // the document title's style, or null
 
-    private FontProfile(Style body, Map<Style, Integer> level, Style title) {
-        this.body = body;
+    private FontProfile(Map<Style, Integer> level, Style title) {
         this.level = level;
         this.title = title;
-        this.levels = level.values().stream().mapToInt(Integer::intValue).max().orElse(0);
     }
 
-    public Style body()   { return body; }
-    public int   levels() { return levels; }
-    /** The document title's style, or {@code null} if the document has no singular title-sized style. */
-    public Style title()  { return title; }
+    /** Whether {@code s} is the document title's style (the one elevated style exempt from recurrence). */
     public boolean isTitle(Style s) { return title != null && title.equals(s); }
 
     /** The heading level of a style: 0 = body / not a heading, 1..N = heading rank (1 largest). */
@@ -79,12 +72,6 @@ public final class FontProfile {
         for (Map.Entry<Style, Integer> e : level.entrySet())
             if (e.getKey().bold() == s.bold() && Math.abs(e.getKey().size() - s.size()) <= SIZE_TOL) return e.getValue();
         return 0;
-    }
-
-    /** The style of one run: its (rounded) size and the weight of its font. */
-    public static Style styleOf(OCDText t, OCDDocument doc) {
-        OCDFont f = t.fontId() == null ? null : doc.findFont(t.fontId());
-        return new Style(round(t.fontSize()), f != null && f.isBold());
     }
 
     /** The style of a whole line: its dominant (most-ink) size, and bold iff the line is bold as a whole
@@ -131,7 +118,7 @@ public final class FontProfile {
                 pages.computeIfAbsent(s, k -> new HashSet<>()).add(pg);
             }
         }
-        if (ink.isEmpty()) return new FontProfile(new Style(round(12), false), Map.of(), null);
+        if (ink.isEmpty()) return new FontProfile(Map.of(), null);
 
         Style body = ink.entrySet().stream().max(Map.Entry.comparingByValue()).get().getKey();
 
@@ -166,7 +153,7 @@ public final class FontProfile {
         if (title != null && (heads.isEmpty() || title.size() > heads.get(0).size() + SIZE_TOL) && !level.containsKey(title)) {
             // keep title
         } else title = null;
-        return new FontProfile(body, level, title);
+        return new FontProfile(level, title);
     }
 
     private static double round(double v) { return Math.round(v * 2.0) / 2.0; }   // ½-pt buckets

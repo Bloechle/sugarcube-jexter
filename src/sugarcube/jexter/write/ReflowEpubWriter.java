@@ -38,10 +38,6 @@ public final class ReflowEpubWriter {
     /** Uniform projection. Reflow is content-first (no page geometry, no embedded fonts),
      *  so it consumes no export options — {@code opt} is accepted for contract uniformity. */
     public static void write(OCDDocument doc, OutputStream out, ConvertOptions opt) throws IOException {
-        write(doc, out);
-    }
-
-    public static void write(OCDDocument doc, OutputStream out) throws IOException {
         String uid = EpubPackage.uniqueId(doc);
         try (JxZip zip = new JxZip(out)) {
             zip.mimetype(EpubPackage.MIME);                      // STORED, first

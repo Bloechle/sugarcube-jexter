@@ -31,24 +31,8 @@ public final class BlendComposite implements Composite {
         DIFFERENCE, EXCLUSION, HUE, SATURATION, COLOR, LUMINOSITY
     }
 
-    // ── Singleton instances for alpha=1 ─────────────────────────
-
+    /** Normal at full alpha: the composite that needs no blending. */
     public static final BlendComposite Normal     = new BlendComposite(Mode.NORMAL);
-    public static final BlendComposite Multiply   = new BlendComposite(Mode.MULTIPLY);
-    public static final BlendComposite Screen     = new BlendComposite(Mode.SCREEN);
-    public static final BlendComposite Overlay    = new BlendComposite(Mode.OVERLAY);
-    public static final BlendComposite Darken     = new BlendComposite(Mode.DARKEN);
-    public static final BlendComposite Lighten    = new BlendComposite(Mode.LIGHTEN);
-    public static final BlendComposite ColorDodge = new BlendComposite(Mode.COLOR_DODGE);
-    public static final BlendComposite ColorBurn  = new BlendComposite(Mode.COLOR_BURN);
-    public static final BlendComposite HardLight  = new BlendComposite(Mode.HARD_LIGHT);
-    public static final BlendComposite SoftLight  = new BlendComposite(Mode.SOFT_LIGHT);
-    public static final BlendComposite Difference = new BlendComposite(Mode.DIFFERENCE);
-    public static final BlendComposite Exclusion  = new BlendComposite(Mode.EXCLUSION);
-    public static final BlendComposite Hue        = new BlendComposite(Mode.HUE);
-    public static final BlendComposite Saturation = new BlendComposite(Mode.SATURATION);
-    public static final BlendComposite ColorMode  = new BlendComposite(Mode.COLOR);
-    public static final BlendComposite Luminosity = new BlendComposite(Mode.LUMINOSITY);
 
     private final Mode mode;
     private final float alpha;
@@ -74,22 +58,6 @@ public final class BlendComposite implements Composite {
         Mode m = parseMode(pdfName);
         if (m == Mode.NORMAL && alpha >= 1f) return Normal;
         return new BlendComposite(m, alpha);
-    }
-
-    public static BlendComposite getInstance(Mode mode, float alpha) {
-        return new BlendComposite(mode, alpha);
-    }
-
-    public BlendComposite derive(float alpha) {
-        return this.alpha == alpha ? this : new BlendComposite(mode, alpha);
-    }
-
-    /**
-     * Returns true if this blend mode is effectively "Normal" at full alpha,
-     * meaning no custom compositing is needed (standard SrcOver suffices).
-     */
-    public boolean isNormal() {
-        return mode == Mode.NORMAL && alpha >= 1f;
     }
 
     public Mode mode() { return mode; }

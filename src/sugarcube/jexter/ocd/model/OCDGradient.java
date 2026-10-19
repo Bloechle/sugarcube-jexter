@@ -49,14 +49,12 @@ public final class OCDGradient {
 
     public Kind        kind()      { return kind; }
     public boolean     isLinear()  { return kind == Kind.LINEAR; }
-    public boolean     isRadial()  { return kind == Kind.RADIAL; }
     public double[]    coords()    { return coords; }
     public float[]     offsets()   { return offsets; }
     public int[]       colors()    { return colors; }
     public JxTransform transform() { return transform; }
     public boolean     extend0()   { return extend0; }
     public boolean     extend1()   { return extend1; }
-    public int         stopCount() { return offsets != null ? offsets.length : 0; }
 
     /** Whether the stop arrays are well-formed enough to render (≥ 2 parallel stops). */
     public boolean isValid() {

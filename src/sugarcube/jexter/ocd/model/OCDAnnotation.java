@@ -50,11 +50,6 @@ public final class OCDAnnotation {
     public List<JxRect> quads()            { return quads; }
     public OCDAnnotation addQuad(JxRect q) { if (q != null) quads.add(q); return this; }
 
-    public boolean isTextMarkup() {
-        return type == Markup.HIGHLIGHT || type == Markup.UNDERLINE
-                || type == Markup.STRIKEOUT || type == Markup.SQUIGGLY;
-    }
-
     private static String nz(String v) { return v == null ? "" : v; }
 
     @Override public String toString() {

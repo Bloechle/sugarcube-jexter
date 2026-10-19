@@ -29,7 +29,6 @@ public final class JxLog {
     public static void info (Object src, Object msg)              { log(Level.INFO,    src, msg, null); }
     public static void warn (Object src, Object msg)              { log(Level.WARNING, src, msg, null); }
     public static void warn (Object src, Object msg, Throwable t) { log(Level.WARNING, src, msg, t);   }
-    public static void error(Object src, Object msg, Throwable t) { log(Level.ERROR,   src, msg, t);   }
 
     private static void log(Level level, Object src, Object msg, Throwable t) {
         Logger log = logger(src);

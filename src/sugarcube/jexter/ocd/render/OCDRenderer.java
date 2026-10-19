@@ -64,19 +64,6 @@ public final class OCDRenderer {
     private OCDRenderer() {}
 
 
-    /**
-     * Display filter for the inspector. Each leaf type can be hidden and the page clips
-     * can be ignored (to reveal clipped-away content). {@link #ALL} is the faithful default
-     * (every caller that does not opt in renders exactly as before), so the fidelity bar
-     * cannot regress: the analysis/fidelity paths all use {@code ALL}.
-     */
-    public record View(boolean text, boolean paths, boolean images, boolean clips, boolean annotations) {
-        public static final View ALL = new View(true, true, true, true, true);
-        public static View show(boolean text, boolean paths, boolean images, boolean clips, boolean annotations) {
-            return new View(text, paths, images, clips, annotations);
-        }
-    }
-
     public static BufferedImage render(OCDPage page, OCDDocument doc) {
         return render(page, doc, 144.0);
     }
@@ -86,10 +73,6 @@ public final class OCDRenderer {
     }
 
     public static BufferedImage render(OCDPage page, OCDDocument doc, double dpi, boolean annotations) {
-        return render(page, doc, dpi, new View(true, true, true, true, annotations));
-    }
-
-    public static BufferedImage render(OCDPage page, OCDDocument doc, double dpi, View view) {
         double scale = dpi / 72.0;
         JxRect box = page.effectiveBox();
         int rot = page.rotation();
@@ -130,8 +113,8 @@ public final class OCDRenderer {
 
             AffineTransform pageTx = g.getTransform();   // page space — clips are applied here
             Map<String, BufferedImage> imageCache = new HashMap<>();
-            paintAll(g, page.content(), page, doc, pageTx, imageCache, view);
-            if (view.annotations()) paintAnnotations(g, page);
+            paintAll(g, page.content(), page, doc, pageTx, imageCache);
+            if (annotations) paintAnnotations(g, page);
         } finally {
             g.dispose();
         }
@@ -169,7 +152,7 @@ public final class OCDRenderer {
             g.translate(-bounds.x(), -bounds.y());
             AffineTransform pageTx = g.getTransform();
             Map<String, BufferedImage> imageCache = new HashMap<>();
-            paintAll(g, nodes, page, doc, pageTx, imageCache, View.ALL);
+            paintAll(g, nodes, page, doc, pageTx, imageCache);
         } finally {
             g.dispose();
         }
@@ -185,16 +168,11 @@ public final class OCDRenderer {
      */
     public static void paintNode(Graphics2D g, OCDNode node, OCDPage page, OCDDocument doc,
                                  AffineTransform pageTx, Map<String, BufferedImage> cache) {
-        paint(g, node, page, doc, pageTx, cache, View.ALL);
+        paint(g, node, page, doc, pageTx, cache);
     }
 
     private static void paint(Graphics2D g, OCDNode node, OCDPage page, OCDDocument doc,
-                              AffineTransform pageTx, Map<String, BufferedImage> imageCache, View view) {
-        // display filter (inspector): hide a leaf type entirely; groups still recurse so their
-        // surviving children paint. Order-preserving — z is untouched, so fidelity holds for View.ALL.
-        if ((node instanceof OCDText  && !view.text())
-                || (node instanceof OCDPath  && !view.paths())
-                || (node instanceof OCDImage && !view.images())) return;
+                              AffineTransform pageTx, Map<String, BufferedImage> imageCache) {
         // a layer switched off paints nothing — the cover, a raster export and a pixel check alike
         if (node instanceof OCDLayerContent lc && doc.layer(lc.layerId()) != null && !doc.layer(lc.layerId()).visible()) return;
         AffineTransform savedT = g.getTransform();
@@ -202,9 +180,9 @@ public final class OCDRenderer {
         Composite savedComposite = g.getComposite();
         try {
             // clip is page-space: intersect it under the page transform, not the node's
-            if (node.hasClip() && view.clips()) {
+            if (node.hasClip()) {
                 OCDClip clip = page.clip(node.clipId());
-                if (clip != null && clip.path() != null && !clip.isNone()) {
+                if (clip != null && clip.path() != null) {
                     g.setTransform(pageTx);
                     g.clip(clip.path());
                     g.setTransform(savedT);
@@ -226,8 +204,8 @@ public final class OCDRenderer {
                 }
                 case OCDText t   -> paintText(g, t, doc);
                 case OCDGroup gr -> {
-                    if (gr.compositesAsOne()) paintAsOne(g, gr, page, doc, pageTx, imageCache, view);
-                    else paintAll(g, gr.children(), page, doc, pageTx, imageCache, view);
+                    if (gr.compositesAsOne()) paintAsOne(g, gr, page, doc, pageTx, imageCache);
+                    else paintAll(g, gr.children(), page, doc, pageTx, imageCache);
                 }
                 case OCDBreak b  -> { }   // line-break sentinel: paints nothing
             }
@@ -250,12 +228,12 @@ public final class OCDRenderer {
      * transform, clip and hints, so the children land exactly where they would have.
      */
     private static void paintAsOne(Graphics2D g, OCDGroup gr, OCDPage page, OCDDocument doc,
-                                   AffineTransform pageTx, Map<String, BufferedImage> imageCache, View view) {
+                                   AffineTransform pageTx, Map<String, BufferedImage> imageCache) {
         // The layer spans the visible canvas: the clip in device space. A Graphics handed in with no
         // clip has no stated extent (its device configuration answers Integer.MAX_VALUE squared), so
         // it gets the per-leaf painting rather than an unbounded layer.
         Shape clip = g.getClip();
-        if (clip == null) { paintAll(g, gr.children(), page, doc, pageTx, imageCache, view); return; }
+        if (clip == null) { paintAll(g, gr.children(), page, doc, pageTx, imageCache); return; }
         java.awt.Rectangle db = g.getTransform().createTransformedShape(clip).getBounds();
         if (db.isEmpty()) return;
         BufferedImage layer = new BufferedImage(db.width, db.height, BufferedImage.TYPE_INT_ARGB);
@@ -267,7 +245,7 @@ public final class OCDRenderer {
             if (clip != null) lg.clip(clip);
             AffineTransform layerPageTx = new AffineTransform(pageTx);
             layerPageTx.preConcatenate(AffineTransform.getTranslateInstance(-db.x, -db.y));
-            paintAll(lg, gr.children(), page, doc, layerPageTx, imageCache, view);
+            paintAll(lg, gr.children(), page, doc, layerPageTx, imageCache);
         } finally {
             lg.dispose();
         }
@@ -282,8 +260,8 @@ public final class OCDRenderer {
      *  so equal-{@code z} ties keep their flow order) lets the document be stored in reading order while the
      *  raster stays byte-identical. Applied at every level (page content and each group's children). */
     private static void paintAll(Graphics2D g, List<OCDNode> nodes, OCDPage page, OCDDocument doc,
-                                 AffineTransform pageTx, Map<String, BufferedImage> imageCache, View view) {
-        for (OCDNode n : OCDNode.inPaintOrder(nodes)) paint(g, n, page, doc, pageTx, imageCache, view);
+                                 AffineTransform pageTx, Map<String, BufferedImage> imageCache) {
+        for (OCDNode n : OCDNode.inPaintOrder(nodes)) paint(g, n, page, doc, pageTx, imageCache);
     }
 
     // ── annotation layer ─────────────────────────────────────────────────────

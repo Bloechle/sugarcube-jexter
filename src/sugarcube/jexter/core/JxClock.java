@@ -26,6 +26,4 @@ public final class JxClock {
     /** Milliseconds for output-facing timestamps: {@code SOURCE_DATE_EPOCH} when set, else now. */
     public static long millis() { return PINNED != null ? PINNED * 1000L : System.currentTimeMillis(); }
 
-    /** True when {@code SOURCE_DATE_EPOCH} pins the clock (reproducible mode). */
-    public static boolean pinned() { return PINNED != null; }
 }

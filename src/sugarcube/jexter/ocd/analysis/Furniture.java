@@ -51,7 +51,6 @@ public final class Furniture {
     private static final int    STACK     = 2;     // same-side neighbour offset: previous/next page of the same parity
     private static final double SIM_MIN   = 0.60;  // furniture iff mean same-side-neighbour similarity ≥ this
     private static final double CONTIG    = 2.0;   // accumulate inward only while the next line is within this many line-heights
-    private static final int    VIZ_BINS  = 200;   // Y resolution of the diagnostic Profile (inspector only)
 
     /** One page's lines (top-first) with their baseline y, line height, and raw comparison string. */
     private record Page(List<Liner.Line> lines, double[] yc, double[] lh, String[] raw) {}
@@ -97,7 +96,7 @@ public final class Furniture {
     /** The contiguous, stable furniture run inward from one edge: the line indices from the edge inward, in
      *  order, stopping at the first line that is non-contiguous (gap &gt; {@value #CONTIG}× the previous line
      *  height) or not stable furniture. {@code hi} is the header's deepest index so a footer never crosses into
-     *  it (−1 for the header pass). One walk, shared by {@link #detect} (tagging) and {@link #profile} (bins). */
+     *  it (−1 for the header pass). Used by {@link #detect}. */
     private static List<Integer> edgeRun(List<Page> pg, int p, boolean top, int hi) {
         Page pa = pg.get(p); int n = pa.lines.size();
         List<Integer> run = new ArrayList<>();
@@ -156,34 +155,6 @@ public final class Furniture {
         return d[b.length()];
     }
 
-    /** The detector's diagnostic view for tooling (PDF Inspector): per Y bin (top→bottom), the max line
-     *  <b>stability</b> (same-side-neighbour similarity) of any line centred in that bin, plus the Y bins of the
-     *  detected header / footer edge lines (−1 = none). Built from the same pass as {@link #detect}. */
-    public record Profile(int pages, int bins, double[] rec, int headerBin, int footerBin) {}
-
-    public static Profile profile(OCDDocument doc) {
-        int pages = doc.pageCount();
-        List<Page> pg = scan(doc);
-        double[] rec = new double[VIZ_BINS];
-        int headerBin = -1, footerBin = -1;
-        double headerYf = Double.MAX_VALUE, footerYf = -1.0;
-        for (int p = 0; p < pages; p++) {
-            Page pa = pg.get(p); int n = pa.lines.size(); if (n == 0) continue;
-            JxRect box = doc.page(p).effectiveBox(); double top = box.maxY(), h = Math.max(1.0, box.height());
-            for (int j = 0; j < n; j++) {
-                if (pa.raw[j].isEmpty()) continue;
-                int b = bin((top - pa.yc[j]) / h);
-                rec[b] = Math.max(rec[b], Math.max(strength(pg, p, true, j), strength(pg, p, false, n - 1 - j)));
-            }
-            List<Integer> head = edgeRun(pg, p, true, -1);
-            for (int i : head) { double f = (top - pa.yc[i]) / h; if (f < headerYf) { headerYf = f; headerBin = bin(f); } }
-            int hi = head.isEmpty() ? -1 : head.get(head.size() - 1);
-            List<Integer> foot = edgeRun(pg, p, false, hi);
-            for (int i : foot) { double f = (top - pa.yc[i]) / h; if (f > footerYf) { footerYf = f; footerBin = bin(f); } }
-        }
-        return new Profile(pages, VIZ_BINS, rec, headerBin, footerBin);
-    }
-
     // ── scan: cluster each page's lines (top-first) and pre-compute baseline y, line height, raw string ──
     private static List<Page> scan(OCDDocument doc) {
         List<Page> pg = new ArrayList<>(doc.pageCount());
@@ -218,10 +189,6 @@ public final class Furniture {
         StringBuilder b = new StringBuilder();
         for (OCDText t : l.runs()) if (t.text() != null) b.append(t.text());
         return b.toString();
-    }
-
-    private static int bin(double frac) {
-        return Math.max(0, Math.min(VIZ_BINS - 1, (int) Math.round(frac * (VIZ_BINS - 1))));
     }
 
     /** Text lines of a page, clustered by the shared clusterer and ordered <b>top-most first</b>

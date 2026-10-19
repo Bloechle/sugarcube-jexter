@@ -204,7 +204,6 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
 
     // open text run (glyphs grouped by font/fill/mode/baseline)
     private OCDText run;
-    private AffineTransform runOrigin;     // first-glyph matrix (em→page, size included)
     private AffineTransform runInverse;    // its inverse (page→em)
     private double runSize;                // effective point size of the run
     private String runKey;
@@ -763,7 +762,6 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         if (fs < 1e-6) fs = 1;
         AffineTransform base = new AffineTransform(at);
         base.scale(1.0 / fs, 1.0 / fs);                           // strip size, keep rotation/shear/pos
-        runOrigin = at;
         runSize = fs;
         runKey = key;
         runClipId = cid;
@@ -794,7 +792,6 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         }
         run = null;
         runClippedOut = false;
-        runOrigin = null;
         runInverse = null;
         runKey = null;
         runClipId = null;

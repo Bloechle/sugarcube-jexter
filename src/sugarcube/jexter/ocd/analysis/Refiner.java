@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.function.BooleanSupplier;
 import java.util.Locale;
 
 /**
@@ -83,46 +82,28 @@ public final class Refiner {
     private static final int    WINDOW_PAGE_MIN  = 4;  // \u2265 this many pages \u2192 process page-by-page (scale-invariant), else one-shot
     private static final int    WINDOW_BLOCK_MIN = 80; // \u2026or this many content blocks, whichever triggers first
 
-    /** Run the refinement. Returns {@link Result} with {@code ok} and, on failure, a short human
-     *  reason. Never throws: any failure is logged and leaves {@code doc} exactly as it was. */
+    /** Run the refinement. Returns {@link Result} with {@code ok} and, on failure, a short human reason. Never
+     *  throws: any failure is logged and leaves {@code doc} exactly as it was. It honours
+     *  {@link Thread#interrupt() thread interruption} between pages and mid-call — a partial structure is kept —
+     *  so a host stops a run by interrupting its worker. Progress goes to the log, stage by stage. */
     public static Result refine(OCDDocument doc, ConvertOptions opts, LlmClient client) {
-        return refine(doc, opts, client, null, null);
-    }
-
-    public static Result refine(OCDDocument doc, ConvertOptions opts, LlmClient client, Progress progress) {
-        return refine(doc, opts, client, progress, null);
-    }
-
-    /** Functional progress sink so the AI panel can stream staged progress (the model call blocks). */
-    @FunctionalInterface public interface Progress { void at(String stage, String detail); }
-
-    /**
-     * Run the refinement.
-     *
-     * @param cancel polled between pages to stop early — a partial structure is kept; the pass also
-     *               honours {@link Thread#interrupt() thread interruption}, so a host can stop a run by
-     *               interrupting its worker thread with no extra wiring. {@code null} = never cancel.
-     */
-    public static Result refine(OCDDocument doc, ConvertOptions opts, LlmClient client, Progress progress, BooleanSupplier cancel) {
-        Progress p = progress != null ? progress
-                : (s, d) -> JxLog.info(Refiner.class, "refine \u00b7 " + s + (d == null || d.isEmpty() ? "" : " \u00b7 " + d));
         if (doc == null || client == null) return new Result(false, "no document or model");
         try {
-            if (cancelled(cancel)) return new Result(false, "cancelled before start");
+            if (cancelled()) return new Result(false, "cancelled before start");
             List<Block> blocks = BlockSignals.harvest(doc);
-            p.at("harvest", blocks.size() + " content blocks");
+            at("harvest", blocks.size() + " content blocks");
             if (blocks.size() < 2) { JxLog.debug(Refiner.class, "structure refine skipped \u2014 too few blocks", null); return new Result(false, "too few content blocks to refine"); }
 
             if (doc.pages().size() >= WINDOW_PAGE_MIN || blocks.size() >= WINDOW_BLOCK_MIN)
-                return refineWindowed(doc, opts, client, p, blocks, cancel);   // scale-invariant page-by-page path
+                return refineWindowed(doc, opts, client, blocks);   // scale-invariant page-by-page path
 
             double median = bodyMedian(blocks);
             String bodyFam = bodyFamily(blocks, median);
             String user   = serialize(blocks, median, bodyFam);
-            p.at("prompt", user.length() + " chars prepared");
-            p.at("request", "calling " + client.model() + "\u2026");
+            at("prompt", user.length() + " chars prepared");
+            at("request", "calling " + client.model() + "\u2026");
             String reply  = client.complete(SYSTEM, user);
-            p.at("reply", (reply == null ? 0 : reply.length()) + " chars received");
+            at("reply", (reply == null ? 0 : reply.length()) + " chars received");
             if (reply == null || reply.isBlank()) { JxLog.warn(Refiner.class, "structure refine \u2014 empty model reply"); return new Result(false, "the model returned an empty reply"); }
 
             String json = extractJson(reply);
@@ -148,7 +129,7 @@ public final class Refiner {
             if (tree == null || tree.isEmpty()) { JxLog.warn(Refiner.class, "structure refine \u2014 empty tree"); return new Result(false, "the model produced an empty structure"); }
 
             double cov = used.size() / (double) blocks.size();
-            p.at("ground", pct(cov) + " of " + blocks.size() + " blocks grounded");
+            at("ground", pct(cov) + " of " + blocks.size() + " blocks grounded");
             if (cov < MIN_COVERAGE) {
                 JxLog.warn(Refiner.class, "structure refine rejected \u2014 coverage " + pct(cov) + " < " + pct(MIN_COVERAGE));
                 return new Result(false, "structure rejected \u2014 only " + pct(cov) + " of blocks grounded (floor " + pct(MIN_COVERAGE) + ")");
@@ -203,7 +184,7 @@ public final class Refiner {
      * then owns the one global decision a per-page model cannot make: a consistent heading hierarchy.
      * A page that fails (transport / bad JSON) is skipped and counts against the coverage floor.
      */
-    private static Result refineWindowed(OCDDocument doc, ConvertOptions opts, LlmClient client, Progress p, List<Block> blocks, BooleanSupplier cancel) {
+    private static Result refineWindowed(OCDDocument doc, ConvertOptions opts, LlmClient client, List<Block> blocks) {
         double median  = bodyMedian(blocks);
         String bodyFam = bodyFamily(blocks, median);
         String profile = profileHeader(blocks, median, bodyFam);
@@ -223,21 +204,21 @@ public final class Refiner {
         Set<String> used = new HashSet<>();
         int okPages = 0, attempted = 0, total = nums.size();
         boolean stopped = false;
-        p.at("windowed", total + " pages \u00b7 one window each \u00b7 calling " + client.model() + "\u2026");
+        at("windowed", total + " pages \u00b7 one window each \u00b7 calling " + client.model() + "\u2026");
 
         for (int i = 0; i < nums.size(); i++) {
-            if (cancelled(cancel)) { stopped = true; break; }                 // stop between pages — keep what's done
+            if (cancelled()) { stopped = true; break; }                 // stop between pages — keep what's done
             int pageNo = nums.get(i);
             List<Block> cur  = byPage.get(pageNo);
             List<Block> prev = i > 0               ? byPage.get(nums.get(i - 1)) : List.of();
             List<Block> next = i < nums.size() - 1 ? byPage.get(nums.get(i + 1)) : List.of();
             attempted += cur.size();
-            p.at("page", "page " + (pageNo + 1) + " (" + (i + 1) + "/" + total + ")");
+            at("page", "page " + (pageNo + 1) + " (" + (i + 1) + "/" + total + ")");
 
             String reply;
             try { reply = client.complete(SYSTEM_PAGE, serializeWindow(profile, prev, cur, next, median, bodyFam)); }
             catch (Throwable t) {
-                if (isInterruption(t) || cancelled(cancel)) { stopped = true; break; }   // interrupted mid-call → stop, keep partial
+                if (isInterruption(t) || cancelled()) { stopped = true; break; }   // interrupted mid-call → stop, keep partial
                 JxLog.warn(Refiner.class, "structure refine \u2014 page " + (pageNo + 1) + " failed, skipped", t);
                 continue;
             }
@@ -267,7 +248,7 @@ public final class Refiner {
         }
         int denom = stopped ? Math.max(1, attempted) : blocks.size();        // partial run: score over the pages we reached
         double cov = used.size() / (double) denom;
-        p.at(stopped ? "stopped" : "ground", pct(cov) + " of " + denom + " blocks over " + okPages + "/" + total
+        at(stopped ? "stopped" : "ground", pct(cov) + " of " + denom + " blocks over " + okPages + "/" + total
                 + " pages" + (stopped ? " \u2014 stopped early, keeping partial structure" : ""));
         if (cov < MIN_COVERAGE) { JxLog.warn(Refiner.class, "structure refine rejected \u2014 coverage " + pct(cov) + " < " + pct(MIN_COVERAGE)); return new Result(false, "structure rejected \u2014 only " + pct(cov) + " of blocks grounded (floor " + pct(MIN_COVERAGE) + ")"); }
 
@@ -276,9 +257,13 @@ public final class Refiner {
         return new Result(true, stopped ? "stopped at " + okPages + "/" + total + " pages \u2014 partial structure kept" : "");
     }
 
-    /** Stop signal: an explicit canceller from the host, or this worker thread being interrupted. */
-    private static boolean cancelled(BooleanSupplier cancel) {
-        return Thread.currentThread().isInterrupted() || (cancel != null && cancel.getAsBoolean());
+    private static void at(String stage, String detail) {
+        JxLog.info(Refiner.class, "refine \u00b7 " + stage + (detail == null || detail.isEmpty() ? "" : " \u00b7 " + detail));
+    }
+
+    /** Stop signal: this worker thread being interrupted. */
+    private static boolean cancelled() {
+        return Thread.currentThread().isInterrupted();
     }
 
     /** True if {@code t} is (or wraps) an {@link InterruptedException} — a blocking model call cut short. */

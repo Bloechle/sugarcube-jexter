@@ -73,7 +73,6 @@ public final class OCDText extends OCDNode {
     public boolean hasConfidence()         { return !Double.isNaN(confidence); }
 
     public boolean isInvisible() { return renderMode == INVISIBLE || renderMode == CLIP; }
-    public boolean isClipping()  { return renderMode >= FILL_CLIP; }
     public boolean hasFill()     { int m = renderMode & 3; return m == 0 || m == 2; }
     public boolean hasStroke()   { int m = renderMode & 3; return m == 1 || m == 2; }
 

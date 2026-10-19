@@ -12,8 +12,6 @@ package sugarcube.jexter.ocd.model;
  */
 public final class OCDLayer {
 
-    public static final String BACKGROUND = "background";
-
     private final String id;
     private String  name;
     private boolean visible = true;   // default visibility

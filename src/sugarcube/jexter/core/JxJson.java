@@ -229,9 +229,6 @@ public final class JxJson {
     public static Object opt(Object root, String path) { return walk(root, path, false); }
 
     public static String  pathStr (Object root, String p) { Object v = path(root, p); return v == null ? null : v.toString(); }
-    public static long    pathLng (Object root, String p) { return ((Number) path(root, p)).longValue(); }
-    public static double  pathDbl (Object root, String p) { return ((Number) path(root, p)).doubleValue(); }
-    public static boolean pathBool(Object root, String p) { return Boolean.TRUE.equals(path(root, p)); }
 
     @SuppressWarnings("unchecked")
     private static Object walk(Object cur, String path, boolean strict) {

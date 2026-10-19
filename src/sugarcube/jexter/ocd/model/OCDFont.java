@@ -16,10 +16,8 @@ import java.util.Locale;
  * distinct glyphs that share a Unicode value (ligatures, small caps, alternates)
  * or have none (.notdef) coexist without overwriting each other.
  *
- * <p>Outlines and metrics are in normalized em units (1 em = 1). Metrics can be
- * recomputed from the real outlines via {@link #computeHeights()} — and since
- * {@link OCDGlyph} derives its bounds from the {@link sugarcube.jexter.core.JxPath},
- * that works at any time, including after a load.
+ * <p>Outlines and metrics are in normalized em units (1 em = 1); {@link OCDGlyph} derives its bounds
+ * from its {@link sugarcube.jexter.core.JxPath}, at any time, including after a load.
  *
  * <p>Serialization (OCD-EPUB members / OTF compilation) lives in the writer layer, not here.
  */
@@ -110,31 +108,6 @@ public final class OCDFont {
         return reverseCmap;
     }
 
-    /** Resolve a character to its glyph via the cmap, or null. */
-    public OCDGlyph glyphForChar(int codepoint) {
-        Integer gid = cmap.get(codepoint);
-        return gid == null ? null : glyphs.get(gid);
-    }
-    public OCDGlyph glyphForChar(char ch) { return glyphForChar((int) ch); }
-
-    // ── metric recomputation from real outlines ────────────────────────────────
-    /** Recompute cap/x-height from the actual glyph outlines. Safe to call any time. */
-    public OCDFont computeHeights() {
-        OCDGlyph cap = firstOf('H', 'I', 'T');
-        if (cap != null && cap.yMax() > 0) capHeight = round4(cap.yMax());
-        OCDGlyph ex = firstOf('x', 'o', 'e');
-        if (ex != null && ex.yMax() > 0) xHeight = round4(ex.yMax());
-        return this;
-    }
-
-    private OCDGlyph firstOf(char... chars) {
-        for (char c : chars) {
-            OCDGlyph g = glyphForChar(c);
-            if (g != null) return g;
-        }
-        return null;
-    }
-
     // ── style helpers ───────────────────────────────────────────────────────────
     public boolean isBold() {
         return "bold".equalsIgnoreCase(weight)
@@ -180,8 +153,6 @@ public final class OCDFont {
         }
         return n >= 4;   // several equal-width glyphs → monospace
     }
-
-    private static double round4(double v) { return Math.round(v * 10000.0) / 10000.0; }
 
     @Override public String toString() {
         return "OCDFont[" + name + " " + weight + " " + style + ", glyphs=" + glyphs.size()

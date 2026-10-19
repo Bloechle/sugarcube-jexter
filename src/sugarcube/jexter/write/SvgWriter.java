@@ -71,8 +71,6 @@ public final class SvgWriter {
                 .getBytes(StandardCharsets.UTF_8));
     }
 
-    public static String render(OCDDocument doc, OCDPage page) { return render(doc, page, true); }
-
     public static String render(OCDDocument doc, OCDPage page, boolean annotations) {
         return render(doc, page, annotations, FontSrc.LINKED);
     }

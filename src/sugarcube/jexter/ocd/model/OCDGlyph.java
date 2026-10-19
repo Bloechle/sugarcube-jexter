@@ -30,8 +30,6 @@ public record OCDGlyph(int gid, String unicode, JxPath outline, double advance, 
     /** Outline bounds in em units (empty for spaces). */
     public JxRect bounds() { return outline == null ? JxRect.EMPTY : JxRect.of(outline.bounds()); }
 
-    /** Lowest y of the outline (negative = descent below baseline). */
-    public double yMin() { return bounds().y(); }
     /** Highest y of the outline (cap / ascender height). */
     public double yMax() { return bounds().maxY(); }
 }

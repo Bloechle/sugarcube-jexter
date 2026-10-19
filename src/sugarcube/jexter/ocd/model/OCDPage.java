@@ -176,25 +176,6 @@ public final class OCDPage {
         return p;
     }
 
-    // ── text convenience ───────────────────────────────────────────────────────
-    /** All text on the page in z-order (runs joined by space), recursing into groups. */
-    public String text() {
-        var sb = new StringBuilder();
-        collectText(content, sb);
-        return sb.toString().trim();
-    }
-
-    private static void collectText(List<OCDNode> nodes, StringBuilder sb) {
-        for (OCDNode n : nodes) {
-            if (n instanceof OCDText t) {
-                if (sb.length() > 0) sb.append(' ');
-                sb.append(t.text());
-            } else if (n instanceof OCDGroup g) {
-                collectText(g.children(), sb);
-            }
-        }
-    }
-
     @Override public String toString() {
         return "OCDPage[" + (int) displayWidth() + "×" + (int) displayHeight()
                 + ", nodes=" + content.size() + ", clips=" + clips.size() + "]";

@@ -15,7 +15,7 @@ public final class FontProbe {
         File f = new File(args[0]);
         boolean repair = args.length > 1 && args[1].equals("repair");
         try (PDDocument pdf = Loader.loadPDF(f)) {
-            if (repair) PdfStreamEngine.repairEmbeddedTrueTypeFonts(pdf, new ConvertOptions());
+            if (repair) TrueTypeRepair.repair(pdf, new ConvertOptions());
             PDPage page = pdf.getPage(0);
             PDResources res = page.getResources();
             System.out.printf("%-36s %-22s %7s %7s %7s%n", "font", "class", "codes", "inked", "EMPTY");

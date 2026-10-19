@@ -25,8 +25,7 @@ import java.util.List;
  * in the model. The pure compilation side ({@code font.JxFont}/{@code GlyfOtf}) stays FontBox-free.
  *
  * <pre>
- *   TtfImporter.json(ttfBytes, codepoints)
- *     → { "name":…, "unitsPerEm":…, "glyphs":[ { "cp":…, "em":"&lt;svg path&gt;", "advance":… } … ] }
+ *   TtfImporter.extract(ttfBytes, codepoints) → [ Glyph(cp, em outline, advance) … ]
  * </pre>
  *
  * Only outlined glyphs are returned; spaces (no contours) carry no entry. Glyphs are emitted in the
@@ -34,7 +33,7 @@ import java.util.List;
  *
  * <p><b>It is one half of a loop, and the other half is {@code font.Foundry}</b>, whose request already
  * accepts exactly this shape ({@code {cp, em, advance}}) as its "already vectorized" branch — so
- * loading a font, editing a glyph and rebuilding is: {@code TtfImporter.json} → the request → {@link
+ * loading a font, editing a glyph and rebuilding is: {@code TtfImporter.extract} → the request → {@link
  * sugarcube.jexter.font.Foundry#build}. Measured on DejaVu Sans: 9 outlined glyphs of the 10 asked
  * ({@code ' '} has no contour), rebuilt into a TTF that PDFBox embeds and sets text with, at DejaVu's
  * own proportions (o 612, l 278, H 752 per 1000 em).
@@ -96,13 +95,4 @@ public final class TtfImporter {
         return n == null || n.isBlank() ? "Imported" : n;
     }
 
-    /** The import response the front-end consumes: name + the extracted glyph outlines. Parses once. */
-    public static String json(byte[] ttf, int[] codepoints) throws IOException {
-        try (TrueTypeFont font = new TTFParser().parse(new RandomAccessReadBuffer(ttf))) {
-            JxStringer j = new JxStringer().obj().str("name", nameOf(font)).arr("glyphs");
-            for (Glyph g : extract(font, codepoints))
-                j.obj().num("cp", g.cp()).str("em", g.emSvg()).num("advance", g.advance()).end();
-            return j.end().end().toString();
-        }
-    }
 }

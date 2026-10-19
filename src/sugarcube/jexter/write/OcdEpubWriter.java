@@ -39,7 +39,6 @@ import static sugarcube.jexter.write.EpubPackage.safe;
  */
 public final class OcdEpubWriter {
 
-    public static final String MIME = EpubPackage.MIME;
     static final String JX = OCDVocab.MEMBERS;
 
     private OcdEpubWriter() {}
@@ -48,7 +47,7 @@ public final class OcdEpubWriter {
     public static void write(OCDDocument doc, OutputStream out, ConvertOptions opt) throws IOException {
         String uid = EpubPackage.uniqueId(doc);
         try (JxZip zip = new JxZip(out)) {
-            zip.mimetype(MIME);                                   // STORED, first
+            zip.mimetype(EpubPackage.MIME);                       // STORED, first
             EpubPackage.container(zip);
             EpubPackage.images(zip, doc);
             media(zip, doc);

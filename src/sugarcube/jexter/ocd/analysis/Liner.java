@@ -38,11 +38,6 @@ final class Liner {
      *  and XY-Cut downstream could never recover the columns. */
     private static final double COLUMN_GAP = 1.0;
 
-    /** Median run height (0 when empty). */
-    static double medianHeight(List<OCDText> runs) {
-        return JxNum.median(runs.stream().mapToDouble(t -> t.bounds().height()).toArray());
-    }
-
     /** A clustered line: mean y and member runs (left→right). Geometry only — no text, no spacing; word
      *  spaces live in the runs as sentinels (the {@link Spacer} authority), read by whoever needs the text. */
     record Line(double yc, List<OCDText> runs) {}

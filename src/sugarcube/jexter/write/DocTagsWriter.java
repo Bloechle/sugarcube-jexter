@@ -35,14 +35,10 @@ public final class DocTagsWriter {
 
     private DocTagsWriter() {}
 
-    public static final int DEFAULT_GRID = 500;
-
     /** Uniform projection: DocTags (UTF-8), quantized onto the {@link ConvertOptions#DOCTAGS_GRID} grid. */
     public static void write(OCDDocument doc, OutputStream out, ConvertOptions opt) throws IOException {
         out.write(toDocTags(doc, opt.get(ConvertOptions.DOCTAGS_GRID)).getBytes(StandardCharsets.UTF_8));
     }
-
-    public static String toDocTags(OCDDocument doc) { return toDocTags(doc, DEFAULT_GRID); }
 
     public static String toDocTags(OCDDocument doc, int grid) {
         Emit e = new Emit(doc, doc.pages(), OCDIndex.of(doc), grid);

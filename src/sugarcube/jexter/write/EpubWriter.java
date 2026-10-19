@@ -41,21 +41,13 @@ import static sugarcube.jexter.write.EpubPackage.safe;
  */
 public final class EpubWriter {
 
-    public static final String MIME = EpubPackage.MIME;
-
     private EpubWriter() {}
-
-    /** The boolean overload, kept for callers outside this project: annotations only, defaults
-     *  elsewhere — {@link ConvertOptions#RENDER_ANNOTATIONS} is what it sets. */
-    public static void write(OCDDocument doc, OutputStream out, boolean annotations) throws IOException {
-        write(doc, out, new ConvertOptions().set(ConvertOptions.RENDER_ANNOTATIONS, annotations));
-    }
 
     public static void write(OCDDocument doc, OutputStream out, ConvertOptions opt) throws IOException {
         boolean annotations = Boolean.TRUE.equals(opt.get(ConvertOptions.RENDER_ANNOTATIONS));
         String uid = EpubPackage.uniqueId(doc);
         try (JxZip zip = new JxZip(out)) {
-            zip.mimetype(MIME);                                  // STORED, first
+            zip.mimetype(EpubPackage.MIME);                      // STORED, first
             EpubPackage.container(zip);                          // META-INF/container.xml
             fonts(zip, doc);                                     // OEBPS/fonts/*.otf
             fontsCss(zip, doc);                                  // OEBPS/fonts.css (@font-face)

@@ -87,8 +87,6 @@ public record JxTransform(double a, double b, double c, double d, double tx, dou
 
     /** The length of the image of the unit x-axis — the horizontal scale, shear included. */
     public double scaleX() { return Math.sqrt(a * a + b * b); }
-    /** The length of the image of the unit y-axis. */
-    public double scaleY() { return Math.sqrt(c * c + d * d); }
 
     public boolean isIdentity() {
         return a == 1 && b == 0 && c == 0 && d == 1 && tx == 0 && ty == 0;

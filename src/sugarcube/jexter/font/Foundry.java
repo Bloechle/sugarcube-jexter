@@ -45,7 +45,6 @@ import java.util.Locale;
  *                   glyphs:[ { cp:&lt;codepoint&gt;, png:"data:image/png;base64,…" } … ] }
  *
  *   Foundry.build(request)  → { bytes, filename, mediaType }
- *   Foundry.preview({ png, guides }) → { svg, w, h, advance }            // cleaned vector, for live UI
  * </pre>
  */
 public final class Foundry {
@@ -53,13 +52,13 @@ public final class Foundry {
     private Foundry() {}
 
     // ── em metrics (1 em = 1.0); the on-screen guides mirror these proportions ──
-    public static final double EM_ASCENT  = 0.80;
-    public static final double EM_DESCENT = 0.20;
-    public static final double EM_CAP     = 0.70;
-    public static final double EM_XHEIGHT = 0.48;
-    public static final double EM_SPACE   = 0.28;
-    public static final double SIDE_BEAR  = 0.06;   // left/right bearing, em
-    public static final int    TURD_PX    = 6;      // drop trace specks ≤ this (px²)
+    private static final double EM_ASCENT  = 0.80;
+    private static final double EM_DESCENT = 0.20;
+    private static final double EM_CAP     = 0.70;
+    private static final double EM_XHEIGHT = 0.48;
+    private static final double EM_SPACE   = 0.28;
+    private static final double SIDE_BEAR  = 0.06;   // left/right bearing, em
+    private static final int    TURD_PX    = 6;      // drop trace specks ≤ this (px²)
 
     /** A compiled font + how to deliver it. */
     public record Font(byte[] bytes, String filename, String mediaType) {}
@@ -103,22 +102,6 @@ public final class Foundry {
         boolean cff = format.equals("otf") || format.equals("cff");
         byte[] data = cff ? JxFont.toCffOtf(font) : JxFont.toOtf(font);
         return new Font(data, slug(name) + (cff ? ".otf" : ".ttf"), cff ? "font/otf" : "font/ttf");
-    }
-
-    // ── preview ───────────────────────────────────────────────────────────────
-    /** { png, guides } → { svg, w, h, advance }: the cleaned vector for one glyph, for live on-page feedback. */
-    public static String preview(String requestJson) throws IOException {
-        Map<String, Object> req = JxJson.asObj(JxJson.parse(requestJson));
-        BufferedImage img = decodePng(JxJson.str(req, "png"));
-        if (img == null) throw new IllegalArgumentException("empty image");
-        JxPath pixels = tracePixels(img);
-        Guides g = guides(JxJson.has(req, "guides") ? JxJson.obj(req, "guides") : java.util.Map.of());
-        JxPath em = pixels == null ? null : toEm(pixels, g);
-        double advance = em == null ? 0 : em.bounds().getWidth() + 2 * SIDE_BEAR;
-        return new JxStringer().obj()
-                .str("svg", pixels == null ? "" : pixels.toSvg())
-                .num("w", img.getWidth()).num("h", img.getHeight())
-                .num("advance", advance).end().toString();
     }
 
     // ── trace + em-normalization (the one piece of glue) ─────────────────────────

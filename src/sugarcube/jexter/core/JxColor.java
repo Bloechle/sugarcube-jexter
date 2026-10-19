@@ -32,11 +32,7 @@ public record JxColor(int argb) {
 
     public float alpha() { return a() / 255f; }
 
-    /** Same colour with alpha replaced (folds an ExtGState ca/CA into the colour). */
-    public JxColor withAlpha(float a) { return rgba(r(), g(), b(), Math.round(a * 255)); }
-
     public boolean isOpaque()      { return a() == 0xFF; }
-    public boolean isTransparent() { return a() == 0; }
 
     /** CSS form: {@code #rrggbb} when opaque, otherwise {@code rgba(r,g,b,a)}. */
     public String css() {

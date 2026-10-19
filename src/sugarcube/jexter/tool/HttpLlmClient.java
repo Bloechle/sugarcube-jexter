@@ -56,7 +56,7 @@ public final class HttpLlmClient implements LlmClient {
     private final int maxTokens;
 
     public HttpLlmClient() {
-        this(env("JEXTER_LLM_PROVIDER", env("JEXTER_LLM_SHAPE", "anthropic")),
+        this(env("JEXTER_LLM_PROVIDER", "anthropic"),
              env("JEXTER_LLM_ENDPOINT", ""),
              env("JEXTER_LLM_KEY", env("ANTHROPIC_API_KEY", env("OPENAI_API_KEY", ""))),
              env("JEXTER_LLM_MODEL", ""),

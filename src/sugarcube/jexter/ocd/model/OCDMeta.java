@@ -50,9 +50,6 @@ public final class OCDMeta {
     public Map<String, String> custom()           { return custom; }
     public OCDMeta             custom(String k, String v) { if (notBlank(k)) custom.put(k, nz(v)); return this; }
 
-    /** Authors as one display string. */
-    public String authorLine() { return String.join(", ", authors); }
-
     public boolean isEmpty() {
         return title.isEmpty() && subject.isEmpty() && creator.isEmpty() && producer.isEmpty()
                 && language.isEmpty() && created.isEmpty() && modified.isEmpty()

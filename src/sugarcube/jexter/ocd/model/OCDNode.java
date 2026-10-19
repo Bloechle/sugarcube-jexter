@@ -29,10 +29,6 @@ import java.util.List;
  */
 public sealed abstract class OCDNode permits OCDText, OCDPath, OCDImage, OCDGroup, OCDMedia, OCDBreak {
 
-    /** Reserved sentinel id: never assigned to a real node (live ids start at {@code n1}),
-     *  free to denote "no node" / a synthetic anchor in references. */
-    public static final String NONE = "n0";
-
     protected String id;                                  // page-scoped, unique
     protected float  z;                                   // paint order (float: insert between siblings); flow carries reading order
     protected String name = "";                           // optional human / source name
