@@ -65,6 +65,7 @@ final class Fixtures {
         FEATURES.put("text_clip_image", (Page) Fixtures::clipImage);
         FEATURES.put("text_tiny_leading", (Page) Fixtures::tinyLeading);
         FEATURES.put("text_ligature", (Page) Fixtures::ligature);
+        FEATURES.put("text_press", (Page) Fixtures::press);
         FEATURES.put("vector_shapes", (Page) Fixtures::shapes);
         FEATURES.put("vector_clipping", (Page) Fixtures::clipping);
         FEATURES.put("vector_transforms", (Page) Fixtures::transforms);
@@ -144,6 +145,67 @@ final class Fixtures {
         cs.newLineAtOffset(x, y);
         cs.showText(s);
         cs.endText();
+    }
+
+    /** What a fixture's text must read, line by line, word for word (the WORDS gate). */
+    static final Map<String, List<String>> WORDS = new LinkedHashMap<>();
+
+    /**
+     * Press setting, as a newspaper producer writes it: no space glyph anywhere, every word placed by a TJ
+     * offset. A justified column whose word spaces vary from tight to loose, a results table whose names hold
+     * a word space beside wide column gaps, tracked capitals, a headline under Tz, and two columns set on
+     * baselines offset by half a line — each one a way the word spaces were lost (glued words, or two
+     * columns read as one line with no space left in it).
+     */
+    private static void press(Doc d, PDPageContentStream cs) throws IOException {
+        PDFont times = new PDType1Font(Standard14Fonts.FontName.TIMES_ROMAN);
+        PDFont bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+        List<String> words = new ArrayList<>();
+        float x = 20 * MM, y = H - 45 * MM;
+        // offsets in thousandths of an em, between consecutive words
+        Object[][] body = {
+            { "Le conseil communal a voté", new int[]{ 90, 300, 110, 280 } },
+            { "un crédit de deux millions", new int[]{ 95, 95, 320, 100 } },
+            { "pour la rénovation du collège", new int[]{ 230, 230, 230, 230 } },
+            { "une ligne serrée comme souvent", new int[]{ 85, 90, 88, 92 } } };
+        for (Object[] l : body) { words.add(tj(cs, times, 9, x, y, (String) l[0], (int[]) l[1], 0, 100)); y -= 11.5f; }
+        Object[][] table = {
+            { "Young Boys 12 8 2 2 26", new int[]{ 250, 2400, 1800, 1800, 1800, 1800 } },
+            { "FC Lausanne-Sport 12 6 3 3 21", new int[]{ 250, 1000, 1800, 1800, 1800, 1800 } } };
+        for (Object[] l : table) { words.add(tj(cs, times, 7, x, y, (String) l[0], (int[]) l[1], 0, 100)); y -= 9; }
+        y -= 12;
+        words.add(tj(cs, bold, 14, x, y, "LE GRAND ENTRETIEN", new int[]{ 350, 350 }, 1.6f, 100));
+        y -= 34;
+        words.add(tj(cs, bold, 30, x, y, "Une rentrée sous tension", new int[]{ 200, 200, 200 }, 0, 93));
+        // two columns, the right one half a line lower: a union band chained them into one line
+        String[] left = { "La commune investit dans", "ses écoles cette année", "un montant record pour" };
+        String[] right = { "Les travaux commencent", "au printemps prochain", "sous réserve du budget" };
+        y -= 30;
+        for (int i = 0; i < left.length; i++) {
+            words.add(tj(cs, times, 9, x, y - i * 11, left[i], null, 0, 100));
+            words.add(tj(cs, times, 9, x + 62 * MM, y - 5.5f - i * 11, right[i], null, 0, 100));
+        }
+        WORDS.put("text_press", words);
+    }
+
+    /** One line in one TJ: the words of {@code line}, each pair parted by {@code gaps[i]} thousandths of an em
+     *  (0.25 em when null) and no space glyph; {@code tc} character spacing, {@code tz} horizontal scaling. */
+    private static String tj(PDPageContentStream cs, PDFont f, float size, float x, float y, String line,
+                             int[] gaps, float tc, float tz) throws IOException {
+        String[] w = line.split(" ");
+        List<Object> ops = new ArrayList<>();
+        for (int i = 0; i < w.length; i++) {
+            ops.add(w[i]);
+            if (i + 1 < w.length) ops.add((float) -(gaps == null ? 250 : gaps[i]));
+        }
+        cs.beginText();
+        cs.setFont(f, size);
+        cs.setCharacterSpacing(tc);
+        cs.setHorizontalScaling(tz);
+        cs.newLineAtOffset(x, y);
+        cs.showTextWithPositioning(ops.toArray());
+        cs.endText();
+        return line;
     }
 
     /** A font for scripts Liberation lacks: one box glyph per character, compiled by the engine. */

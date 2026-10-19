@@ -317,7 +317,11 @@ same-line runs overlap strongly, tight-leading neighbours only ≈0.1–0.3 — 
 **sub/superscript naturally joins its line** with no special case and no size gate (an earlier size
 guard orphaned superscripts: a raised, small run seeded its own band and the larger body run was then
 rejected — removed). It anchors on geometry, not on font metrics or unicode, so it works identically on
-born-digital PDF and on OCR output. `Liner` carries **no text and no spaces** — a line is `(yc, runs)`;
+born-digital PDF and on OCR output. A line's band is the band of its **tallest run**, never the union of
+its runs: a union grows with each run it takes, and two columns set on offset baselines then chain — each
+line overlaps the half-line beside it, the band slides down a step at a time, and a whole paragraph of one
+column becomes one "line" with the other column's lines in it (measured on a two-column paper: its abstract
+read as one line, with no word space left). `Liner` carries **no text and no spaces** — a line is `(yc, runs)`;
 the word spaces are `Spacer`'s job (below).
 
 The `splitColumns` flag is the only variation: `true` cuts a band at any >1 em gutter (proto-lines, so a
@@ -362,15 +366,18 @@ Runs reach `Spacer` as pure ink. The moment `Segmenter` rebuilds a clean line (`
 1. **reading order** — the line's runs are ordered left→right (intrinsic to a frozen line);
 2. **inner spaces** (`spaceLine`) — the line is read as one glyph stream and, at every seam (intra-run
    and inter-run alike), the advance slack `step/size − advance` is read as a **ratio of the face's space
-   width**, so a line that mixes sizes still compares. **The line names its own gate**: the sorted ratios
-   are split at their widest jump, and a line whose two clusters stand apart is gated at that valley —
-   never below `SPACE_FRACTION`, so the gate is only ever stricter than the style and the pass can only
-   ever *remove* a space, never invent one. Body text separates a charspace cluster at ~0 from word
-   spaces at ~1; a tracked line separates 0.28 from 1.4. One absolute number cannot serve both: a press
-   page tracked at 0.078 em against a 0.0778 em gate — two ten-thousandths under — read every letter seam
-   as a word space. A line with one cluster cannot point at a valley (geometry alone cannot tell one
-   tracked word from a line of isolated letters), so it says nothing rather than guess; under
-   `MIN_SEAMS` seams there is no distribution and the style decides, as before;
+   width**, so a line that mixes sizes still compares. **The line names its own gate**: walking its sorted
+   ratios up from the bottom, the first value that stands twice above the tight cluster under it (the
+   letter seams, ~0 in body text, the tracking on a tracked line), across a jump at least as wide as that
+   cluster is spread, opens the word spaces. The FIRST valley, not the widest: a justified press column
+   mixes a tight word space (0.36 of the face's space) with a loose one (1.2), and a results table mixes
+   word spaces with column gaps (1.0 against 7.2) — the widest jump lies between the spaces there, and
+   every tighter space was glued ("Leconseil", "YoungBoys"). The gate never falls under the style
+   (`SPACE_FRACTION`, 0.28) on a line that has a gap past it — a looser letter pair in a display face is
+   letter fitting — nor under the kerning floor (`MIN_GAP`, 0.10) on a line whose gaps all sit under the
+   style, where the face's space width says more than its setting. A line with no valley says nothing
+   rather than guess (one tracked word and a line of isolated letters look alike); under `MIN_SEAMS` seams
+   there is no distribution and the style decides;
 3. **line end** (`endLine`) — the line ends on a word boundary: a trailing sentinel, unless it ends in a
    hyphen (left painted, for read-out to rejoin the split word or keep a compound). This seals the
    inter-line *and* inter-block same-line seam — a `Titre 2` marker block to its rubric block.

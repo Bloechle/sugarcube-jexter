@@ -22,9 +22,9 @@ import java.util.List;
  * order, and never touched again. It splices spaces by two concerns:
  * <ul>
  *   <li><b>inner spaces</b> ({@code spaceLine}) — the line is read as one glyph stream and, at every seam
- *       (intra-run and inter-run alike), the advance slack {@code step/size − advance} past half the font
- *       {@linkplain OCDFont#spaceWidth() space width} (the style) is a word space. One uniform rule, no
- *       per-line tuning, robust whatever the line holds (one glyph, one word, two words, a tab).
+ *       (intra-run and inter-run alike), the advance slack {@code step/size − advance}, as a ratio of the font's
+ *       {@linkplain OCDFont#spaceWidth() space width}, is a word space when it clears the line's own gate
+ *       ({@code gate}): the valley above its letter seams. One rule, intra-run and inter-run alike.
  *   <li><b>line end</b> ({@code endLine}) — the line ends on a word boundary: a trailing sentinel, unless it
  *       ends in a hyphen (left painted for read-out to rejoin the split word or keep a compound). This seals
  *       the inter-line and inter-block same-line seams (a {@code Titre 2} marker to its rubric).
@@ -51,6 +51,11 @@ public final class Spacer {
      *  believed; measured separations are 5x on a tracked line and unbounded on body text, so this is a floor,
      *  not a tuning. */
     private static final int    MIN_SEAMS  = 6;
+    /** × the font space width: no seam under this is a word space, whatever the line says — the top of the
+     *  kerning cluster on the same histogram (it dies at +0.05, the valley lies in [0.075, 0.10]). A line that
+     *  shows its own valley is gated there, down to this floor: its word spaces may sit well under the
+     *  style (0.16 of the face's space on a justified report, measured), and the style alone glued them. */
+    private static final double MIN_GAP    = 0.10;
     private static final double SEPARATION = 2.0;
     private static final double TIGHT      = 0.05;
 
@@ -87,8 +92,8 @@ public final class Spacer {
 
     /** Infer and splice the word spaces of a frozen line, runs already left→right. The line is read as a single
      *  glyph stream (prior sentinels skipped, so it is idempotent); at each seam the slack {@code step/size −
-     *  advance} is the gap the layout left beyond the left glyph's own width — past half the font space width
-     *  (the style) it is a word space. <b>One uniform rule, intra-run and inter-run alike</b>, so it needs no
+     *  advance} is the gap the layout left beyond the left glyph's own width — past the line's gate it is a
+     *  word space. <b>One uniform rule, intra-run and inter-run alike</b>, so it needs no
      *  per-line tuning and is robust whatever the line holds: one glyph (no seam), one word (every slack tight),
      *  two words or a tab (the space/tab clears the style, kerning never does). */
     private static void spaceLine(OCDDocument doc, List<OCDText> runs) {
@@ -96,11 +101,6 @@ public final class Spacer {
         List<G> gl = new ArrayList<>();
         for (OCDText t : runs) {
             OCDFont f = doc.findFont(t.fontId());
-            // The slack scale must be the run's HORIZONTAL em on the page — the same basis as the
-            // glyph x positions — not the nominal font size: PDF Tz (horizontal scaling, ubiquitous
-            // in press headlines at ~96-97%) makes them differ, and dividing horizontal deltas by
-            // the vertical size under-reads every gap by exactly Tz (measured: 0.045 vs 0.062 em on
-            // a 65 pt headline at Tz 96.5 — just under the gate, whole titles glued).
             // The slack scale must be the run's HORIZONTAL em on the page — the same basis as the
             // glyph x positions. PDF Tz (horizontal scaling, ubiquitous in press headlines at
             // ~93-97%) makes it differ from the nominal size: dividing horizontal deltas by the
@@ -128,7 +128,7 @@ public final class Spacer {
         if (gl.size() < 2) return;                                 // one glyph (or none): no seam, no space
 
         // The line names its own gate. Each seam is read as a RATIO of the face's space width, so a line that
-        // mixes sizes still compares; then the sorted ratios are split at their widest jump. Body text separates
+        // mixes sizes still compares; then the sorted ratios are split where the tight cluster ends. Body text separates
         // a charspace cluster at ~0 from word spaces at ~1; a tracked line separates 0.28 from 1.4. One absolute
         // number cannot serve both — the tracked page measured 0.078 em of tracking against a 0.0778 em gate,
         // two ten-thousandths under, and every letter seam became a word space.
@@ -159,25 +159,34 @@ public final class Spacer {
         });
     }
 
-    /** The seam gate for one line, as a ratio of the face's space width. A line with enough seams and two
-     *  separated clusters is gated at its own valley — never below {@link #SPACE_FRACTION}, so the gate is
-     *  only ever stricter than the style and the pass can only ever REMOVE a space, never invent one.
-     *  A line with one cluster cannot point at a valley: geometry alone cannot tell one tracked word from a
-     *  line of isolated letters, so it says nothing rather than guess. Too few seams is not a distribution:
-     *  the style decides, as before. */
+    /** The seam gate for one line, as a ratio of the face's space width. A line with enough seams is gated at
+     *  the valley that closes its TIGHT cluster — the letter seams, at ~0 in body text, at the tracking on a
+     *  tracked line: walking the sorted ratios up from the bottom, the first value that stands
+     *  {@link #SEPARATION}× above the cluster under it, across a jump at least as wide as that cluster is
+     *  spread, opens the word spaces. The gate never falls under the style ({@link #SPACE_FRACTION}) on a line
+     *  that has a gap past it, nor under the kerning floor ({@link #MIN_GAP}) on a line whose gaps all sit
+     *  under the style.
+     *
+     *  <p>The FIRST such valley, not the widest: a justified column mixes a tight word space (0.36 of the
+     *  face's space) with a loose one (1.2), and a results table mixes word spaces with column gaps (1.0 against
+     *  7.2). The widest jump lies BETWEEN the spaces there, and every tighter space under it was glued
+     *  ("Leconseil", "YoungBoys") — the press defect. A line with no such valley cannot point at a gap:
+     *  geometry alone cannot tell one tracked word from a line of isolated letters, so it says nothing rather
+     *  than guess. Too few seams is not a distribution: the style decides. */
     private static double gate(double[] ratio) {
         if (ratio.length < MIN_SEAMS) return SPACE_FRACTION;
         double[] s = ratio.clone();
         java.util.Arrays.sort(s);
-        int at = 0;
-        double widest = -1;
+        // A line with a seam past the style has word spaces of the style's size, and a looser letter pair under
+        // it is letter fitting ("des tination" in a display face). Only a line whose every gap sits under the
+        // style — the face's space width says more than its setting — is trusted down to the kerning floor.
+        double floor = s[s.length - 1] > SPACE_FRACTION ? SPACE_FRACTION : MIN_GAP;
         for (int i = 0; i + 1 < s.length; i++) {
-            double jump = s[i + 1] - s[i];
-            if (jump > widest) { widest = jump; at = i; }
+            double lo = median(s, 0, i + 1), next = s[i + 1];
+            if (next >= SEPARATION * Math.max(lo, TIGHT) && next - s[i] >= s[i] - lo
+                    && median(s, i + 1, s.length) > floor)
+                return Math.max((s[i] + next) / 2, floor);
         }
-        double lo = median(s, 0, at + 1), hi = median(s, at + 1, s.length);
-        if (hi > SPACE_FRACTION && hi >= SEPARATION * Math.max(lo, TIGHT))
-            return Math.max((s[at] + s[at + 1]) / 2, SPACE_FRACTION);
         return Double.POSITIVE_INFINITY;
     }
 

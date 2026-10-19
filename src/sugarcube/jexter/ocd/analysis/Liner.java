@@ -103,27 +103,30 @@ final class Liner {
         return t.transform().quarterTurns();
     }
 
-    /** Mutable line accumulator: the member runs, the line's writing axis, and the union band. */
+    /** Mutable line accumulator: the member runs, the line's writing axis, and its band — the band of its
+     *  TALLEST run, never the union of all of them. A union grows with every run it takes, so two columns
+     *  set on offset baselines chain: each line overlaps the half-line beside it, the band slides down one
+     *  step at a time, and a whole paragraph of one column lands in one "line" with the other column's
+     *  lines (measured on a two-column paper: the abstract read as one line, no word space left in it). */
     private static final class Acc {
         final List<OCDText> runs = new ArrayList<>();
         final Box box;
         final int axis;
-        JxRect bounds;
+        JxRect band;
 
         Acc(OCDText t, Box box) { this.box = box; this.axis = box.axis(t); add(t); }
 
         void add(OCDText t) {
             runs.add(t);
             JxRect b = box.of(t);
-            bounds = bounds == null ? b : bounds.union(b);
+            if (band == null || b.height() > band.height()) band = b;
         }
 
-        /** Join iff the run shares the line's band (≥{@link #OVERLAP_MIN} of the smaller) and is not far
-         *  larger than the line. The upper size bound rejects a drop-cap (its tall band overlaps a short
-         *  line band fully yet belongs to none); a smaller script passes both and attaches, no special case. */
+        /** Join iff the run writes along the line's axis and shares its band (≥{@link #OVERLAP_MIN} of the
+         *  smaller): a raised or shrunk sub/superscript sits inside the band and joins, no special case. */
         boolean accepts(OCDText t) {
             return box.axis(t) == axis                              // a different baseline direction is a different line
-                && vOverlap(box.of(t), bounds) >= OVERLAP_MIN;      // then overlap alone is the band — a raised/shrunk sub/superscript belongs to its line
+                && vOverlap(box.of(t), band) >= OVERLAP_MIN;
         }
 
         /** Cut this band into lines at every gap wider than {@link #COLUMN_GAP} (a column gutter or a margin

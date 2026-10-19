@@ -12,6 +12,7 @@
 //             with the model's render (< 0.25 %): a gap there is lost in the model, not in the painting.
 //   FURNITURE running heads and folios stay on the page and out of every structure the writers read.
 //   AGAIN     a second Analysis.run writes the same container, and reading the stages changes nothing.
+//   WORDS     a fixture that declares its text reads it word for word: no space glued, none invented.
 //   STRADDLE  no paragraph wraps a paint span another node sits inside (it could not be stored atomically).
 //   CLIPS     every clip reference resolves, on the imported model and on the model read back.
 //   COPY      a page and its copy project identically, and editing the copy leaves the page alone.
@@ -103,6 +104,7 @@ public final class Gates {
             gate("TAGS",     () -> tags(pdf, model));
             gate("PIXELS",   () -> pixels(pdf, model));
             gate("FURNITURE",() -> furniture(model));
+            gate("WORDS",    () -> words(pdf.getName(), ocd));
             gate("AGAIN",    () -> again(pdf));
             gate("STRADDLE", () -> straddle(model));
             gate("CLIPS",    () -> clips(model, OCDReader.read(container.toFile())));
@@ -284,6 +286,19 @@ public final class Gates {
     }
 
     // ── STRADDLE ─────────────────────────────────────────────────────────────────
+
+    // ── WORDS ────────────────────────────────────────────────────────────────────
+
+    /** The read-out holds every line the fixture declares, word for word: a glued word, a split one or two
+     *  columns read as one line each break a line. Only fixtures that declare their words are checked. */
+    private static List<String> words(String name, byte[] ocd) throws Exception {
+        List<String> lines = Fixtures.WORDS.get(name.replaceFirst("\\.pdf$", ""));
+        if (lines == null) return ok();
+        String md = new String(to(ocd, "md"), java.nio.charset.StandardCharsets.UTF_8).replaceAll("\\s+", " ");
+        List<String> bad = new ArrayList<>();
+        for (String l : lines) if (!(" " + md + " ").contains(" " + l + " ")) bad.add("not read as written: \"" + l + "\"");
+        return bad;
+    }
 
     // ── NAV ──────────────────────────────────────────────────────────────────────
 

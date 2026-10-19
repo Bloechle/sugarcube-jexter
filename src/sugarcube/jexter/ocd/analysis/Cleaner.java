@@ -116,9 +116,13 @@ public final class Cleaner {
      * capitals all map to U+0020 is not a page full of spaces, it is a page whose letters we are about
      * to delete. So a blank claim is checked against the FONT: the glyph goes only if its outline is
      * absent or empty. An unknown font or an unknown gid paints nothing either way, so it goes too.
+     * A glyph that claims NO text is asked the same question: an inkless one is a space whose
+     * {@code toUnicode} the producer forgot, and kept, it hid the gap it stands for from {@link Spacer} —
+     * a whole report read with no word space in it.
      */
     private static boolean paintsNothing(OCDText t, OCDText.Glyph g, OCDDocument doc) {
-        if (!g.isBlank()) return false;                  // carries text: never this pass's business
+        boolean mute = g.unicode() == null || g.unicode().isEmpty();
+        if (!g.isBlank() && !mute) return false;          // carries text: never this pass's business
         OCDFont f = doc == null ? null : doc.font(t.fontId());
         if (f == null) return true;                      // nothing to ask: the old, text-only verdict
         OCDGlyph gl = f.glyph(g.gid());

@@ -325,6 +325,11 @@ Analysis (`ocd.analysis`)
 - Three structures coexist, priority `pdf` (PDF/UA, built at import) > `outline` > `heuristic`.
   Nav-guided alignment is self-reference: the matched strings come from the document itself.
 - Figures, tables, captions, lists, code are deferred to `Refiner` — do not re-add a heuristic.
+- Word spaces are judged against PDFBox's extractor in BOTH directions: glued (our long words the reference
+  never has) and lost (its long words we never produce). A gate change that improves one and is not
+  measured on the other has not been measured. The `text_press` fixture and the WORDS gate hold the press
+  shapes (justified spaces, results tables, tracking, Tz, offset columns); a line's band is its tallest
+  run, never a growing union; an inkless glyph with no text is a space whose ToUnicode was forgotten.
 
 ## 6 · Client traps (Prism, the Inspector, Jexter)
 
