@@ -1,5 +1,7 @@
 package sugarcube.jexter.font;
 
+import sugarcube.jexter.core.JxName;
+
 import sugarcube.jexter.ocd.model.OCDFont;
 import sugarcube.jexter.ocd.model.OCDGlyph;
 
@@ -72,7 +74,85 @@ abstract sealed class OtfBuilder permits CffOtf, GlyfOtf {
     }
 
     // ════════════════════════ format-independent tables ════════════════════════
-    final byte[] hhea(int numGlyphs, int advMax) {
+    // Every metric is an em fraction, put on the builder's grid by r(): the two formats differ by their grid
+    // and the tables that are theirs (glyf/loca/maxp 1.0 or CFF/maxp 0.5), never by a number written twice.
+
+    /** The widest advance and the mean one, in font units — hhea and OS/2 both need them. */
+    final int[] advances() {
+        int max = 0, sum = 0, n = 0;
+        for (OCDGlyph g : glyphs) { if (g == null) continue; int a = r(g.advance()); max = Math.max(max, a); sum += a; n++; }
+        return new int[] { max, n > 0 ? sum / n : 0 };
+    }
+
+    /** {@code head}: {@code flags} and {@code indexToLocFormat} are the format's (TrueType long offsets, or 0). */
+    final byte[] head(int flags, int indexToLocFormat) {
+        Buf b = new Buf();
+        b.u16(1); b.u16(0);                                        // version 1.0
+        b.u32(0x00010000L);                                        // fontRevision
+        b.u32(0);                                                  // checkSumAdjustment (patched by sfnt)
+        b.u32(0x5F0F3CF5L);                                        // magic
+        b.u16(flags);
+        b.u16(em());                                               // unitsPerEm
+        b.u32(0); b.u32(0);                                        // created
+        b.u32(0); b.u32(0);                                        // modified
+        b.u16(xMin & 0xFFFF); b.u16(yMin & 0xFFFF); b.u16(xMax & 0xFFFF); b.u16(yMax & 0xFFFF);
+        b.u16((font.isBold() ? 1 : 0) | (font.isItalic() ? 2 : 0));// macStyle
+        b.u16(8);                                                  // lowestRecPPEM
+        b.u16(2);                                                  // fontDirectionHint
+        b.u16(indexToLocFormat);
+        b.u16(0);                                                  // glyphDataFormat
+        return b.out();
+    }
+
+    /** {@code cmap}: one format-4 subtable, under both the Unicode (0,3) and the Windows (3,1) records. */
+    final byte[] cmapTable() {
+        byte[] sub = cmap4();
+        Buf b = new Buf();
+        b.u16(0); b.u16(2);                                        // version, numTables
+        int subOff = 4 + 2 * 8;
+        b.u16(0); b.u16(3); b.u32(subOff);                        // (0,3) Unicode BMP
+        b.u16(3); b.u16(1); b.u32(subOff);                        // (3,1) Windows BMP
+        b.bytes(sub);
+        return b.out();
+    }
+
+    final byte[] os2() {
+        Buf b = new Buf();
+        b.u16(4);                                                  // version
+        b.u16(advances()[1]);                                      // xAvgCharWidth
+        b.u16(font.isBold() ? 700 : 400);                          // usWeightClass
+        b.u16(5);                                                  // usWidthClass
+        b.u16(0);                                                  // fsType (installable)
+        b.u16(r(0.65)); b.u16(r(0.70)); b.u16(0); b.u16(r(0.14));  // subscript x/y size, x/y offset
+        b.u16(r(0.65)); b.u16(r(0.70)); b.u16(0); b.u16(r(0.48));  // superscript
+        b.u16(r(0.05)); b.u16(r(font.capHeight() != 0 ? font.capHeight() * 0.6 : 0.3)); // strikeout size, position
+        b.u16(0);                                                  // sFamilyClass
+        for (int i = 0; i < 10; i++) b.u8(0);                      // panose
+        b.u32(1); b.u32(0); b.u32(0); b.u32(0);                    // unicode ranges (basic latin bit)
+        b.bytes("JEXT".getBytes(java.nio.charset.StandardCharsets.US_ASCII)); // achVendID
+        b.u16((font.isItalic() ? 0x01 : 0) | (font.isBold() ? 0x20 : 0) | (!font.isBold() && !font.isItalic() ? 0x40 : 0));
+        b.u16(cmap.isEmpty() ? 0x20 : cmap.firstKey());            // usFirstCharIndex
+        b.u16(cmap.isEmpty() ? 0x20 : cmap.lastKey());             // usLastCharIndex
+        b.u16(r(font.ascent())); b.u16(r(font.descent())); b.u16(0); // typo asc/desc (negative)/linegap
+        b.u16(r(font.ascent())); b.u16(-r(font.descent()));       // win asc/desc (positive)
+        b.u32(1); b.u32(0);                                        // code page range (latin1)
+        b.u16(r(font.xHeight())); b.u16(r(font.capHeight()));      // sxHeight, sCapHeight
+        b.u16(0); b.u16(0x20); b.u16(0);                           // default, break, maxContext
+        return b.out();
+    }
+
+    final byte[] post() {
+        Buf b = new Buf();
+        b.u32(0x00030000L);                                        // version 3.0 (no names)
+        b.u32(0);                                                  // italicAngle
+        b.u16(r(-0.1) & 0xFFFF); b.u16(r(0.05));                   // underlinePosition, underlineThickness
+        b.u32(0);                                                  // isFixedPitch
+        b.u32(0); b.u32(0); b.u32(0); b.u32(0);                    // mem usage
+        return b.out();
+    }
+
+    final byte[] hhea(int numGlyphs) {
+        int advMax = advances()[0];
         Buf b = new Buf();
         b.u32(0x00010000L);
         b.u16(r(font.ascent())); b.u16(r(font.descent())); b.u16(0);   // descender: negative (OCDFont)
@@ -171,7 +251,7 @@ abstract sealed class OtfBuilder permits CffOtf, GlyfOtf {
     final String psName() {
         String s = font.id() != null ? font.id()
                 : font.name() != null ? font.name() : (font.family() != null ? font.family() : "Font");
-        if (s.indexOf('+') == 6) s = s.substring(7);
+        s = JxName.unsubset(s);
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < s.length() && sb.length() < 60; i++) {
             char c = s.charAt(i);
@@ -206,7 +286,7 @@ abstract sealed class OtfBuilder permits CffOtf, GlyfOtf {
         for (int i = 0; i < numTables; i++) {
             Table t = tables.get(i);
             b.bytes(t.tag.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
-            b.u32(checksum(t.data));
+            b.u32(JxFont.checksum(t.data));
             b.u32(offs[i]);
             b.u32(t.data.length);
         }
@@ -217,17 +297,9 @@ abstract sealed class OtfBuilder permits CffOtf, GlyfOtf {
         }
 
         byte[] out = b.out();
-        long adj = (0xB1B0AFBAL - checksum(out)) & 0xFFFFFFFFL;
+        long adj = (0xB1B0AFBAL - JxFont.checksum(out)) & 0xFFFFFFFFL;
         int ho = offs[headIdx];
         out[ho + 8] = (byte) (adj >> 24); out[ho + 9] = (byte) (adj >> 16); out[ho + 10] = (byte) (adj >> 8); out[ho + 11] = (byte) adj;
         return out;
-    }
-
-    static long checksum(byte[] data) {
-        long sum = 0;
-        int i = 0, len = data.length;
-        while (i + 4 <= len) { sum += ((data[i] & 0xFFL) << 24) | ((data[i + 1] & 0xFFL) << 16) | ((data[i + 2] & 0xFFL) << 8) | (data[i + 3] & 0xFFL); i += 4; }
-        if (i < len) { long v = 0; for (int s = 24; i < len; i++, s -= 8) v |= (data[i] & 0xFFL) << s; sum += v; }
-        return sum & 0xFFFFFFFFL;
     }
 }

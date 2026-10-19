@@ -20,10 +20,16 @@ public record JxColor(int argb) {
     }
 
     /** From a [0..1] RGB triplet (e.g. PDFBox {@code PDColorSpace.toRGB}), opaque. */
-    public static JxColor ofRgb(float[] rgb) {
-        return rgb == null ? BLACK
-                : rgba(Math.round(rgb[0] * 255), Math.round(rgb[1] * 255), Math.round(rgb[2] * 255), 255);
+    public static JxColor ofRgb(float[] rgb) { return ofRgb(rgb, 1f); }
+
+    /** From a [0..1] RGB triplet and a [0..1] alpha, each clamped — the one float-colour conversion. */
+    public static JxColor ofRgb(float[] rgb, float alpha) {
+        return rgb == null ? BLACK : rgba(unit(rgb[0]), unit(rgb[1]), unit(rgb[2]), unit(alpha));
     }
+
+    /** A [0..1] component (clamped) as 0..255. */
+    public static int unit(float v)  { return Math.round(Math.max(0f, Math.min(1f, v)) * 255); }
+    public static int unit(double v) { return (int) Math.round(Math.max(0, Math.min(1, v)) * 255); }
 
     public int a() { return (argb >>> 24) & 0xFF; }
     public int r() { return (argb >> 16) & 0xFF; }

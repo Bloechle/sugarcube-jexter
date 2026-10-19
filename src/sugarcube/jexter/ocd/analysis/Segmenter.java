@@ -280,7 +280,7 @@ public final class Segmenter {
             sb.append(t.text() == null ? "" : t.text());
             JxRect b = t.bounds();
             yc += b.cy();
-            bounds = bounds.isEmpty() ? b : bounds.union(b);
+            bounds = bounds.union(b);
             if (t.id() != null) ids.add(t.id());
         }
         double[] st = runStyle(doc, runs);                    // [dominant size, bold fraction]
@@ -377,7 +377,7 @@ public final class Segmenter {
     private static void finish(OCDDocument doc, Block b) {
         List<OCDText> runs = new ArrayList<>();
         for (Line ln : b.lines) {
-            b.bounds = b.bounds.isEmpty() ? ln.bounds : b.bounds.union(ln.bounds);
+            b.bounds = b.bounds.union(ln.bounds);
             b.nodeIds.addAll(ln.nodeIds);
             runs.addAll(ln.runs);
         }

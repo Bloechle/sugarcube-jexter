@@ -76,6 +76,13 @@ public final class OCDFont {
         if (g != null) glyphs.put(g.gid(), g);
         return this;
     }
+    /** A font BUILT character by character (a loaded TTF, a drawn hand): the next glyph id, its outline, and
+     *  the cmap entry naming it — the one way the font builders add a glyph. */
+    public OCDFont addChar(int codepoint, sugarcube.jexter.core.JxPath outline, double advance) {
+        int gid = glyphs.keySet().stream().mapToInt(Integer::intValue).max().orElse(0) + 1;
+        add(new OCDGlyph(gid, new String(Character.toChars(codepoint)), outline, advance));
+        return map(codepoint, gid);
+    }
     public OCDGlyph glyph(int gid)             { return glyphs.get(gid); }
     public boolean  hasGlyph(int gid)          { return glyphs.containsKey(gid); }
     public Map<Integer, OCDGlyph> glyphs()     { return glyphs; }

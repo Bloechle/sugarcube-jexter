@@ -47,8 +47,8 @@ public final class TtfImporter {
 
     private TtfImporter() {}
 
-    /** One extracted glyph: codepoint, em-unit outline as an SVG path, em advance width. */
-    public record Glyph(int cp, String emSvg, double advance) {}
+    /** One extracted glyph: codepoint, em-unit outline, em advance width. */
+    public record Glyph(int cp, JxPath outline, double advance) {}
 
     /** Extract the requested codepoints (those the font actually maps and outlines). */
     public static List<Glyph> extract(byte[] ttf, int[] codepoints) throws IOException {
@@ -76,7 +76,7 @@ public final class TtfImporter {
             if (gp == null) continue;
             JxPath em = new JxPath(toEm.createTransformedShape(gp));      // non-zero winding, holes already correct
             if (em.isEmpty() || em.bounds().isEmpty()) continue;
-            out.add(new Glyph(cp, em.toSvg(), font.getAdvanceWidth(gid) * s));
+            out.add(new Glyph(cp, em, font.getAdvanceWidth(gid) * s));
         }
         return out;
     }

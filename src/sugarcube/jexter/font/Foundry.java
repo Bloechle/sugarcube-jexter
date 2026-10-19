@@ -1,6 +1,7 @@
 package sugarcube.jexter.font;
 
 import sugarcube.jexter.core.JxJson;
+import sugarcube.jexter.core.JxName;
 import sugarcube.jexter.core.JxPath;
 import sugarcube.jexter.core.JxStringer;
 import sugarcube.jexter.ocd.model.OCDFont;
@@ -72,11 +73,10 @@ public final class Foundry {
         String format = orDefault(JxJson.str(req, "format"), "ttf").toLowerCase(Locale.ROOT);
         Guides g = guides(JxJson.has(req, "guides") ? JxJson.obj(req, "guides") : java.util.Map.of());
 
-        OCDFont font = new OCDFont(name).family(family).id(slug(name))
+        OCDFont font = new OCDFont(name).family(family).id(JxName.safe(name))
                 .ascent(EM_ASCENT).descent(EM_DESCENT).capHeight(EM_CAP)
                 .xHeight(EM_XHEIGHT).spaceWidth(EM_SPACE).embedded(true);
 
-        int gid = 1;
         for (Object e : JxJson.arr(req, "glyphs")) {
             Map<String, Object> ge = JxJson.asObj(e);
             int cp = (int) JxJson.lng(ge, "cp");
@@ -94,14 +94,13 @@ public final class Foundry {
                 if (outline == null) continue;                   // blank cell
                 advance = outline.bounds().getWidth() + 2 * SIDE_BEAR;
             }
-            font.add(new OCDGlyph(gid, new String(Character.toChars(cp)), outline, advance));
-            font.map(cp, gid++);
+            font.addChar(cp, outline, advance);
         }
         if (font.glyphCount() == 0) throw new IllegalArgumentException("no glyphs traced");
 
         boolean cff = format.equals("otf") || format.equals("cff");
         byte[] data = cff ? JxFont.toCffOtf(font) : JxFont.toOtf(font);
-        return new Font(data, slug(name) + (cff ? ".otf" : ".ttf"), cff ? "font/otf" : "font/ttf");
+        return new Font(data, JxName.safe(name) + (cff ? ".otf" : ".ttf"), cff ? "font/otf" : "font/ttf");
     }
 
     // ── trace + em-normalization (the one piece of glue) ─────────────────────────
@@ -151,10 +150,4 @@ public final class Foundry {
     }
 
     private static String orDefault(String v, String def) { return v == null || v.isBlank() ? def : v; }
-
-    /** Font id slug: keep letters/digits, drop the rest, never empty. */
-    public static String slug(String s) {
-        String t = (s == null ? "" : s).replaceAll("[^A-Za-z0-9]+", "");
-        return t.isEmpty() ? "MyHand" : t;
-    }
 }

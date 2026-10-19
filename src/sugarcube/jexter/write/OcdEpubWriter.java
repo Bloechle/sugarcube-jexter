@@ -1,17 +1,14 @@
 package sugarcube.jexter.write;
 
 import sugarcube.jexter.core.ConvertOptions;
-import sugarcube.jexter.core.JxText;
 import sugarcube.jexter.core.JxZip;
 import sugarcube.jexter.ocd.io.OCDVocab;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDPage;
-import sugarcube.jexter.ocd.model.OCDStructNode;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Locale;
 
 import static sugarcube.jexter.write.EpubPackage.OPF;
 import static sugarcube.jexter.write.EpubPackage.num;
@@ -54,8 +51,10 @@ public final class OcdEpubWriter {
             EpubPackage.cover(zip, doc);
             String coverKey = pages(zip, doc);                    // SVG-OCD pages (universal face)
             members(zip, doc, coverKey);                          // ocd/* (authoritative face)
-            nav(zip, doc);
-            ncx(zip, doc, uid);
+            String toc = doc.structure() != null
+                    ? EpubPackage.tocOl(doc.structure(), OCDIndex.of(doc), EpubPackage::headingHref) : "";
+            zip.deflated(OPF + "nav.xhtml", EpubPackage.fixedNav(doc, toc));
+            zip.deflated(OPF + "toc.ncx", EpubPackage.fixedNcx(doc, uid));
             opf(zip, doc, uid);
         }
     }
@@ -155,109 +154,32 @@ public final class OcdEpubWriter {
             zip.deflated(JX + "annots.json", utf8(OcdMembers.annotsJson(doc)));
     }
 
-    // ── logical navigation (shared skeleton) ─────────────────────────────────────
-
-    private static void nav(JxZip zip, OCDDocument doc) throws IOException {
-        OCDIndex ix = OCDIndex.of(doc);
-        String tocInner = doc.structure() != null
-                ? EpubPackage.tocOl(doc.structure(), ix, EpubPackage::headingHref) : "";
-        if (tocInner.isBlank()) {
-            var sb = new StringBuilder();
-            int i = 1;
-            for (OCDPage ignored : doc.pages())
-                sb.append("    <li><a href=\"").append(OCDVocab.pageHref(i)).append("\">Page ")
-                  .append(i++).append("</a></li>\n");
-            tocInner = sb.toString();
-        }
-        var plist = new StringBuilder();
-        int i = 1;
-        for (OCDPage ignored : doc.pages())
-            plist.append("    <li><a href=\"").append(OCDVocab.pageHref(i)).append("\">")
-                 .append(i++).append("</a></li>\n");
-        String start = OCDVocab.pageHref(1);
-        zip.deflated(OPF + "nav.xhtml", EpubPackage.navDoc(EpubPackage.title(doc), tocInner, start, plist.toString()));
-    }
-
-
-    private static void ncx(JxZip zip, OCDDocument doc, String uid) throws IOException {
-        var pts = new StringBuilder();
-        var heads = new java.util.ArrayList<OCDStructNode>();
-        if (doc.structure() != null) EpubPackage.collectHeadings(doc.structure(), heads);
-        OCDIndex ix = OCDIndex.of(doc);
-        var ncx = new EpubPackage.Ncx();
-        if (!heads.isEmpty()) {
-            for (OCDStructNode h : heads) ncx.add(EpubPackage.label(h, ix), EpubPackage.headingHref(h));
-        } else {
-            int n = 1;
-            for (OCDPage ignored : doc.pages()) { ncx.add("Page " + n, OCDVocab.pageHref(n)); n++; }
-        }
-        zip.deflated(OPF + "toc.ncx", EpubPackage.ncx(uid, EpubPackage.title(doc), ncx.inner()));
-    }
-
-    // ── package: manifest declares BOTH faces ────────────────────────────────────
+    // ── the package: the shared fixed-layout skeleton, which declares BOTH faces ────
 
     private static void opf(JxZip zip, OCDDocument doc, String uid) throws IOException {
-        var manifest = new StringBuilder();
-        var spine = new StringBuilder();
-        manifest.append("    <item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/>\n");
-        manifest.append("    <item id=\"ncx\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/>\n");
-        manifest.append("    <item id=\"glyphs\" href=\"pages/fonts.svg\" media-type=\"image/svg+xml\"/>\n");
-        if (!doc.pages().isEmpty())
-            manifest.append("    <item id=\"cover-image\" href=\"").append(EpubPackage.COVER_HREF)
-                    .append("\" media-type=\"").append(EpubPackage.COVER_MEDIA).append("\" properties=\"cover-image\"/>\n");
-        for (var e : doc.images().entrySet()) {
-            String n = safe(e.getKey());
-            manifest.append("    <item id=\"img-").append(n).append("\" href=\"images/").append(n)
-                    .append("\" media-type=\"").append(EpubPackage.mediaForImage(n)).append("\"/>\n");
+        var media = new StringBuilder();
+        for (String name : doc.media().keySet()) {
+            String n = safe(name);
+            EpubPackage.item(media, "med-" + n, "media/" + n, EpubPackage.mediaType(n), null);
         }
-        for (var e : doc.media().entrySet()) {
-            String n = safe(e.getKey());
-            manifest.append("    <item id=\"med-").append(n).append("\" href=\"media/").append(n)
-                    .append("\" media-type=\"").append(mediaFor(n)).append("\"/>\n");
-        }
-        int p = 1;
-        for (String path : doc.passengers().keySet()) {
-            // Declared, or epubcheck refuses the container: an EPUB manifest must list every resource.
-            manifest.append("    <item id=\"px-").append(p++).append("\" href=\"").append(JxText.attr(path))
-                    .append("\" media-type=\"").append(EpubPackage.mediaForPath(path)).append("\"/>\n");
-        }
-        int i = 1;
-        for (OCDPage ignored : doc.pages()) {
-            manifest.append("    <item id=\"page-").append(i).append("\" href=\"").append(OCDVocab.pageHref(i))
-                    .append("\" media-type=\"application/xhtml+xml\" properties=\"svg\"/>\n");
-            spine.append("    <itemref idref=\"page-").append(i).append("\"/>\n");
-            i++;
-        }
-        // the authoritative face — every ocd/* member is a declared publication resource
-        jx(manifest, "jx-meta", "meta.json");
+        int p = 1;      // declared, or epubcheck refuses the container: an EPUB manifest lists every resource
+        for (String path : doc.passengers().keySet())
+            EpubPackage.item(media, "px-" + p++, path, EpubPackage.mediaType(path), null);
+        var members = new StringBuilder();   // the authoritative face — every ocd/* member is a declared resource
+        member(members, "jx-meta", "meta.json");
         if (doc.outputIntent() != null && doc.outputIntent().profile() != null)
-            manifest.append("    <item id=\"jx-output-intent\" href=\"ocd/").append(OcdMembers.OUTPUT_INTENT_PROFILE)
-                    .append("\" media-type=\"application/vnd.iccprofile\"/>\n");
-        jx(manifest, "jx-outline", "outline.json");
-        if (!doc.structures().isEmpty()) jx(manifest, "jx-structures", "structures.json");
-        if (OcdMembers.hasAnnots(doc)) jx(manifest, "jx-annots", "annots.json");
-
-        String coverMeta = doc.pages().isEmpty() ? "" : "<meta name=\"cover\" content=\"cover-image\"/>\n";
-        String metaExtra = coverMeta + EpubPackage.dublinCore(doc.meta()) + EpubPackage.accessibilityMeta(doc, true);
-        String opf = EpubPackage.packageOpf(uid, EpubPackage.title(doc), EpubPackage.lang(doc),
-                metaExtra, manifest.toString(), spine.toString(), true, EpubPackage.deterministicModified(doc));
-        zip.deflated(OPF + "content.opf", opf);
+            member(members, "jx-output-intent", OcdMembers.OUTPUT_INTENT_PROFILE);
+        member(members, "jx-outline", "outline.json");
+        if (!doc.structures().isEmpty()) member(members, "jx-structures", "structures.json");
+        if (OcdMembers.hasAnnots(doc)) member(members, "jx-annots", "annots.json");
+        var glyphs = new StringBuilder();
+        EpubPackage.item(glyphs, "glyphs", "pages/fonts.svg", "image/svg+xml", null);
+        zip.deflated(OPF + "content.opf", EpubPackage.fixedOpf(doc, uid, glyphs.toString(), media.toString(),
+                members.toString(), EpubPackage.deterministicModified(doc)));
     }
 
-    private static void jx(StringBuilder manifest, String id, String href) {
-        manifest.append("    <item id=\"").append(id).append("\" href=\"ocd/").append(href)
-                .append("\" media-type=\"application/json\"/>\n");
-    }
-
-    private static String mediaFor(String name) {
-        String n = name.toLowerCase(Locale.US);
-        if (n.endsWith(".mp4") || n.endsWith(".m4v")) return "video/mp4";
-        if (n.endsWith(".webm")) return "video/webm";
-        if (n.endsWith(".mp3"))  return "audio/mpeg";
-        if (n.endsWith(".m4a"))  return "audio/mp4";
-        if (n.endsWith(".ogg") || n.endsWith(".oga")) return "audio/ogg";
-        if (n.endsWith(".wav"))  return "audio/wav";
-        return "application/octet-stream";
+    private static void member(StringBuilder manifest, String id, String name) {
+        EpubPackage.item(manifest, id, "ocd/" + name, EpubPackage.mediaType(name), null);
     }
 
     private static byte[] utf8(String s) { return s.getBytes(StandardCharsets.UTF_8); }

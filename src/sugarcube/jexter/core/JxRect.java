@@ -47,6 +47,13 @@ public record JxRect(double x, double y, double width, double height) {
         return x < r.right() && right() > r.x && y < r.maxY() && maxY() > r.y;
     }
 
+    /** The box spanning both, a degenerate side (a 0-pt rule) included — where {@link #union} drops an empty one. */
+    public JxRect span(JxRect r) {
+        double nx = Math.min(x, r.x), ny = Math.min(y, r.y);
+        return new JxRect(nx, ny, Math.max(right(), r.right()) - nx, Math.max(maxY(), r.maxY()) - ny);
+    }
+
+    /** The box covering both, ignoring an empty side. */
     public JxRect union(JxRect r) {
         if (isEmpty()) return r;
         if (r.isEmpty()) return this;

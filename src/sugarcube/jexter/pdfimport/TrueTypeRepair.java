@@ -10,6 +10,7 @@ import org.apache.pdfbox.io.RandomAccessReadBuffer;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.core.JxProgress;
+import sugarcube.jexter.font.JxFont;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -162,22 +163,11 @@ final class TrueTypeRepair {
             int newOff = (b.length + 3) & ~3;                      // sfnt tables are 4-byte aligned
             byte[] out = java.util.Arrays.copyOf(b, newOff + ((table.length + 3) & ~3));
             System.arraycopy(table, 0, out, newOff, table.length);
-            put32(out, post.entry + 4, checksum(table));
+            put32(out, post.entry + 4, (int) JxFont.checksum(table));
             put32(out, post.entry + 8, newOff);
             put32(out, post.entry + 12, table.length);
             return out;
         } catch (RuntimeException malformed) { return null; }
-    }
-
-    /** The sfnt table checksum: the sum of the table's 32-bit words, zero-padded to a word. */
-    private static int checksum(byte[] t) {
-        int sum = 0;
-        for (int i = 0; i < t.length; i += 4) {
-            int w = 0;
-            for (int k = 0; k < 4; k++) w = (w << 8) | (i + k < t.length ? t[i + k] & 255 : 0);
-            sum += w;
-        }
-        return sum;
     }
 
     private static void put32(byte[] b, int at, int v) {

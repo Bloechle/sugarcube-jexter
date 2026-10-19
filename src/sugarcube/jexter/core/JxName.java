@@ -8,4 +8,9 @@ public final class JxName {
     public static String safe(String s) {
         return (s == null || s.isEmpty()) ? "unnamed" : s.replaceAll("[^A-Za-z0-9._-]", "_");
     }
+
+    /** A font name without its subset tag: {@code ABCDEF+Garamond → Garamond} (PDF 9.6.4). */
+    public static String unsubset(String name) {
+        return name != null && name.length() > 7 && name.charAt(6) == '+' ? name.substring(7) : name;
+    }
 }

@@ -343,15 +343,9 @@ public final class Conversion {
         String name = sugarcube.jexter.pdfimport.TtfImporter.name(bytes);
         var font = new sugarcube.jexter.ocd.model.OCDFont(name).family(name)
                 .id(sugarcube.jexter.core.JxName.safe(name)).embedded(true);
-        int gid = 1;
-        for (var g : glyphs) {
-            var path = sugarcube.jexter.core.JxPath.ofSvg(g.emSvg());
-            if (path == null || path.isEmpty()) continue;
-            font.add(new sugarcube.jexter.ocd.model.OCDGlyph(gid, new String(Character.toChars(g.cp())), path, g.advance()));
-            font.map(g.cp(), gid++);
-        }
+        for (var g : glyphs) font.addChar(g.cp(), g.outline(), g.advance());
         doc.add(font);
-        JxLog.info("addFont", name + " — " + (gid - 1) + " glyph(s)");
+        JxLog.info("addFont", name + " — " + font.glyphCount() + " glyph(s)");
     }
 
     private static final String PRINTABLE_ASCII =

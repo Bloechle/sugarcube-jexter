@@ -7,7 +7,6 @@ import sugarcube.jexter.ocd.io.OCDVocab;
 import sugarcube.jexter.font.JxFont;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDFont;
-import sugarcube.jexter.ocd.model.OCDStructNode;
 import sugarcube.jexter.ocd.model.OCDPage;
 
 import java.io.IOException;
@@ -54,9 +53,9 @@ public final class EpubWriter {
             EpubPackage.images(zip, doc);                                    // OEBPS/images/*
             EpubPackage.cover(zip, doc);                         // OEBPS/images/cover.jpg (rasterized page 1)
             pagesXhtml(zip, doc, annotations);                   // OEBPS/pages/page-NNN.xhtml (inline SVG)
-            nav(zip, doc, opt);                                  // OEBPS/nav.xhtml (logical: toc + page-list)
-            ncx(zip, doc, uid);                                  // OEBPS/toc.ncx (EPUB2 compat)
-            opf(zip, doc, uid);                                  // OEBPS/content.opf (manifest + spine)
+            zip.deflated(OPF + "nav.xhtml", EpubPackage.fixedNav(doc, toc(doc, opt)));   // toc + page-list
+            zip.deflated(OPF + "toc.ncx", EpubPackage.fixedNcx(doc, uid));               // EPUB2 compat
+            zip.deflated(OPF + "content.opf", opf(doc, uid));                            // manifest + spine
         }
     }
 
@@ -109,86 +108,26 @@ public final class EpubWriter {
         }
     }
 
-    // ── logical: EPUB3 navigation (toc + landmarks + page-list) ──────────────────
+    // ── logical: the toc (headings, or every page with navPerPage) — the rest is the shared package ──
 
-    private static void nav(JxZip zip, OCDDocument doc, ConvertOptions opt) throws IOException {
+    private static String toc(OCDDocument doc, ConvertOptions opt) {
         OCDIndex ix = OCDIndex.of(doc);
         // navPerPage: every page in the nav, headings where they exist, "Page N" otherwise. A
         // projection choice, not a fact about the document — the model is never touched.
-        String tocInner = Boolean.TRUE.equals(opt.get(ConvertOptions.NAV_PER_PAGE))
-                ? EpubPackage.tocPerPage(doc, doc.structure(), ix,
-                        p -> OCDVocab.pageHref(p + 1), p -> "Page " + (p + 1))
-                : doc.structure() != null
-                ? EpubPackage.tocOl(doc.structure(), ix, EpubPackage::headingHref) : "";
-        if (tocInner.isBlank()) {
-            var sb = new StringBuilder();
-            int i = 1;
-            for (OCDPage ignored : doc.pages())
-                sb.append("    <li><a href=\"").append(OCDVocab.pageHref(i)).append("\">Page ")
-                  .append(i++).append("</a></li>\n");
-            tocInner = sb.toString();
-        }
-        var plist = new StringBuilder();
-        int i = 1;
-        for (OCDPage ignored : doc.pages())
-            plist.append("    <li><a href=\"").append(OCDVocab.pageHref(i)).append("\">")
-                 .append(i++).append("</a></li>\n");
-        String start = OCDVocab.pageHref(1);
-        zip.deflated(OPF + "nav.xhtml", EpubPackage.navDoc(title(doc), tocInner, start, plist.toString()));
+        return Boolean.TRUE.equals(opt.get(ConvertOptions.NAV_PER_PAGE))
+                ? EpubPackage.tocPerPage(doc, doc.structure(), ix, p -> OCDVocab.pageHref(p + 1), p -> "Page " + (p + 1))
+                : doc.structure() != null ? EpubPackage.tocOl(doc.structure(), ix, EpubPackage::headingHref) : "";
     }
 
-
-    private static void ncx(JxZip zip, OCDDocument doc, String uid) throws IOException {
-        var pts = new StringBuilder();
-        var heads = new java.util.ArrayList<OCDStructNode>();
-        if (doc.structure() != null) EpubPackage.collectHeadings(doc.structure(), heads);
-        OCDIndex ix = OCDIndex.of(doc);
-        var ncx = new EpubPackage.Ncx();
-        if (!heads.isEmpty()) {
-            for (OCDStructNode h : heads) ncx.add(EpubPackage.label(h, ix), EpubPackage.headingHref(h));
-        } else {
-            int n = 1;
-            for (OCDPage ignored : doc.pages()) { ncx.add("Page " + n, OCDVocab.pageHref(n)); n++; }
-        }
-        zip.deflated(OPF + "toc.ncx", EpubPackage.ncx(uid, title(doc), ncx.inner()));
-    }
-
-    // ── package: manifest + spine (fixed-layout, pre-paginated) ──────────────────
-
-    private static void opf(JxZip zip, OCDDocument doc, String uid) throws IOException {
-        var manifest = new StringBuilder();
-        var spine = new StringBuilder();
-        manifest.append("    <item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/>\n");
-        manifest.append("    <item id=\"ncx\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/>\n");
-        manifest.append("    <item id=\"css\" href=\"fonts.css\" media-type=\"text/css\"/>\n");
-        if (!doc.pages().isEmpty())
-            manifest.append("    <item id=\"cover-image\" href=\"").append(EpubPackage.COVER_HREF)
-                    .append("\" media-type=\"").append(EpubPackage.COVER_MEDIA).append("\" properties=\"cover-image\"/>\n");
+    private static String opf(OCDDocument doc, String uid) {
+        var css = new StringBuilder();
+        EpubPackage.item(css, "css", "fonts.css", "text/css", null);
+        var fonts = new StringBuilder();
         for (OCDFont f : doc.fonts().values()) {
             String n = safe(f.id());
-            manifest.append("    <item id=\"font-").append(n).append("\" href=\"fonts/").append(n)
-                    .append(".otf\" media-type=\"font/otf\"/>\n");
+            EpubPackage.item(fonts, "font-" + n, "fonts/" + n + ".otf", "font/otf", null);
         }
-        for (var e : doc.images().entrySet()) {
-            String n = safe(e.getKey());
-            manifest.append("    <item id=\"img-").append(n).append("\" href=\"images/").append(n)
-                    .append("\" media-type=\"").append(EpubPackage.mediaForImage(n)).append("\"/>\n");
-        }
-        int i = 1;
-        for (OCDPage ignored : doc.pages()) {
-            manifest.append("    <item id=\"page-").append(i).append("\" href=\"").append(OCDVocab.pageHref(i))
-                    .append("\" media-type=\"application/xhtml+xml\" properties=\"svg\"/>\n");
-            spine.append("    <itemref idref=\"page-").append(i).append("\"/>\n");
-            i++;
-        }
-        String coverMeta = doc.pages().isEmpty() ? "" : "<meta name=\"cover\" content=\"cover-image\"/>\n";
-        String metaExtra = coverMeta + EpubPackage.dublinCore(doc.meta()) + EpubPackage.accessibilityMeta(doc, true);
-        String opf = EpubPackage.packageOpf(uid, title(doc), lang(doc), metaExtra, manifest.toString(), spine.toString(), true);
-        zip.deflated(OPF + "content.opf", opf);
+        return EpubPackage.fixedOpf(doc, uid, css.toString(), fonts.toString(), "", null);
     }
 
-    // ── helpers ──────────────────────────────────────────────────────────────────
-
-    private static String title(OCDDocument doc) { return EpubPackage.title(doc); }
-    private static String lang(OCDDocument doc)  { return EpubPackage.lang(doc); }
 }

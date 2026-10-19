@@ -27,12 +27,9 @@ public final class CffOtf extends OtfBuilder {
 
     public static byte[] build(OCDFont f) { return new CffOtf(f).assemble(); }
 
-
     private CffOtf(OCDFont f) { super(f); }
 
     @Override int em() { return EM; }
-
-
 
     // ════════════════════════ CFF primitives ════════════════════════
     /** A CFF INDEX of the given byte objects. */
@@ -187,29 +184,7 @@ public final class CffOtf extends OtfBuilder {
         return b.out();
     }
 
-
     // ════════════════════════ sfnt tables ════════════════════════
-    private byte[] head() {
-        Buf b = new Buf();
-        b.u16(1); b.u16(0);                                        // version 1.0
-        b.u32(0x00010000L);                                        // fontRevision
-        b.u32(0);                                                  // checkSumAdjustment (patched later)
-        b.u32(0x5F0F3CF5L);                                        // magic
-        b.u16(0x0003);                                             // flags
-        b.u16(EM);                                                 // unitsPerEm
-        b.u32(0); b.u32(0);                                        // created
-        b.u32(0); b.u32(0);                                        // modified
-        b.u16(xMin & 0xFFFF); b.u16(yMin & 0xFFFF); b.u16(xMax & 0xFFFF); b.u16(yMax & 0xFFFF);
-        b.u16((font.isBold() ? 1 : 0) | (font.isItalic() ? 2 : 0));// macStyle
-        b.u16(8);                                                  // lowestRecPPEM
-        b.u16(2);                                                  // fontDirectionHint
-        b.u16(0);                                                  // indexToLocFormat
-        b.u16(0);                                                  // glyphDataFormat
-        return b.out();
-    }
-
-
-
     private byte[] maxp(int numGlyphs) {
         Buf b = new Buf();
         b.u32(0x00005000L);                                        // version 0.5 (CFF)
@@ -217,65 +192,16 @@ public final class CffOtf extends OtfBuilder {
         return b.out();
     }
 
-    private byte[] cmapTable() {
-        byte[] sub = cmap4();
-        Buf b = new Buf();
-        b.u16(0); b.u16(1);                                        // version, numTables
-        b.u16(3); b.u16(1); b.u32(12);                             // (3,1) Windows BMP, offset
-        b.bytes(sub);
-        return b.out();
-    }
-
-
-
-    private byte[] os2(int avgAdv) {
-        Buf b = new Buf();
-        b.u16(4);                                                  // version
-        b.u16(avgAdv);                                             // xAvgCharWidth
-        b.u16(font.isBold() ? 700 : 400);                          // usWeightClass
-        b.u16(5);                                                  // usWidthClass
-        b.u16(0);                                                  // fsType (installable)
-        b.u16(650); b.u16(700); b.u16(0); b.u16(140);              // subscript
-        b.u16(650); b.u16(700); b.u16(0); b.u16(480);              // superscript
-        b.u16(50); b.u16(r(font.capHeight() != 0 ? font.capHeight() * 0.6 : 0.3)); // strikeout
-        b.u16(0);                                                  // sFamilyClass
-        for (int i = 0; i < 10; i++) b.u8(0);                      // panose
-        b.u32(1); b.u32(0); b.u32(0); b.u32(0);                    // unicode ranges (basic latin bit)
-        b.bytes("JEXT".getBytes(java.nio.charset.StandardCharsets.US_ASCII)); // achVendID
-        b.u16((font.isItalic() ? 0x01 : 0) | (font.isBold() ? 0x20 : 0) | (!font.isBold() && !font.isItalic() ? 0x40 : 0));
-        b.u16(cmap.isEmpty() ? 0x20 : cmap.firstKey());            // usFirstCharIndex
-        b.u16(cmap.isEmpty() ? 0x20 : cmap.lastKey());             // usLastCharIndex
-        b.u16(r(font.ascent())); b.u16(r(font.descent())); b.u16(0); // typo asc/desc (negative)/linegap
-        b.u16(r(font.ascent())); b.u16(-r(font.descent()));                   // win asc/desc (positive)
-        b.u32(1); b.u32(0);                                        // code page range (latin1)
-        b.u16(r(font.xHeight())); b.u16(r(font.capHeight()));      // sxHeight, sCapHeight
-        b.u16(0); b.u16(0x20); b.u16(0);                           // default, break, maxContext
-        return b.out();
-    }
-
-    private byte[] post() {
-        Buf b = new Buf();
-        b.u32(0x00030000L);                                        // version 3.0 (no names)
-        b.u32(0);                                                  // italicAngle
-        b.u16(-100 & 0xFFFF); b.u16(50);                           // underlinePosition, underlineThickness
-        b.u32(0);                                                  // isFixedPitch
-        b.u32(0); b.u32(0); b.u32(0); b.u32(0);                    // mem usage
-        return b.out();
-    }
-
     // ════════════════════════ sfnt assembly ════════════════════════
     private byte[] assemble() {
         int n = glyphs.size();
-        int advMax = 0, advSum = 0, cnt = 0;
-        for (OCDGlyph g : glyphs) { if (g == null) continue; int a = r(g.advance()); advMax = Math.max(advMax, a); advSum += a; cnt++; }
-        int avgAdv = cnt > 0 ? advSum / cnt : 0;
 
         List<Table> tables = new ArrayList<>();
         tables.add(new Table("CFF ", cffTable()));
-        tables.add(new Table("OS/2", os2(avgAdv)));
+        tables.add(new Table("OS/2", os2()));
         tables.add(new Table("cmap", cmapTable()));
-        tables.add(new Table("head", head()));
-        tables.add(new Table("hhea", hhea(n, advMax)));
+        tables.add(new Table("head", head(0x0003, 0)));
+        tables.add(new Table("hhea", hhea(n)));
         tables.add(new Table("hmtx", hmtx()));
         tables.add(new Table("maxp", maxp(n)));
         tables.add(new Table("name", nameTable()));

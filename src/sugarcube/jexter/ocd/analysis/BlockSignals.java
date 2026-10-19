@@ -119,7 +119,7 @@ final class BlockSignals {
         double pw = page.displayWidth()  <= 0 ? 1 : page.displayWidth();
         double ph = page.displayHeight() <= 0 ? 1 : page.displayHeight();
         JxRect bounds = JxRect.EMPTY;
-        for (OCDNode n : unit) { JxRect r = n.bounds(); if (r != null && !r.isEmpty()) bounds = bounds.isEmpty() ? r : bounds.union(r); }
+        for (OCDNode n : unit) { JxRect r = n.bounds(); if (r != null) bounds = bounds.union(r); }
         int[] g = gridBox(bounds, pw, ph);
         b.gx0 = g[0]; b.gy0 = g[1]; b.gx1 = g[2]; b.gy1 = g[3];
         return b;

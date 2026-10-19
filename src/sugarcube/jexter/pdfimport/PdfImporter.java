@@ -213,13 +213,8 @@ public final class PdfImporter extends PdfStreamEngine {
 
     /** Crop = group bounds ∩ page; null/empty when there's nothing to bake. */
     private JxRect bakeCrop(OCDGroup g) {
-        JxRect pb = page.effectiveBox();
-        JxRect gb = inkBounds(g);
-        double x0 = Math.max(pb.x(), gb.x()), y0 = Math.max(pb.y(), gb.y());
-        double x1 = Math.min(pb.x() + pb.width(), gb.x() + gb.width());
-        double y1 = Math.min(pb.y() + pb.height(), gb.y() + gb.height());
-        if (x1 - x0 < 0.5 || y1 - y0 < 0.5) return null;
-        return new JxRect(x0, y0, x1 - x0, y1 - y0);
+        JxRect crop = page.effectiveBox().intersection(inkBounds(g));
+        return crop.width() < 0.5 || crop.height() < 0.5 ? null : crop;
     }
 
     /**
@@ -240,7 +235,10 @@ public final class PdfImporter extends PdfStreamEngine {
     private static JxRect inkBounds(OCDNode n) {
         if (n instanceof OCDGroup g) {
             JxRect box = null;
-            for (OCDNode c : g.children()) box = union(box, inkBounds(c));
+            for (OCDNode c : g.children()) {
+                JxRect cb = inkBounds(c);
+                box = box == null ? cb : cb == null ? box : box.span(cb);
+            }
             return box == null ? g.bounds() : box;
         }
         JxRect b = n.bounds();
@@ -250,28 +248,13 @@ public final class PdfImporter extends PdfStreamEngine {
             pad = p.pen().width() / 2 * (p.pen().join() == sugarcube.jexter.core.JxStroke.Join.MITER
                     ? Math.min(Math.max(p.pen().miterLimit(), 1), 4) : 1);
         if (n instanceof sugarcube.jexter.ocd.model.OCDText t && t.hasStroke()) pad = t.pen().width() / 2;
-        return pad <= 0 ? b : new JxRect(b.x() - pad, b.y() - pad, b.width() + 2 * pad, b.height() + 2 * pad);
-    }
-
-    /** The union, tolerating a null on either side. */
-    private static JxRect union(JxRect a, JxRect b) {
-        if (a == null) return b;
-        if (b == null) return a;
-        double x0 = Math.min(a.x(), b.x()), y0 = Math.min(a.y(), b.y());
-        double x1 = Math.max(a.x() + a.width(), b.x() + b.width());
-        double y1 = Math.max(a.y() + a.height(), b.y() + b.height());
-        return new JxRect(x0, y0, x1 - x0, y1 - y0);
+        return pad <= 0 ? b : b.inflate(pad, pad);
     }
 
     /** Emit a composited image for group {@code g} carrying its blend/alpha (Y-up unit-square map). */
     private void emitBaked(OCDGroup g, JxRect crop, BufferedImage img) throws IOException {
-        String ref = doc.newImageRef("png");
-        ByteArrayOutputStream buf = new ByteArrayOutputStream();
-        ImageIO.write(img, "png", buf);
-        doc.addImage(ref, buf.toByteArray());
-        OCDImage n = new OCDImage(ref).pixelSize(img.getWidth(), img.getHeight());
+        OCDImage n = placed(img, new java.awt.geom.Rectangle2D.Double(crop.x(), crop.y(), crop.width(), crop.height()));
         n.id(g.id()).z(g.z());
-        n.transform(JxTransform.of(new AffineTransform(crop.width(), 0, 0, crop.height(), crop.x(), crop.y())));
         if (g.hasBlend()) n.blend(g.blend());
         if (g.alpha() < 1f) n.alpha(g.alpha());
         addNode(n);

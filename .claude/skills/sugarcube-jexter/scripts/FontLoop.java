@@ -15,7 +15,7 @@ public class FontLoop {
         for (int i = 0; i < gs.size(); i++) {
             TtfImporter.Glyph g = gs.get(i);
             if (i > 0) js.append(',');
-            js.append("{\"cp\":").append(g.cp()).append(",\"em\":\"").append(g.emSvg())
+            js.append("{\"cp\":").append(g.cp()).append(",\"em\":\"").append(g.outline().toSvg())
               .append("\",\"advance\":").append(g.advance()).append('}');
         }
         js.append("]}");

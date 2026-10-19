@@ -191,7 +191,8 @@ public final class HtmlWriter {
         byte[] data = doc.media().get(m.resourceRef());
         if (data == null) return "";
         boolean audio = "audio".equals(m.tag());
-        String mime = audio ? "audio/mpeg" : "video/mp4";
+        String mime = EpubPackage.mediaType(m.resourceRef());
+        if (!mime.startsWith(m.tag() + "/")) mime = audio ? "audio/mpeg" : "video/mp4";   // a ref with no telling extension
         String src = assets != null
                 ? assets.ref(named(m.resourceRef(), audio ? ".mp3" : ".mp4"), data, mime)
                 : dataUri(mime, data);

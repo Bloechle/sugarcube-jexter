@@ -262,6 +262,68 @@ final class EpubPackage {
         String inner() { return sb.toString(); }
     }
 
+    // ── the fixed-layout package, shared by the presentation EPUB and the OCD-EPUB ──────────────────
+
+    /** The fixed-layout {@code nav.xhtml}: {@code tocInner} (blank → one "Page N" entry per page) and the
+     *  page-list. */
+    static String fixedNav(OCDDocument doc, String tocInner) {
+        if (tocInner.isBlank()) {
+            var sb = new StringBuilder();
+            for (int i = 1; i <= doc.pageCount(); i++)
+                sb.append("    <li><a href=\"").append(OCDVocab.pageHref(i)).append("\">Page ").append(i).append("</a></li>\n");
+            tocInner = sb.toString();
+        }
+        var plist = new StringBuilder();
+        for (int i = 1; i <= doc.pageCount(); i++)
+            plist.append("    <li><a href=\"").append(OCDVocab.pageHref(i)).append("\">").append(i).append("</a></li>\n");
+        return navDoc(title(doc), tocInner, OCDVocab.pageHref(1), plist.toString());
+    }
+
+    /** The fixed-layout {@code toc.ncx}: the headings of the default structure, else one entry per page. */
+    static String fixedNcx(OCDDocument doc, String uid) {
+        var heads = new java.util.ArrayList<OCDStructNode>();
+        if (doc.structure() != null) collectHeadings(doc.structure(), heads);
+        OCDIndex ix = OCDIndex.of(doc);
+        var ncx = new Ncx();
+        if (!heads.isEmpty()) for (OCDStructNode h : heads) ncx.add(label(h, ix), headingHref(h));
+        else for (int n = 1; n <= doc.pageCount(); n++) ncx.add("Page " + n, OCDVocab.pageHref(n));
+        return ncx(uid, title(doc), ncx.inner());
+    }
+
+    /** The fixed-layout {@code content.opf}. Both flavours declare nav, ncx, the cover, every image and every
+     *  page; each adds its own items at three places — {@code head} after the ncx, {@code resources} after
+     *  the images, {@code tail} after the pages. {@code modified} as for {@link #packageOpf}. */
+    static String fixedOpf(OCDDocument doc, String uid, String head, String resources, String tail, String modified) {
+        var manifest = new StringBuilder();
+        var spine = new StringBuilder();
+        item(manifest, "nav", "nav.xhtml", "application/xhtml+xml", "nav");
+        item(manifest, "ncx", "toc.ncx", "application/x-dtbncx+xml", null);
+        manifest.append(head);
+        boolean cover = doc.pageCount() > 0;
+        if (cover) item(manifest, "cover-image", COVER_HREF, COVER_MEDIA, "cover-image");
+        for (String name : doc.images().keySet()) {
+            String n = safe(name);
+            item(manifest, "img-" + n, "images/" + n, mediaType(n), null);
+        }
+        manifest.append(resources);
+        for (int i = 1; i <= doc.pageCount(); i++) {
+            item(manifest, "page-" + i, OCDVocab.pageHref(i), "application/xhtml+xml", "svg");
+            spine.append("    <itemref idref=\"page-").append(i).append("\"/>\n");
+        }
+        manifest.append(tail);
+        String metaExtra = (cover ? "<meta name=\"cover\" content=\"cover-image\"/>\n" : "")
+                + dublinCore(doc.meta()) + accessibilityMeta(doc, true);
+        return packageOpf(uid, title(doc), lang(doc), metaExtra, manifest.toString(), spine.toString(), true, modified);
+    }
+
+    /** One manifest {@code <item>}; {@code properties} null when it has none. */
+    static void item(StringBuilder manifest, String id, String href, String mediaType, String properties) {
+        manifest.append("    <item id=\"").append(id).append("\" href=\"").append(JxText.attr(href))
+                .append("\" media-type=\"").append(mediaType).append('"');
+        if (properties != null) manifest.append(" properties=\"").append(properties).append('"');
+        manifest.append("/>\n");
+    }
+
     // ── package skeleton ────────────────────────────────────────────────────────
     /** The {@code content.opf}. {@code prePaginated} adds the fixed-layout {@code rendition:*}
      *  metadata; reflowable packages omit it. {@code metaExtra} carries cover-meta + Dublin Core +
@@ -390,27 +452,32 @@ final class EpubPackage {
         String l = doc.meta().language();
         return !l.isBlank() ? l : "und";
     }
-    /** The media type an EPUB manifest needs for a PASSENGER — a member the model does not own but
-     *  carries through a round trip. Unknown extensions get the octet-stream fallback, which is legal
-     *  and honest: better a declared blob than an undeclared resource epubcheck refuses. */
-    static String mediaForPath(String path) {
+    /** THE media type of a member, by its name: images, audio and video, the model's data members — and the
+     *  octet-stream fallback for anything else, which is legal and honest (a passenger the model does not own
+     *  is better declared as a blob than left undeclared for epubcheck to refuse). */
+    static String mediaType(String path) {
         String n = path.toLowerCase(Locale.ROOT);
-        if (n.endsWith(".json")) return "application/json";
-        if (n.endsWith(".xml"))  return "application/xml";
-        if (n.endsWith(".txt"))  return "text/plain";
-        if (n.endsWith(".css"))  return "text/css";
-        if (n.endsWith(".svg"))  return "image/svg+xml";
-        if (n.endsWith(".png") || n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".gif") || n.endsWith(".webp"))
-            return mediaForImage(n);
-        return "application/octet-stream";
-    }
-
-    static String mediaForImage(String name) {
-        String n = name.toLowerCase(Locale.ROOT);
-        if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
-        if (n.endsWith(".gif")) return "image/gif";
-        if (n.endsWith(".svg")) return "image/svg+xml";
-        return "image/png";
+        int dot = n.lastIndexOf('.');
+        return switch (dot < 0 ? "" : n.substring(dot + 1)) {
+            case "png"         -> "image/png";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "gif"         -> "image/gif";
+            case "webp"        -> "image/webp";
+            case "svg"         -> "image/svg+xml";
+            case "mp4", "m4v"  -> "video/mp4";
+            case "webm"        -> "video/webm";
+            case "mp3"         -> "audio/mpeg";
+            case "m4a"         -> "audio/mp4";
+            case "ogg", "oga"  -> "audio/ogg";
+            case "wav"         -> "audio/wav";
+            case "json"        -> "application/json";
+            case "xml"         -> "application/xml";
+            case "txt"         -> "text/plain";
+            case "css"         -> "text/css";
+            case "otf"         -> "font/otf";
+            case "icc"         -> "application/vnd.iccprofile";
+            default            -> "application/octet-stream";
+        };
     }
     static String num(double v)  { return JxNum.fmt(v); }
     static String xml(String s)  { return JxText.text(s); }

@@ -34,8 +34,6 @@ public final class GlyfOtf extends OtfBuilder {
 
     @Override int em() { return EM; }
 
-
-
     // ════════════════════════ glyf + loca ════════════════════════
     private record Pt(int x, int y, boolean on) {}
 
@@ -105,27 +103,6 @@ public final class GlyfOtf extends OtfBuilder {
     }
 
     // ════════════════════════ sfnt tables ════════════════════════
-    private byte[] head() {
-        Buf b = new Buf();
-        b.u16(1); b.u16(0);
-        b.u32(0x00010000L);
-        b.u32(0);                                                      // checkSumAdjustment (patched)
-        b.u32(0x5F0F3CF5L);
-        b.u16(0x000B);                                                 // flags
-        b.u16(EM);
-        b.u32(0); b.u32(0);
-        b.u32(0); b.u32(0);
-        b.u16(xMin & 0xFFFF); b.u16(yMin & 0xFFFF); b.u16(xMax & 0xFFFF); b.u16(yMax & 0xFFFF);
-        b.u16((font.isBold() ? 1 : 0) | (font.isItalic() ? 2 : 0));
-        b.u16(8);
-        b.u16(2);
-        b.u16(1);                                                      // indexToLocFormat = long
-        b.u16(0);
-        return b.out();
-    }
-
-
-
     private byte[] maxp(int numGlyphs, int maxPts, int maxCtrs) {
         Buf b = new Buf();
         b.u32(0x00010000L);                                            // version 1.0 (TrueType)
@@ -138,72 +115,17 @@ public final class GlyfOtf extends OtfBuilder {
         return b.out();
     }
 
-    private byte[] cmapTable() {
-        byte[] sub = cmap4();
-        Buf b = new Buf();
-        b.u16(0); b.u16(2);                                            // version, numTables (two records → one subtable)
-        int subOff = 4 + 2 * 8;
-        b.u16(0); b.u16(3); b.u32(subOff);                            // (0,3) Unicode BMP
-        b.u16(3); b.u16(1); b.u32(subOff);                            // (3,1) Windows BMP
-        b.bytes(sub);
-        return b.out();
-    }
-
-
-
-    private byte[] os2(int avgAdv) {
-        Buf b = new Buf();
-        b.u16(4);
-        b.u16(avgAdv);
-        b.u16(font.isBold() ? 700 : 400);
-        b.u16(5);
-        b.u16(0);
-        b.u16(1300); b.u16(1400); b.u16(0); b.u16(280);
-        b.u16(1300); b.u16(1400); b.u16(0); b.u16(960);
-        b.u16(100); b.u16(r(font.capHeight() != 0 ? font.capHeight() * 0.6 : 0.3));
-        b.u16(0);
-        for (int i = 0; i < 10; i++) b.u8(0);
-        b.u32(1); b.u32(0); b.u32(0); b.u32(0);
-        b.bytes("JEXT".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
-        b.u16((font.isItalic() ? 0x01 : 0) | (font.isBold() ? 0x20 : 0) | (!font.isBold() && !font.isItalic() ? 0x40 : 0));
-        b.u16(cmap.isEmpty() ? 0x20 : cmap.firstKey());
-        b.u16(cmap.isEmpty() ? 0x20 : cmap.lastKey());
-        b.u16(r(font.ascent())); b.u16(r(font.descent())); b.u16(0);   // typo: descender negative
-        b.u16(r(font.ascent())); b.u16(-r(font.descent()));                    // win: descent positive
-        b.u32(1); b.u32(0);
-        b.u16(r(font.xHeight())); b.u16(r(font.capHeight()));
-        b.u16(0); b.u16(0x20); b.u16(0);
-        return b.out();
-    }
-
-    private byte[] post() {
-        Buf b = new Buf();
-        b.u32(0x00030000L);
-        b.u32(0);
-        b.u16(-205 & 0xFFFF); b.u16(102);
-        b.u32(0);
-        b.u32(0); b.u32(0); b.u32(0); b.u32(0);
-        return b.out();
-    }
-
-
     // ════════════════════════ sfnt assembly ════════════════════════
     private byte[] assemble() {
         int n = glyphs.size();
         byte[][] gl = glyfLoca();                       // also populates maxPts / maxCtrs
-        int advMax = 0, advSum = 0, cnt = 0;
-        for (OCDGlyph g : glyphs) {
-            if (g == null) continue;
-            int a = r(g.advance()); advMax = Math.max(advMax, a); advSum += a; cnt++;
-        }
-        int avgAdv = cnt > 0 ? advSum / cnt : 0;
 
         List<Table> tables = new ArrayList<>();
-        tables.add(new Table("OS/2", os2(avgAdv)));
+        tables.add(new Table("OS/2", os2()));
         tables.add(new Table("cmap", cmapTable()));
         tables.add(new Table("glyf", gl[0]));
-        tables.add(new Table("head", head()));
-        tables.add(new Table("hhea", hhea(n, advMax)));
+        tables.add(new Table("head", head(0x000B, 1)));
+        tables.add(new Table("hhea", hhea(n)));
         tables.add(new Table("hmtx", hmtx()));
         tables.add(new Table("loca", gl[1]));
         tables.add(new Table("maxp", maxp(n, maxPts, maxCtrs)));

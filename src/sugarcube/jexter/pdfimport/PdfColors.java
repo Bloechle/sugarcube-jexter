@@ -96,16 +96,14 @@ final class PdfColors {
             boolean e1 = ext != null && ext.size() == 2 && ext.getObject(1) instanceof COSBoolean b1 && b1.getValue();
 
             PDColorSpace cs = sh.getColorSpace();
-            int a8 = clamp8(Math.round(alpha * 255));
+            int a8 = JxColor.unit(alpha);
             final int N = 33;                          // linear interpolation between 33 samples
             float[] offs = new float[N];
             int[]   cols = new int[N];
             for (int i = 0; i < N; i++) {
                 float f = i / (float) (N - 1);
                 float[] rgb = cs.toRGB(sh.evalFunction(new float[]{ d0 + (d1 - d0) * f }));
-                cols[i] = JxColor.rgba(clamp8(Math.round(rgb[0] * 255)),
-                                       clamp8(Math.round(rgb[1] * 255)),
-                                       clamp8(Math.round(rgb[2] * 255)), a8).argb();
+                cols[i] = JxColor.rgba(JxColor.unit(rgb[0]), JxColor.unit(rgb[1]), JxColor.unit(rgb[2]), a8).argb();
                 offs[i] = f;
             }
             OCDGradient.Kind kind = (type == 2) ? OCDGradient.Kind.LINEAR : OCDGradient.Kind.RADIAL;
@@ -119,12 +117,6 @@ final class PdfColors {
     }
 
     static float[] toArr(COSArray a) { return a == null ? null : a.toFloatArray(); }
-    static int clamp8(int v) { return v < 0 ? 0 : Math.min(255, v); }
-
-    static int argb(float[] rgb, float a) {
-        return JxColor.rgba(Math.round(rgb[0] * 255), Math.round(rgb[1] * 255), Math.round(rgb[2] * 255),
-                Math.round(a * 255)).argb();
-    }
 
     private static final Map<BlendMode, String> BLEND = new IdentityHashMap<>();
     static {

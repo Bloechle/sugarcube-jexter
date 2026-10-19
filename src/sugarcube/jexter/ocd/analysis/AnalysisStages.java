@@ -55,7 +55,7 @@ public final class AnalysisStages {
         Function<Liner.Line, JxRect> bf = lb::get;
         List<JxRect> leafB = new ArrayList<>();
         for (List<Liner.Line> leaf : XYCut.segment(lines, bf)) {
-            JxRect u = JxRect.EMPTY; for (Liner.Line ln : leaf) u = u.isEmpty() ? bf.apply(ln) : u.union(bf.apply(ln));
+            JxRect u = JxRect.EMPTY; for (Liner.Line ln : leaf) u = u.union(bf.apply(ln));
             leafB.add(u);
         }
 
@@ -89,7 +89,7 @@ public final class AnalysisStages {
     }
 
     private static JxRect union(List<OCDText> rs) {
-        JxRect u = JxRect.EMPTY; for (OCDText t : rs) u = u.isEmpty() ? t.bounds() : u.union(t.bounds()); return u;
+        JxRect u = JxRect.EMPTY; for (OCDText t : rs) u = u.union(t.bounds()); return u;
     }
     private static String box(JxRect b) {
         return "[" + fmt(b.minX()) + ',' + fmt(b.minY()) + ',' + fmt(b.maxX()) + ',' + fmt(b.maxY()) + "]";

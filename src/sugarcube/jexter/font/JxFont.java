@@ -23,4 +23,14 @@ public final class JxFont {
     public static byte[] toCffOtf(OCDFont f) {
         return CffOtf.build(f);
     }
+
+    /** The sfnt checksum: the sum of the data's big-endian 32-bit words, zero-padded to a word (OpenType
+     *  "Calculating checksums") — for a table, and for the whole file's {@code head.checkSumAdjustment}. */
+    public static long checksum(byte[] data) {
+        long sum = 0;
+        int i = 0, len = data.length;
+        while (i + 4 <= len) { sum += ((data[i] & 0xFFL) << 24) | ((data[i + 1] & 0xFFL) << 16) | ((data[i + 2] & 0xFFL) << 8) | (data[i + 3] & 0xFFL); i += 4; }
+        if (i < len) { long v = 0; for (int s = 24; i < len; i++, s -= 8) v |= (data[i] & 0xFFL) << s; sum += v; }
+        return sum & 0xFFFFFFFFL;
+    }
 }

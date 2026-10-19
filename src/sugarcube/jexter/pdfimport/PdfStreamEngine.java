@@ -446,16 +446,34 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
             g.clip(a);
             g.drawImage(ref, new AffineTransform(1 / sx, 0, 0, -1 / sy, pb.x(), pb.y() + pb.height()), null);
         } finally { g.dispose(); }
-        try {
-            String ref2 = doc.newImageRef("png");
-            ByteArrayOutputStream buf = new ByteArrayOutputStream();
-            ImageIO.write(img, "png", buf);
-            doc.addImage(ref2, buf.toByteArray());
-            OCDImage n = new OCDImage(ref2).pixelSize(w, h);
-            n.transform(JxTransform.of(new AffineTransform(b.getWidth(), 0, 0, b.getHeight(), b.getMinX(), b.getMinY())));
-            emit(n);
-        } catch (IOException e) { return false; }
+        try { emit(placed(img, b)); } catch (IOException e) { return false; }
         return true;
+    }
+
+    /** The pixels per page unit for a raster of {@code w × h} page units: ~2, capped at {@value #RASTER_BUDGET}
+     *  pixels so a huge region cannot blow up memory — the one budget of every raster the import makes. */
+    static double rasterScale(double w, double h) {
+        double scale = 2.0;
+        long px = (long) Math.ceil(w * scale) * (long) Math.ceil(h * scale);
+        return px > RASTER_BUDGET ? scale * Math.sqrt((double) RASTER_BUDGET / px) : scale;
+    }
+
+    private static final long RASTER_BUDGET = 4_000_000;
+
+    /** A raster stored once as a PNG resource; its ref. */
+    protected String storePng(BufferedImage img) throws IOException {
+        String ref = doc.newImageRef("png");
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        ImageIO.write(img, "png", buf);
+        doc.addImage(ref, buf.toByteArray());
+        return ref;
+    }
+
+    /** A raster as the image node that paints it over {@code box} (page space, Y-up; the image is top-down). */
+    protected OCDImage placed(BufferedImage img, Rectangle2D box) throws IOException {
+        OCDImage n = new OCDImage(storePng(img)).pixelSize(img.getWidth(), img.getHeight());
+        n.transform(JxTransform.of(new AffineTransform(box.getWidth(), 0, 0, box.getHeight(), box.getMinX(), box.getMinY())));
+        return n;
     }
 
     @Override public void clip(int windingRule)        { pendingClipRule = windingRule; }
@@ -506,10 +524,7 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
                 return;
             }
 
-            // resolution: ~2 px per page unit, capped so a huge region can't blow up memory
-            double scale = 2.0;
-            long px = (long) Math.ceil(b.getWidth() * scale) * (long) Math.ceil(b.getHeight() * scale);
-            if (px > 4_000_000) scale *= Math.sqrt(4_000_000.0 / px);
+            double scale = rasterScale(b.getWidth(), b.getHeight());
             int w = Math.max(1, (int) Math.ceil(b.getWidth() * scale));
             int h = Math.max(1, (int) Math.ceil(b.getHeight() * scale));
 
@@ -525,14 +540,7 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
                 g.fill(b);
             } finally { g.dispose(); }
 
-            String ref = doc.newImageRef("png");
-            ByteArrayOutputStream buf = new ByteArrayOutputStream();
-            ImageIO.write(img, "png", buf);
-            doc.addImage(ref, buf.toByteArray());
-
-            // unit square → fill bbox in page space (Y-up); renderer flips the top-down raster
-            OCDImage n = new OCDImage(ref).pixelSize(w, h);
-            n.transform(JxTransform.of(new AffineTransform(b.getWidth(), 0, 0, b.getHeight(), b.getMinX(), b.getMinY())));
+            OCDImage n = placed(img, b);
             n.alpha(alpha);
             emit(n);
         } catch (Exception e) {   // unsupported / malformed shading → skip, never crash the page
@@ -568,10 +576,7 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
             if (bi == null) return;
             pw = bi.getWidth();
             ph = bi.getHeight();
-            ref = doc.newImageRef("png");
-            ByteArrayOutputStream buf = new ByteArrayOutputStream();
-            ImageIO.write(bi, "png", buf);
-            doc.addImage(ref, buf.toByteArray());
+            ref = storePng(bi);
         }
 
         OCDImage n = new OCDImage(ref).pixelSize(pw, ph);
@@ -986,10 +991,10 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
             }
             if (intentCmyk != null) {                          // CMYK means what the output intent says it means
                 float[] k = PdfColors.cmykComponents(cs, color);
-                if (k != null) return PdfColors.argb(intentCmyk.toRGB(k), alpha);
+                if (k != null) return JxColor.ofRgb(intentCmyk.toRGB(k), alpha).argb();
             }
             float[] rgb = cs.toRGB(color.getComponents());
-            return PdfColors.argb(rgb, alpha);
+            return JxColor.ofRgb(rgb, alpha).argb();
         } catch (Exception e) {   // IOException, UnsupportedOperationException (patterns), malformed CS
             JxLog.debug(PdfStreamEngine.class, "color conversion failed \u2192 neutral grey", e);
             return neutral(alpha);
@@ -1018,13 +1023,13 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
                 float[] rgb;
                 try { rgb = cs.toRGB(sh.evalFunction(new float[]{ d0 + (d1 - d0) * i / (float) (N - 1) })); }
                 catch (Exception skip) { continue; }
-                r += PdfColors.clamp8(Math.round(rgb[0] * 255));
-                g += PdfColors.clamp8(Math.round(rgb[1] * 255));
-                b += PdfColors.clamp8(Math.round(rgb[2] * 255));
+                r += JxColor.unit(rgb[0]);
+                g += JxColor.unit(rgb[1]);
+                b += JxColor.unit(rgb[2]);
                 n++;
             }
             if (n == 0) return null;
-            return JxColor.rgba((int) (r / n), (int) (g / n), (int) (b / n), PdfColors.clamp8(Math.round(alpha * 255))).argb();
+            return JxColor.rgba((int) (r / n), (int) (g / n), (int) (b / n), JxColor.unit(alpha)).argb();
         } catch (Exception e) {
             JxLog.debug(PdfStreamEngine.class, "shading sample failed \u2192 neutral grey", e);
             return null;

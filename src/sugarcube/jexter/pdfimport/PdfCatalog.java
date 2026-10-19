@@ -88,10 +88,7 @@ final class PdfCatalog {
         return () -> {
             try {
                 PDRectangle cb = pdf.getPage(i).getCropBox();
-                double scale = 2.0;
-                long px = (long) Math.ceil(cb.getWidth() * scale) * (long) Math.ceil(cb.getHeight() * scale);
-                if (px > 4_000_000) scale *= Math.sqrt(4_000_000.0 / px);
-                return ReferenceRaster.render(pdf, i, (float) scale);
+                return ReferenceRaster.render(pdf, i, (float) PdfStreamEngine.rasterScale(cb.getWidth(), cb.getHeight()));
             } catch (Exception e) {
                 JxLog.debug(PdfCatalog.class, "reference raster failed", e);
                 return null;
@@ -240,8 +237,7 @@ final class PdfCatalog {
                 if (an instanceof PDAnnotationLink lk) {
                     PDRectangle r = lk.getRectangle();
                     if (r == null) continue;
-                    var link = new OCDLink(
-                            new JxRect(r.getLowerLeftX(), r.getLowerLeftY(), r.getWidth(), r.getHeight()));
+                    var link = new OCDLink(box(r));
                     var action = lk.getAction();
                     if (action instanceof PDActionURI u) {
                         link.uri(u.getURI());
@@ -280,7 +276,7 @@ final class PdfCatalog {
         };
         var a = new OCDAnnotation(type);
         PDRectangle r = an.getRectangle();
-        if (r != null) a.rect(new JxRect(r.getLowerLeftX(), r.getLowerLeftY(), r.getWidth(), r.getHeight()));
+        if (r != null) a.rect(box(r));
         a.contents(an.getContents()).modified(an.getModifiedDate());
         a.author(an.getCOSObject().getString(COSName.T));
         try {
@@ -341,7 +337,7 @@ final class PdfCatalog {
                     // the control displays, which is what value() means to a renderer.
                     if (type == OCDFormField.Field.BUTTON) ff.value(caption(w));
                     var r = w.getRectangle();
-                    if (r != null) ff.rect(new JxRect(r.getLowerLeftX(), r.getLowerLeftY(), r.getWidth(), r.getHeight()));
+                    if (r != null) ff.rect(box(r));
                     doc.pages().get(idx).addField(ff);
                 }
             }
@@ -381,14 +377,13 @@ final class PdfCatalog {
         for (int i = 0; i < t.length; i++) {
             switch (t[i]) {
                 case "Tf" -> { if (i >= 1) ff.fontSize(dbl(t[i - 1])); }
-                case "g"  -> { if (i >= 1) { int v = c255(dbl(t[i - 1])); ff.textColor(JxColor.rgb(v, v, v).argb()); } }
-                case "rg" -> { if (i >= 3) ff.textColor(JxColor.rgb(c255(dbl(t[i - 3])), c255(dbl(t[i - 2])), c255(dbl(t[i - 1]))).argb()); }
+                case "g"  -> { if (i >= 1) { int v = JxColor.unit(dbl(t[i - 1])); ff.textColor(JxColor.rgb(v, v, v).argb()); } }
+                case "rg" -> { if (i >= 3) ff.textColor(JxColor.rgb(JxColor.unit(dbl(t[i - 3])), JxColor.unit(dbl(t[i - 2])), JxColor.unit(dbl(t[i - 1]))).argb()); }
                 default   -> { }
             }
         }
     }
     private static double dbl(String v) { try { return Double.parseDouble(v); } catch (Exception e) { return 0; } }
-    private static int c255(double v)   { return (int) Math.round(Math.max(0, Math.min(1, v)) * 255); }
 
     /** A pushbutton's caption: {@code /MK /CA}, the only place its label exists. */
     private static String caption(PDAnnotationWidget w) {

@@ -107,7 +107,7 @@ final class FontExtractor {
     private static OCDFont newFont(PDFont font, String name) {
         OCDFont f = new OCDFont(name).embedded(font.isEmbedded());
         // family stays the human name (subset prefix stripped), independent of the id
-        f.family(name.length() > 7 && name.charAt(6) == '+' ? name.substring(7) : name);
+        f.family(JxName.unsubset(name));
 
         PDFontDescriptor fd = font.getFontDescriptor();
         if (fd != null) {
