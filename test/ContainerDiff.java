@@ -9,8 +9,8 @@
 //   java -cp "target/classes:lib/*" test/ContainerDiff.java a.ocd.epub b.ocd.epub
 //   java -cp "target/classes:lib/*" test/ContainerDiff.java x.ocd.epub   // x vs write(read(x))
 
-import sugarcube.jexter.write.Conversion;
 
+import sugarcube.jexter.Conversion;
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;

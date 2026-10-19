@@ -1,6 +1,6 @@
+import sugarcube.jexter.Conversion;
+import sugarcube.jexter.ocd.io.SvgOcdWriter;
 import sugarcube.jexter.ocd.model.OCDDocument;
-import sugarcube.jexter.write.Conversion;
-import sugarcube.jexter.write.SvgOcdWriter;
 import sugarcube.jexter.core.JxName;
 import java.nio.file.*;
 

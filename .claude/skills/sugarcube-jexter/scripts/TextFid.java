@@ -14,6 +14,7 @@
 
 package sugarcube.jexter.write;
 
+import sugarcube.jexter.ocd.model.OCDIndex;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.text.PDFTextStripper;
 import sugarcube.jexter.pdfimport.PdfImporter;

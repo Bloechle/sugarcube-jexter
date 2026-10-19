@@ -4,7 +4,7 @@
 set -u
 JAR=${1:?jar}; CORPUS=${2:?corpus dir}; EPUBCHECK=${3:-}
 OUT=/tmp/audit-out; rm -rf $OUT; mkdir -p $OUT
-conv() { java -cp "$JAR" sugarcube.jexter.write.Conversion "$@"; }
+conv() { java -cp "$JAR" sugarcube.jexter.Conversion "$@"; }
 fail=0
 
 echo "=== A · matrix ==="

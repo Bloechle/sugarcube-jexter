@@ -1,7 +1,7 @@
 # FRONTEND — the convert contract and the tool architecture
 
 One HTTP convert contract, spoken by two engines, and one front-end (Prism) on a thin transport
-seam (`backend.js`). The same Java facade — `sugarcube.jexter.write.Conversion` — is the engine
+seam (`backend.js`). The same Java facade — `sugarcube.jexter.Conversion` — is the engine
 behind both, so a target or an option is added **once**, in jexter, and both inherit it.
 
 ```

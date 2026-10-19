@@ -6,7 +6,7 @@ thing checkable; a wild corpus proves nothing a fixture cannot here, and takes a
 
     pip install --break-system-packages reportlab pillow
     python3 make_bench_fixtures.py /tmp/fix
-    for f in /tmp/fix/*.pdf; do java -cp "$CP" sugarcube.jexter.write.Conversion \\
+    for f in /tmp/fix/*.pdf; do java -cp "$CP" sugarcube.jexter.Conversion \\
                                      "$f" "${f%.pdf}.ocd.epub"; done
 
   dossier   an ordinary 3-page document — the neutral one, and the false-positive control

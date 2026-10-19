@@ -1,5 +1,6 @@
 package sugarcube.jexter.ui.pdf;
 
+import sugarcube.jexter.Conversion;
 import com.sun.net.httpserver.HttpExchange;
 
 import org.apache.pdfbox.Loader;
@@ -30,7 +31,6 @@ import org.apache.pdfbox.text.PDFTextStripper;
 
 import sugarcube.jexter.ui.WebApp;
 import sugarcube.jexter.core.ConvertOptions;
-import sugarcube.jexter.write.Conversion;
 import sugarcube.jexter.pdfimport.PdfImporter;
 import sugarcube.jexter.pdfimport.PdfRenderer;
 import sugarcube.jexter.ocd.model.OCDDocument;

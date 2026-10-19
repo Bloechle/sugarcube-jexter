@@ -1,5 +1,7 @@
 package sugarcube.jexter.write;
 
+import sugarcube.jexter.ocd.io.EpubPackage;
+import sugarcube.jexter.ocd.model.OCDIndex;
 import sugarcube.jexter.core.JxBlend;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;

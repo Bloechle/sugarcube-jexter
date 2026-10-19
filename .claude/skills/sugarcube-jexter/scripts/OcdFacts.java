@@ -15,7 +15,7 @@
 // ============================================================================
 // STATUS: both stages work. stage ① converts PDF -> OCDDocument (PdfImporter);
 // stage ② reads an .ocd.epub back via OCDReader (the round-trip writer is
-// write.OcdEpubWriter; the legacy JSON .ocd container is gone). The facts
+// ocd.io.OcdEpubWriter; the legacy JSON .ocd container is gone). The facts
 // schema is identical for both surfaces — see references/ocd-facts.md.
 //
 // HONEST LIMITS of the OCD facts (by design — OCD is a normalized pivot):

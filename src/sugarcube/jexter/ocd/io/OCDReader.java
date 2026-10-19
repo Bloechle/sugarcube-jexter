@@ -1019,7 +1019,7 @@ public final class OCDReader {
         }
         return (c.argb() & 0xFF000000) == 0 ? (0xFF000000 | c.argb()) : c.argb();
     }
-    /** The pen a paint class states — the inverse of {@code SvgWriter.strokeCss}. */
+    /** The pen a paint class states — the inverse of {@code SvgPaint.strokeCss}. */
     private static JxStroke pen(Map<String, String> d) {
         double[] dash = null;
         String v = d.get("stroke-dasharray");

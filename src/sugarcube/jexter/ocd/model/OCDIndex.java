@@ -1,11 +1,7 @@
-package sugarcube.jexter.write;
+package sugarcube.jexter.ocd.model;
 
 import sugarcube.jexter.core.JxRect;
-import sugarcube.jexter.ocd.model.OCDDocument;
-import sugarcube.jexter.ocd.model.OCDNode;
-import sugarcube.jexter.ocd.model.OCDStructNode;
 import sugarcube.jexter.core.JxText;
-import sugarcube.jexter.ocd.model.OCDText;
 
 import java.text.Normalizer;
 import java.util.ArrayList;
@@ -25,7 +21,7 @@ import java.util.Map;
  * is the single canonical resolver every structure-driven projection uses — referenced content,
  * or the node's denormalized {@link OCDStructNode#text()} when it has no resolvable refs.
  */
-final class OCDIndex {
+public final class OCDIndex {
 
     private final Map<String, OCDNode> byKey = new HashMap<>();
     private final Map<OCDNode, Integer> position = new java.util.IdentityHashMap<>();   // place in the page's content
@@ -33,7 +29,7 @@ final class OCDIndex {
     private OCDIndex() {}
 
     /** Build the index for an entire document. */
-    static OCDIndex of(OCDDocument doc) {
+    public static OCDIndex of(OCDDocument doc) {
         OCDIndex ix = new OCDIndex();
         for (int p = 0; p < doc.pageCount(); p++) {
             int page = p;
@@ -46,14 +42,14 @@ final class OCDIndex {
     }
 
     /** The node referenced on {@code page} by {@code id}, or {@code null}. */
-    OCDNode node(int page, String id) { return byKey.get(key(page, id)); }
+    public OCDNode node(int page, String id) { return byKey.get(key(page, id)); }
 
     private static String key(int page, String id) { return page + "\u0000" + id; }
 
     /** Append the text under {@code n}: OCDText runs joined by single spaces, groups recursed — but
      *  two runs that sit flush together are joined without a space, and a soft hyphen at a line break
      *  is removed so the word is rejoined. */
-    static void appendText(StringBuilder b, OCDNode n) {
+    public static void appendText(StringBuilder b, OCDNode n) {
         OCDText[] prev = { null };
         n.stream().filter(OCDText.class::isInstance).map(OCDText.class::cast).forEach(t -> {
             if (t.text() != null && !t.text().isEmpty()) { join(b, t, prev[0]); prev[0] = t; }
@@ -116,7 +112,7 @@ final class OCDIndex {
     }
 
     /** The concatenated text under {@code n} (see {@link #appendText}), normalized for export. */
-    static String text(OCDNode n) {
+    public static String text(OCDNode n) {
         StringBuilder b = new StringBuilder();
         appendText(b, n);
         return nfkc(b.toString());
@@ -131,7 +127,7 @@ final class OCDIndex {
     }
 
     /** Canonical text of a structure node across all pages. */
-    String text(OCDStructNode s) { return text(s, -1); }
+    public String text(OCDStructNode s) { return text(s, -1); }
 
     /** A run tagged with the page it was referenced from — node ids are page-scoped, so reading order
      *  is restored by sorting on {@code (page, position in the content)} across own + inline-descendant refs. */
@@ -140,7 +136,7 @@ final class OCDIndex {
     /** Canonical text of a structure node: its referenced content (restricted to {@code page}
      *  when {@code page >= 0}), or — for a node with no resolvable refs (e.g. a cell built from a
      *  straddling run) — its denormalized {@link OCDStructNode#text()}. The one resolver all writers share. */
-    String text(OCDStructNode s, int page) {
+    public String text(OCDStructNode s, int page) {
         List<Run> runs = new ArrayList<>();
         collect(s, page, runs);                                   // own refs + inline-descendant refs (SPAN/CODE/OTHER)
         // Reading order is the content's order, which the analysis set (XYCut) — never the ids, which a

@@ -1,16 +1,16 @@
-package sugarcube.jexter.write;
+package sugarcube.jexter.ocd.io;
 
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.core.JxZip;
-import sugarcube.jexter.ocd.io.OCDVocab;
 import sugarcube.jexter.ocd.model.OCDDocument;
+import sugarcube.jexter.ocd.model.OCDIndex;
 import sugarcube.jexter.ocd.model.OCDPage;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
-import static sugarcube.jexter.write.EpubPackage.OPF;
+import static sugarcube.jexter.ocd.io.EpubPackage.OPF;
 import static sugarcube.jexter.core.JxNum.fmt;
 import static sugarcube.jexter.core.JxName.safe;
 
@@ -36,7 +36,7 @@ import static sugarcube.jexter.core.JxName.safe;
  */
 public final class OcdEpubWriter {
 
-    static final String JX = OCDVocab.MEMBERS;
+    public static final String JX = OCDVocab.MEMBERS;
 
     private OcdEpubWriter() {}
 
@@ -83,7 +83,7 @@ public final class OcdEpubWriter {
         return coverKey;
     }
 
-    static String pageXhtml(OCDDocument doc, OCDPage page, int i, SvgOcdWriter.Fonts glyphs) {
+    public static String pageXhtml(OCDDocument doc, OCDPage page, int i, SvgOcdWriter.Fonts glyphs) {
         return """
                 <?xml version="1.0" encoding="UTF-8"?>
                 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">

@@ -43,7 +43,7 @@ Part B), **`ANALYSIS.md`** (the geometry-first recovery pass), **`FRONTEND.md`**
 (the convert contract + the Prism tool architecture), **`TRACER.md`** (the Potrace
 raster→vector tracer) — and the card **`AGENTS.md`** at the root. Read those first when you get the project. Where a document and
 the source disagree, **the source is right**: `ocd/analysis/Analysis.java` is the
-authority on the pipeline order, `write/Conversion.java` on the target registry.
+authority on the pipeline order, `Conversion.java` on the target registry.
 
 ---
 
@@ -458,9 +458,9 @@ java -cp "$JEXTER_CP:$PDFBOX_JAR" scripts/RenderOcd.java doc.ocd.epub 1 ocd.png 
 # extension (or --to=pdf|epub|epub-reflow|html|md|doctags|ocd|svg|stages); any
 # ConvertOptions key passes through as --key=value. Source is SNIFFED (%PDF vs PK),
 # so the same command opens a PDF or re-exports an OCD-EPUB.
-java -cp "$JEXTER_CP:$PDFBOX_JAR" sugarcube.jexter.write.Conversion in.pdf out.ocd.epub
-java -cp "$JEXTER_CP:$PDFBOX_JAR" sugarcube.jexter.write.Conversion out.ocd.epub out.md
-java -cp "$JEXTER_CP:$PDFBOX_JAR" sugarcube.jexter.write.Conversion in.pdf page.svg --page=0
+java -cp "$JEXTER_CP:$PDFBOX_JAR" sugarcube.jexter.Conversion in.pdf out.ocd.epub
+java -cp "$JEXTER_CP:$PDFBOX_JAR" sugarcube.jexter.Conversion out.ocd.epub out.md
+java -cp "$JEXTER_CP:$PDFBOX_JAR" sugarcube.jexter.Conversion in.pdf page.svg --page=0
 
 # normalize a PDF through OCD (PDF → OCD → PDF); --outline = vectorized glyphs,
 # --<key>=<value> for any ConvertOptions setting (e.g. --mergeGlyphClips=false)
@@ -557,14 +557,14 @@ the failing **edge** names the stage:
                               │
    probe points ─────────────┼─────────────────────────────────────────────┐
         (1) OCD virtual       (2) OCD reread (.ocd.epub write->parse)      (3) EPUB
-        convert.PdfImporter   write.OcdEpubWriter -> ocd.io.OCDReader   write.EpubWriter
+        convert.PdfImporter   ocd.io.OcdEpubWriter -> ocd.io.OCDReader   write.EpubWriter
                               │
    STRUCTURAL  facts(text, fonts+emb, colorspaces, Separation, images, geometry) -diff-> GT
    VISUAL      render(OCDRenderer | WebKit) -pixel-compare-> PDFBox reference
 ```
 
 - `GT ↔ (1)` fails → bug in **`convert.PdfImporter` / `FontExtractor`** (converter).
-- `(1) ↔ (2)` fails → bug in the **OCD-EPUB serialization** — `write.OcdEpubWriter` /
+- `(1) ↔ (2)` fails → bug in the **OCD-EPUB serialization** — `ocd.io.OcdEpubWriter` /
   `SvgOcdWriter` / `OcdMembers` on the write side, `ocd.io.OCDReader` on the read side.
 - `(2) ↔ (3)` fails → bug in the **`write.EpubWriter`** projection.
 
@@ -1916,7 +1916,7 @@ Verify touched classes in the shipped jar with `javap -cp _prod/sugarcube-jexter
   needs it (then `KEEP_FILES`).
 
 **Consumers:** the private consumer notes (account skill `repo-skills`) — jexter is a LIBRARY first; `sugarcube-cloud` compiles
-against `write.Conversion`, `core.ConvertOptions`, `core.JxProgress`, `OCDReader`, `PdfImporter` and
+against `Conversion`, `core.ConvertOptions`, `core.JxProgress`, `OCDReader`, `PdfImporter` and
 `OCDMeta`. Read it before renaming or moving anything public; the CI compiles jexter, not its
 consumers, so a break surfaces on their machine.
 

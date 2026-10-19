@@ -1,10 +1,10 @@
-package sugarcube.jexter.tool;
+package sugarcube.jexter.cli;
 
+import sugarcube.jexter.Conversion;
 import sugarcube.jexter.core.Args;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.redact.RedactionAudit;
-import sugarcube.jexter.write.Conversion;
 
 import java.io.File;
 import java.nio.file.Files;

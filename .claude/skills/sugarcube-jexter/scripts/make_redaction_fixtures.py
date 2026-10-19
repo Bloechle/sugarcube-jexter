@@ -7,8 +7,8 @@
   scan.pdf     image + invisible OCR text (Tr 3) + black box over both                              → TEXT + IMAGE_UNDER_BOX
   pending.pdf  legit.pdf + a /Redact annotation never applied                                       → PENDING_REDACT
   split.pdf    "Alice " + bold "Martin" in two runs, title/author/keywords metadata quoting them     → zones --match matches across runs; --redactMeta
-Run:  java -cp "$JEXTER_CP:lib/*" sugarcube.jexter.tool.Redact audit OUT/fake.pdf [--json]
-      java -cp "$JEXTER_CP:lib/*" sugarcube.jexter.tool.Redact apply OUT/fake.pdf out.pdf   # then audit out.pdf → CLEAN
+Run:  java -cp "$JEXTER_CP:lib/*" sugarcube.jexter.cli.Redact audit OUT/fake.pdf [--json]
+      java -cp "$JEXTER_CP:lib/*" sugarcube.jexter.cli.Redact apply OUT/fake.pdf out.pdf   # then audit out.pdf → CLEAN
 """
 import sys, os
 from reportlab.pdfgen import canvas

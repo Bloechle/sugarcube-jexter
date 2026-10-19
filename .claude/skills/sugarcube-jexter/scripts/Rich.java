@@ -8,13 +8,13 @@
 //   javac -cp "lib/*:target/classes" -d out scripts/Rich.java
 //   java  -cp "lib/*:target/classes:out" Rich in.pdf
 
+import sugarcube.jexter.Conversion;
 import sugarcube.jexter.pdfimport.PdfImporter;
 import sugarcube.jexter.ocd.io.OCDReader;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDFormField;
 import sugarcube.jexter.ocd.model.OCDLink;
 import sugarcube.jexter.ocd.model.OCDPage;
-import sugarcube.jexter.write.Conversion;
 
 import java.io.File;
 import java.nio.file.Files;

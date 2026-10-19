@@ -1,4 +1,4 @@
-package sugarcube.jexter.write;
+package sugarcube.jexter;
 
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.core.ConvertOptions.Group;

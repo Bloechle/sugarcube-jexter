@@ -1,4 +1,4 @@
-package sugarcube.jexter.tool;
+package sugarcube.jexter.bind;
 
 import sugarcube.jexter.core.JxRect;
 import sugarcube.jexter.core.OcrClient;

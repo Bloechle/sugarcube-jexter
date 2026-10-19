@@ -157,26 +157,26 @@ java -cp "$CP" sugarcube.jexter.pdfimport.PdfImporter in.pdf 0 out.png 144
 # from the output extension (or --to=pdf|epub|epub-reflow|html|md|doctags|ocd|svg), and
 # any ConvertOptions / export key passes through as --key=value (e.g. --page=2,
 # --selectable, --grid=1000, --renderAnnotations=false). No args → a drop-a-file window.
-java -cp "$CP" sugarcube.jexter.write.Conversion in.pdf out.epub
-java -cp "$CP" sugarcube.jexter.write.Conversion in.pdf page.svg --page=0
+java -cp "$CP" sugarcube.jexter.Conversion in.pdf out.epub
+java -cp "$CP" sugarcube.jexter.Conversion in.pdf page.svg --page=0
 
 # Page set — the pages the output holds, stated as the RESULT (1-based): omission deletes, order
 # reorders, repetition duplicates, "+" inserts a blank. Composes with every target.
-java -cp "$CP" sugarcube.jexter.write.Conversion in.pdf pages1-3.pdf --pages=1-3      # extract
-java -cp "$CP" sugarcube.jexter.write.Conversion book.ocd.epub out.ocd.epub --pages=6,1,+,3-4
+java -cp "$CP" sugarcube.jexter.Conversion in.pdf pages1-3.pdf --pages=1-3      # extract
+java -cp "$CP" sugarcube.jexter.Conversion book.ocd.epub out.ocd.epub --pages=6,1,+,3-4
 
 # Normalize a PDF through OCD (PDF → OCD → PDF); --outline = vectorized glyphs,
 # --<key>=<value> for any ConvertOptions setting (e.g. --mergeGlyphClips=false)
 java -cp "$CP" sugarcube.jexter.ui.jx.Jexter in.pdf out.pdf
 
 # Redaction — audit (exit 1 = recoverable) and apply (written only when the result audits clean)
-java -cp "$CP" sugarcube.jexter.tool.Redact audit in.pdf [--json]
-java -cp "$CP" sugarcube.jexter.tool.Redact apply in.pdf out.pdf                 # --redact=audit: repair the boxes
-java -cp "$CP" sugarcube.jexter.tool.Redact apply in.pdf out.pdf --redact="1:160,696,66,14;3:72,700,200,12"
+java -cp "$CP" sugarcube.jexter.cli.Redact audit in.pdf [--json]
+java -cp "$CP" sugarcube.jexter.cli.Redact apply in.pdf out.pdf                 # --redact=audit: repair the boxes
+java -cp "$CP" sugarcube.jexter.cli.Redact apply in.pdf out.pdf --redact="1:160,696,66,14;3:72,700,200,12"
 # the same through the one entry point (and /api/convert): --to=audit, --redact=… on any target
-java -cp "$CP" sugarcube.jexter.write.Conversion in.pdf audit.json --to=audit
-java -cp "$CP" sugarcube.jexter.write.Conversion in.pdf out.md --redact=audit
-java -cp "$CP" sugarcube.jexter.write.Conversion in.pdf zones.json --to=zones --match='\d{4}-\d{4}'   # every match, as zones
+java -cp "$CP" sugarcube.jexter.Conversion in.pdf audit.json --to=audit
+java -cp "$CP" sugarcube.jexter.Conversion in.pdf out.md --redact=audit
+java -cp "$CP" sugarcube.jexter.Conversion in.pdf zones.json --to=zones --match='\d{4}-\d{4}'   # every match, as zones
 
 # Prism — the document workbench (PRISM reader chassis + engine API); --serve = dev URL only
 java -cp "$CP" sugarcube.jexter.ui.prism.Prism [--port N] [--web DIR] [--serve]

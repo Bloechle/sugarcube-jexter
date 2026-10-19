@@ -60,7 +60,7 @@ export function serve() {
         const to = u.searchParams.get('to') || 'ocd';
         const inF = path.join(ROOT, '_in.ocd.epub'), outF = path.join(ROOT, '_out.' + (ext[to] || to));
         fs.writeFileSync(inF, Buffer.concat(chunks));
-        const args = ['-cp', CP, 'sugarcube.jexter.write.Conversion', inF, outF, '--to=' + to];
+        const args = ['-cp', CP, 'sugarcube.jexter.Conversion', inF, outF, '--to=' + to];
         for (const [k, v] of u.searchParams) if (k !== 'to') args.push(`--${k}=${v}`);
         try {
           execFileSync(JAVA, args, { stdio: 'pipe' });

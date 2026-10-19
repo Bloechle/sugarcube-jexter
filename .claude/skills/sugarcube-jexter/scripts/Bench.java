@@ -6,8 +6,8 @@
 //
 //   javac -cp "lib/*:target/classes" -d out scripts/Bench.java
 //   java -Xmx2g -cp "lib/*:target/classes:out" Bench in.pdf
+import sugarcube.jexter.Conversion;
 import sugarcube.jexter.pdfimport.*; import sugarcube.jexter.ocd.model.OCDDocument;
-import sugarcube.jexter.write.Conversion;
 import java.io.File; import java.nio.file.*; import java.util.HashMap;
 /** Ou passe le temps : import, analyse, ecriture. */
 public final class Bench { public static void main(String[] a) throws Exception {

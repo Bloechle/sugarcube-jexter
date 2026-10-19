@@ -13,7 +13,7 @@ the other half: the browser.
 ```bash
 npm i playwright-core                       # + a Chromium; PLAYWRIGHT_BROWSERS_PATH points at it
 python3 ../make_bench_fixtures.py /tmp/fix  # the documents (see its header)
-for f in /tmp/fix/*.pdf; do java -cp "$CP" sugarcube.jexter.write.Conversion \
+for f in /tmp/fix/*.pdf; do java -cp "$CP" sugarcube.jexter.Conversion \
                                 "$f" "${f%.pdf}.ocd.epub"; done
 cp /tmp/fix/*.ocd.epub $BENCH_ROOT/site/    # the bench serves the site itself
 

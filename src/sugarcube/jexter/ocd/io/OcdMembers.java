@@ -1,9 +1,8 @@
-package sugarcube.jexter.write;
+package sugarcube.jexter.ocd.io;
 
 import sugarcube.jexter.core.JxColor;
 import sugarcube.jexter.core.JxRect;
 import sugarcube.jexter.core.JxStringer;
-import sugarcube.jexter.ocd.io.OCDVocab;
 import sugarcube.jexter.ocd.model.OCDAnnotation;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDFormField;

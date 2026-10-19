@@ -20,6 +20,8 @@
 // it is produced, so it is never committed. Name PDFs to gate those instead:
 //   java -cp "target/test-classes:target/classes:lib/*" Gates a.pdf …   (SOURCE_DATE_EPOCH set; `;` on Windows)
 
+import sugarcube.jexter.Conversion;
+import sugarcube.jexter.ocd.io.SvgOcdWriter;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -43,8 +45,6 @@ import sugarcube.jexter.ocd.model.*;
 import sugarcube.jexter.ocd.render.OCDRenderer;
 import sugarcube.jexter.pdfimport.PdfImporter;
 import sugarcube.jexter.pdfimport.PdfRenderer;
-import sugarcube.jexter.write.Conversion;
-import sugarcube.jexter.write.SvgOcdWriter;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;

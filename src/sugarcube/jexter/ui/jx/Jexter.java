@@ -1,5 +1,6 @@
 package sugarcube.jexter.ui.jx;
 
+import sugarcube.jexter.Conversion;
 import sugarcube.jexter.core.Args;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -8,7 +9,6 @@ import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.pdfimport.PdfImporter;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ui.WebApp;
-import sugarcube.jexter.write.Conversion;
 
 import java.io.File;
 import java.io.IOException;

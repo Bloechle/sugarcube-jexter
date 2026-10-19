@@ -1,4 +1,5 @@
 package sugarcube.jexter.write;
+import sugarcube.jexter.ocd.model.OCDIndex;
 import sugarcube.jexter.pdfimport.PdfImporter;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.ocd.model.*;

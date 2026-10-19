@@ -1,5 +1,6 @@
 package sugarcube.jexter.write;
 
+import sugarcube.jexter.ocd.io.EpubPackage;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.core.JxZip;
 import sugarcube.jexter.ocd.model.OCDDocument;
@@ -10,7 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static sugarcube.jexter.write.EpubPackage.OPF;
+import static sugarcube.jexter.ocd.io.EpubPackage.OPF;
 import static sugarcube.jexter.core.JxName.safe;
 import static sugarcube.jexter.core.JxText.text;
 

@@ -1,5 +1,7 @@
 package sugarcube.jexter.write;
 
+import sugarcube.jexter.ocd.io.EpubPackage;
+import sugarcube.jexter.ocd.model.OCDIndex;
 import sugarcube.jexter.core.JxText;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.ocd.model.OCDDocument;

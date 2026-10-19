@@ -41,7 +41,7 @@ fs.writeFileSync(FIX + '/authored.ocd.epub', Buffer.from(b64, 'base64'));
 // `to=md` — md and doctags project the LOGICAL tree, and nothing references an authored run, so they
 // report an empty line whatever the reader did. What a truncating reader loses shows up in the run
 // the engine RE-WRITES: its data-text comes back short and its blanks are gone.
-execFileSync(JAVA, ['-cp', CP, 'sugarcube.jexter.write.Conversion',
+execFileSync(JAVA, ['-cp', CP, 'sugarcube.jexter.Conversion',
                     FIX + '/authored.ocd.epub', FIX + '/authored-rt.ocd.epub'], { stdio: 'pipe' });
 const zip = execFileSync('unzip', ['-p', FIX + '/authored-rt.ocd.epub', 'OEBPS/pages/page-001.xhtml']).toString();
 const back = (zip.match(/data-text="(Bonjour[^"]*)"/) || [, '(the run is gone)'])[1];

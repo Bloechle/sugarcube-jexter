@@ -77,7 +77,7 @@ via `OCDReader.read`) both run. Real mapping:
 
 ### Stage ② (OCD-EPUB reread) — wired
 
-The round-trip is a matched pair across two packages: **`write.OcdEpubWriter`**
+The round-trip is a matched pair across two packages: **`ocd.io.OcdEpubWriter`**
 writes the self-contained **`.ocd.epub`** (a valid fixed-layout EPUB 3 that is also
 the model container — SVG-OCD v2 pages via `SvgOcdWriter`, the shared font file
 `pages/fonts.svg`, the `ocd/` JSON members via `OcdMembers`), and

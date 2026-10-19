@@ -1,11 +1,10 @@
-package sugarcube.jexter.write;
+package sugarcube.jexter.ocd.io;
 
 import sugarcube.jexter.core.JxName;
 import sugarcube.jexter.core.JxRect;
 import sugarcube.jexter.core.JxText;
 import sugarcube.jexter.core.JxColor;
 import sugarcube.jexter.core.JxTransform;
-import sugarcube.jexter.ocd.io.OCDVocab;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDFont;
 import sugarcube.jexter.ocd.model.OCDGlyph;
@@ -72,7 +71,7 @@ public final class SvgOcdWriter {
         JxRect win = page.svgWindow();
         double w = win.width(), h = win.height();
         var styles = new LinkedHashMap<String, String>();   // css decl -> class
-        var clips  = new LinkedHashMap<String, String>();   // MODEL clip id -> clip d (SvgWriter.clipRef)
+        var clips  = new LinkedHashMap<String, String>();   // MODEL clip id -> clip d (SvgPaint.clipRef)
         var grads  = new LinkedHashMap<String, String>();   // grad def -> id
         var body   = new StringBuilder(8192);
 
@@ -105,7 +104,7 @@ public final class SvgOcdWriter {
         sb.append("<defs>\n");
         for (var e : clips.entrySet())
             sb.append("<clipPath id=\"").append(e.getKey()).append("\" clipPathUnits=\"userSpaceOnUse\">")
-              .append("<path d=\"").append(e.getValue()).append("\"/></clipPath>\n");   // id AND geometry are the model's (SvgWriter.clipRef)
+              .append("<path d=\"").append(e.getValue()).append("\"/></clipPath>\n");   // id AND geometry are the model's (SvgPaint.clipRef)
         for (var e : grads.entrySet())
             sb.append(e.getKey().replace("__ID__", e.getValue())).append('\n');
         sb.append("</defs>\n");
@@ -160,8 +159,8 @@ public final class SvgOcdWriter {
                              Map<String, String> styles, Map<String, String> clips,
                              Map<String, String> grads, Fonts glyphs) {
         // ONE clip rule, every node kind alike (§B3): a typed <g> wrapper carries the NATIVE clip-path, so
-        // any SVG engine clips with no script and no data-* interpretation to do. See SvgWriter.clipOpen.
-        String clipG = SvgWriter.clipOpen(page, n, clips, true);
+        // any SVG engine clips with no script and no data-* interpretation to do. See SvgPaint.clipOpen.
+        String clipG = SvgPaint.clipOpen(page, n, clips, true);
         sb.append(clipG);
         switch (n) {
             case OCDText t   -> text(sb, doc, t, page, order, styles, glyphs);
@@ -188,8 +187,8 @@ public final class SvgOcdWriter {
                 if (open) sb.append("</g>\n");
                 sb.append("</g>\n");
             }
-            case OCDPath p   -> SvgWriter.path(sb, page, p, styles, clips, grads, attrs(n, cmykAttrs(p), order));
-            case OCDImage im -> SvgWriter.image(sb, page, im, clips, attrs(n, "", order));
+            case OCDPath p   -> SvgPaint.path(sb, page, p, styles, clips, grads, attrs(n, cmykAttrs(p), order));
+            case OCDImage im -> SvgPaint.image(sb, page, im, clips, attrs(n, "", order));
             case OCDMedia m  -> {
                 sb.append("<g id=\"").append(m.id()).append("\" data-ocd=\"media\"");
                 o(sb, order);
@@ -208,7 +207,7 @@ public final class SvgOcdWriter {
                 if (m instanceof OCDVideo v && v.poster() != null) {
                     OCDImage poster = new OCDImage(v.poster());
                     poster.transform(m.transform());
-                    SvgWriter.image(sb, page, poster, clips, null);
+                    SvgPaint.image(sb, page, poster, clips, null);
                 }
                 sb.append("</g>\n");
             }
@@ -220,14 +219,14 @@ public final class SvgOcdWriter {
                 if (g instanceof sugarcube.jexter.ocd.model.OCDLayerContent lc && lc.layerId() != null)
                     sb.append(" data-layer=\"").append(attr(lc.layerId())).append('"');
                 state(sb, g);
-                sb.append(SvgWriter.groupStyle(g));   // data-blend/-alpha are the model; this is the paint
+                sb.append(SvgPaint.groupStyle(g));   // data-blend/-alpha are the model; this is the paint
                 sb.append(">\n");
                 children(sb, doc, page, g.children(), styles, clips, grads, glyphs);
                 sb.append("</g>\n");
             }
             default -> { }   // OCDBreak: text-layer member only — never paints
         }
-        if (!clipG.isEmpty()) sb.append(SvgWriter.CLIP_CLOSE);
+        if (!clipG.isEmpty()) sb.append(SvgPaint.CLIP_CLOSE);
     }
 
     /** Siblings in paint order, containment preserved: SVG-OCD nests paragraphs/groups (the
@@ -267,14 +266,14 @@ public final class SvgOcdWriter {
         String ff = JxName.safe(t.fontId());
         double fs = t.fontSize();
 
-        JxTransform flip = SvgWriter.pageFlip(page);
+        JxTransform flip = SvgPaint.pageFlip(page);
         // Outline glyphs are Y-up (baseline y=0, ascenders +Y): pageFlip · tr maps them straight
         // to screen. The extra flipY of the native-<text> path is the FONT renderer's Y-down
         // compensation and must NOT apply here (it would mirror every glyph about its baseline).
         // v2: the FONT SIZE is factored into the run matrix, so glyphs place with a bare em x.
         JxTransform T = flip.concat(t.transform()).concat(JxTransform.scale(fs > 0 ? fs : 1));
 
-        String cls = SvgWriter.classFor(styles, textCss(t, fs));
+        String cls = SvgPaint.classFor(styles, textCss(t, fs));
 
         // full-stream unicode (blanks included) + cluster map + never-painted sentinels
         var u = new StringBuilder();
@@ -455,7 +454,7 @@ public final class SvgOcdWriter {
      *  reader. Internal targets point at the sibling page file and carry {@code data-y}. */
     private static void links(StringBuilder sb, OCDDocument doc, OCDPage page) {
         if (page.links().isEmpty()) return;
-        JxTransform flip = SvgWriter.pageFlip(page);
+        JxTransform flip = SvgPaint.pageFlip(page);
         sb.append("<g data-ocd=\"links\">\n");
         for (sugarcube.jexter.ocd.model.OCDLink lk : page.links()) {
             sugarcube.jexter.core.JxRect r = flip.apply(lk.rect());
@@ -504,9 +503,9 @@ public final class SvgOcdWriter {
         } else {
             css.append("fill:none");
         }
-        if (stroked) SvgWriter.strokeCss(css, t.stroke(), t.pen(), fs > 0 ? fs : 1);
+        if (stroked) SvgPaint.strokeCss(css, t.stroke(), t.pen(), fs > 0 ? fs : 1);
         if (t.hasBlend() && !t.blend().equalsIgnoreCase("Normal"))
-            css.append(";mix-blend-mode:").append(SvgWriter.cssBlend(t.blend()));
+            css.append(";mix-blend-mode:").append(SvgPaint.cssBlend(t.blend()));
         return css.toString();
     }
 

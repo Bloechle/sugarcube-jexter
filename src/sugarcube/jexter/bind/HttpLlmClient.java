@@ -1,4 +1,4 @@
-package sugarcube.jexter.tool;
+package sugarcube.jexter.bind;
 
 import sugarcube.jexter.core.JxJson;
 import sugarcube.jexter.core.JxStringer;

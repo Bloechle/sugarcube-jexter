@@ -1,11 +1,11 @@
-package sugarcube.jexter.write;
+package sugarcube.jexter.ocd.io;
 
+import sugarcube.jexter.ocd.model.OCDIndex;
 import sugarcube.jexter.core.JxClock;
 import sugarcube.jexter.core.JxName;
 import sugarcube.jexter.core.JxNum;
 import sugarcube.jexter.core.JxText;
 import sugarcube.jexter.core.JxZip;
-import sugarcube.jexter.ocd.io.OCDVocab;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDMeta;
 import sugarcube.jexter.ocd.model.OCDPage;
@@ -32,17 +32,17 @@ import java.util.Locale;
  * heading resolves to an href), the package skeleton, and small text helpers. Each writer keeps
  * only what genuinely differs (content documents, spine, and the {@code rendition:layout} flag).
  */
-final class EpubPackage {
+public final class EpubPackage {
 
     private EpubPackage() {}
 
-    static final String MIME       = "application/epub+zip";
-    static final String OPF        = OCDVocab.OPF;
+    public static final String MIME       = "application/epub+zip";
+    public static final String OPF        = OCDVocab.OPF;
     /** The cover is a RASTERISED page, and a rasterised page is a photograph: PNG stores it losslessly
      *  and pays for it — measured 482 KB of a 722 KB container, two thirds of the whole book for a
      *  thumbnail a reader shows at a couple of hundred pixels. JPEG is what a cover is for. */
-    static final String COVER_HREF  = "images/cover.jpg";
-    static final String COVER_MEDIA = "image/jpeg";
+    public static final String COVER_HREF  = "images/cover.jpg";
+    public static final String COVER_MEDIA = "image/jpeg";
     private static final float  COVER_QUALITY   = 0.86f;
     /** Px on the long edge, for EVERY page whatever its size.
      *
@@ -57,7 +57,7 @@ final class EpubPackage {
     private static final double COVER_LONG_EDGE = 600;
 
     // ── OCF container ─────────────────────────────────────────────────────────
-    static void container(JxZip zip) throws IOException {
+    public static void container(JxZip zip) throws IOException {
         zip.deflated("META-INF/container.xml", """
                 <?xml version="1.0" encoding="UTF-8"?>
                 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
@@ -69,7 +69,7 @@ final class EpubPackage {
     }
 
     // ── cover (rasterized page 1, flattened on white, ~1000 px long edge) ───────
-    static boolean cover(JxZip zip, OCDDocument doc) throws IOException {
+    public static boolean cover(JxZip zip, OCDDocument doc) throws IOException {
         if (doc.cover() != null) {                       // resource read back — reuse verbatim, byte-stable
             zip.stored(OPF + COVER_HREF, doc.cover());   // SAME method as the fresh write, or the two disagree
             return true;
@@ -119,7 +119,7 @@ final class EpubPackage {
     // ── navigation document (EPUB3) ─────────────────────────────────────────────
     /** Full {@code nav.xhtml}: a TOC plus landmarks; {@code pageListInner} (may be empty) is a
      *  {@code page-list} nav. {@code start} is the bodymatter/cover href. */
-    static String navDoc(String title, String tocInner, String start, String pageListInner) {
+    public static String navDoc(String title, String tocInner, String start, String pageListInner) {
         String pageList = pageListInner == null || pageListInner.isBlank() ? "" : """
                 <nav epub:type="page-list" role="doc-pagelist" id="page-list" hidden="hidden">
                   <ol>
@@ -149,7 +149,7 @@ final class EpubPackage {
 
     /** Nested {@code <ol>} of HEADING nodes; {@code href} maps a heading to its target. Headings
      *  nested under non-heading wrappers are surfaced. */
-    static String tocOl(OCDStructNode node, OCDIndex ix, Function<OCDStructNode, String> href) {
+    public static String tocOl(OCDStructNode node, OCDIndex ix, Function<OCDStructNode, String> href) {
         var sb = new StringBuilder();
         for (OCDStructNode c : node.children()) {
             if (c.type() == OCDStructNode.Type.HEADING) {
@@ -166,12 +166,12 @@ final class EpubPackage {
     }
 
     /** Heading label: its resolved text (refs, else denormalized), capped; else a generic label. */
-    static String label(OCDStructNode h, OCDIndex ix) {
+    public static String label(OCDStructNode h, OCDIndex ix) {
         String s = ix.text(h);
         return s.isEmpty() ? ("Heading " + Math.max(1, h.level())) : (s.length() > 120 ? s.substring(0, 120) + "\u2026" : s);
     }
 
-    static void collectHeadings(OCDStructNode s, List<OCDStructNode> out) {
+    public static void collectHeadings(OCDStructNode s, List<OCDStructNode> out) {
         for (OCDStructNode c : s.children()) {
             if (c.type() == OCDStructNode.Type.HEADING) out.add(c);
             collectHeadings(c, out);
@@ -194,7 +194,7 @@ final class EpubPackage {
      * @param href     how a page index (0-based) becomes an href
      * @param label    how a page index (0-based) becomes its fallback label
      */
-    static String tocPerPage(OCDDocument doc, OCDStructNode root, OCDIndex ix,
+    public static String tocPerPage(OCDDocument doc, OCDStructNode root, OCDIndex ix,
                              java.util.function.IntFunction<String> href,
                              java.util.function.IntFunction<String> label) {
         // page -> the headings that start on it, in tree order. collectHeadings is this file's
@@ -225,14 +225,14 @@ final class EpubPackage {
         return sb.toString();
     }
 
-    static int firstPage(OCDStructNode s) {
+    public static int firstPage(OCDStructNode s) {
         if (!s.refs().isEmpty()) return s.refs().get(0).page();
         for (OCDStructNode c : s.children()) { int p = firstPage(c); if (p >= 0) return p; }
         return -1;
     }
 
     // ── NCX (EPUB2 compatibility) ───────────────────────────────────────────────
-    static String ncx(String uid, String title, String navPointsInner) {
+    public static String ncx(String uid, String title, String navPointsInner) {
         return """
                 <?xml version="1.0" encoding="UTF-8"?>
                 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
@@ -248,25 +248,25 @@ final class EpubPackage {
      *  target to carry the SAME playOrder (epubcheck RSC-005) — several headings on one
      *  fixed-layout page all point at that page's xhtml. So ids stay unique (np-N) while
      *  playOrder is first-seen per target href: the one numbering authority. */
-    static final class Ncx {
+    public static final class Ncx {
         private final StringBuilder sb = new StringBuilder();
         private final java.util.Map<String, Integer> orderOf = new java.util.LinkedHashMap<>();
         private int n = 0;
-        Ncx add(String label, String href) {
+        public Ncx add(String label, String href) {
             int po = orderOf.computeIfAbsent(href, h -> orderOf.size() + 1);
             sb.append("    <navPoint id=\"np-").append(++n).append("\" playOrder=\"").append(po).append("\">")
               .append("<navLabel><text>").append(JxText.text(label)).append("</text></navLabel>")
               .append("<content src=\"").append(href).append("\"/></navPoint>\n");
             return this;
         }
-        String inner() { return sb.toString(); }
+        public String inner() { return sb.toString(); }
     }
 
     // ── the fixed-layout package, shared by the presentation EPUB and the OCD-EPUB ──────────────────
 
     /** The fixed-layout {@code nav.xhtml}: {@code tocInner} (blank → one "Page N" entry per page) and the
      *  page-list. */
-    static String fixedNav(OCDDocument doc, String tocInner) {
+    public static String fixedNav(OCDDocument doc, String tocInner) {
         if (tocInner.isBlank()) {
             var sb = new StringBuilder();
             for (int i = 1; i <= doc.pageCount(); i++)
@@ -280,7 +280,7 @@ final class EpubPackage {
     }
 
     /** The fixed-layout {@code toc.ncx}: the headings of the default structure, else one entry per page. */
-    static String fixedNcx(OCDDocument doc, String uid) {
+    public static String fixedNcx(OCDDocument doc, String uid) {
         var heads = new java.util.ArrayList<OCDStructNode>();
         if (doc.structure() != null) collectHeadings(doc.structure(), heads);
         OCDIndex ix = OCDIndex.of(doc);
@@ -293,7 +293,7 @@ final class EpubPackage {
     /** The fixed-layout {@code content.opf}. Both flavours declare nav, ncx, the cover, every image and every
      *  page; each adds its own items at three places — {@code head} after the ncx, {@code resources} after
      *  the images, {@code tail} after the pages. {@code modified} as for {@link #packageOpf}. */
-    static String fixedOpf(OCDDocument doc, String uid, String head, String resources, String tail, String modified) {
+    public static String fixedOpf(OCDDocument doc, String uid, String head, String resources, String tail, String modified) {
         var manifest = new StringBuilder();
         var spine = new StringBuilder();
         item(manifest, "nav", "nav.xhtml", "application/xhtml+xml", "nav");
@@ -317,7 +317,7 @@ final class EpubPackage {
     }
 
     /** One manifest {@code <item>}; {@code properties} null when it has none. */
-    static void item(StringBuilder manifest, String id, String href, String mediaType, String properties) {
+    public static void item(StringBuilder manifest, String id, String href, String mediaType, String properties) {
         manifest.append("    <item id=\"").append(id).append("\" href=\"").append(JxText.attr(href))
                 .append("\" media-type=\"").append(mediaType).append('"');
         if (properties != null) manifest.append(" properties=\"").append(properties).append('"');
@@ -328,14 +328,14 @@ final class EpubPackage {
     /** The {@code content.opf}. {@code prePaginated} adds the fixed-layout {@code rendition:*}
      *  metadata; reflowable packages omit it. {@code metaExtra} carries cover-meta + Dublin Core +
      *  accessibility. */
-    static String packageOpf(String uid, String title, String lang, String metaExtra,
+    public static String packageOpf(String uid, String title, String lang, String metaExtra,
                              String manifest, String spine, boolean prePaginated) {
         return packageOpf(uid, title, lang, metaExtra, manifest, spine, prePaginated, null);
     }
 
     /** {@code modified} null → now (delivery exports); the OCD-EPUB passes a deterministic value
      *  so identical models serialize to identical bytes (writer idempotence — the identity gate). */
-    static String packageOpf(String uid, String title, String lang, String metaExtra,
+    public static String packageOpf(String uid, String title, String lang, String metaExtra,
                              String manifest, String spine, boolean prePaginated, String modifiedOpt) {
         String modified = modifiedOpt != null ? modifiedOpt
                 : Instant.ofEpochMilli(JxClock.millis()).truncatedTo(ChronoUnit.SECONDS).toString();
@@ -366,7 +366,7 @@ final class EpubPackage {
     /** THE identifier authority for every EPUB flavor: an explicit {@code identifier} in the model's
      *  metadata wins; otherwise a name-based UUID derived from the document id — which the importer
      *  content-addresses — so the same source always yields the same {@code dc:identifier}. */
-    static String uniqueId(OCDDocument doc) {
+    public static String uniqueId(OCDDocument doc) {
         String id = doc.meta().custom().get("identifier");
         if (id != null && !id.isBlank()) return id.trim();
         byte[] seed = ("jexter:" + doc.id()).getBytes(java.nio.charset.StandardCharsets.UTF_8);
@@ -375,7 +375,7 @@ final class EpubPackage {
 
     /** Deterministic dcterms:modified for the working format: the model's own dates, else a fixed
      *  sentinel — never the wall clock. */
-    static String deterministicModified(OCDDocument doc) {
+    public static String deterministicModified(OCDDocument doc) {
         String m = doc.meta().modified();
         if (m == null || m.isBlank()) m = doc.meta().created();
         if (m != null && !m.isBlank()) {
@@ -384,7 +384,7 @@ final class EpubPackage {
         return "2000-01-01T00:00:00Z";
     }
 
-    static String dublinCore(OCDMeta m) {
+    public static String dublinCore(OCDMeta m) {
         var sb = new StringBuilder();
         int i = 1;
         for (String a : m.authors()) {
@@ -411,7 +411,7 @@ final class EpubPackage {
     /** EPUB Accessibility 1.1 / schema.org discovery metadata. {@code pageList} reflects whether the
      *  navigation exposes a page-list (fixed-layout replica) — only then are print page numbers
      *  claimed; a reflowable export has no source pagination. */
-    static String accessibilityMeta(OCDDocument doc, boolean pageList) {
+    public static String accessibilityMeta(OCDDocument doc, boolean pageList) {
         boolean hasImages = !doc.images().isEmpty();
         boolean hasStruct = doc.structure() != null && !doc.structure().isEmpty();
         boolean hasAlt    = hasAlt(doc.structure());
@@ -444,18 +444,18 @@ final class EpubPackage {
     }
 
     // ── small helpers ────────────────────────────────────────────────────────────
-    static String title(OCDDocument doc) {
+    public static String title(OCDDocument doc) {
         String t = doc.meta().title();
         return !t.isBlank() ? t : (doc.id() != null ? doc.id() : "OCDDocument");
     }
-    static String lang(OCDDocument doc) {
+    public static String lang(OCDDocument doc) {
         String l = doc.meta().language();
         return !l.isBlank() ? l : "und";
     }
     /** THE media type of a member, by its name: images, audio and video, the model's data members — and the
      *  octet-stream fallback for anything else, which is legal and honest (a passenger the model does not own
      *  is better declared as a blob than left undeclared for epubcheck to refuse). */
-    static String mediaType(String path) {
+    public static String mediaType(String path) {
         String n = path.toLowerCase(Locale.ROOT);
         int dot = n.lastIndexOf('.');
         return switch (dot < 0 ? "" : n.substring(dot + 1)) {
@@ -482,13 +482,13 @@ final class EpubPackage {
 
     /** Every image resource, written under {@code OEBPS/images/}. Both flavours carry the same bytes
      *  under the same names — this was one method in each writer, character for character. */
-    static void images(JxZip zip, OCDDocument doc) throws IOException {
+    public static void images(JxZip zip, OCDDocument doc) throws IOException {
         for (var e : doc.images().entrySet())
             zip.deflated(OPF + "images/" + JxName.safe(e.getKey()), e.getValue());
     }
 
     /** Where a heading lives: the page member of its first referenced page. Also one method in each. */
-    static String headingHref(OCDStructNode s) {
+    public static String headingHref(OCDStructNode s) {
         int p = firstPage(s);
         return OCDVocab.pageHref((p < 0 ? 0 : p) + 1);
     }
