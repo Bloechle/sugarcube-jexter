@@ -848,3 +848,18 @@ html:not([data-theme="dark"]) .px-tooltabs .px-tooltab.px-wip.active { color:#c0
 :root[data-theme="dark"] .px-tooltabs .px-tooltab.px-wip.active { color:#e8b268; }
 .px-tooltabs .px-tooltab.px-wip:hover { color:#9c6210; }
 :root[data-theme="dark"] .px-tooltabs .px-tooltab.px-wip:hover { color:#f2c688; }
+
+/* ── A phone ──────────────────────────────────────────────────────────────────
+   The page gets the width. The rail starts folded (prism.js) and opens OVER the stage, as the tool pane
+   does, opaque; the tabs keep their icons; the footer keeps the rail, the pager and the zoom. */
+@media (max-width: 760px) {
+  .px-body { position:relative; }
+  .px-pane-l, .px-pane-r { position:absolute; top:0; bottom:0; z-index:6; background:var(--qry-bg);
+    box-shadow:0 0 0 1px var(--qry-line), 0 18px 40px -18px color-mix(in srgb, #000 55%, transparent); }
+  .px-pane-l { left:0; }
+  .px-pane-r { right:0; }
+  #split-left, #split-right { display:none; }
+  .px-tooltabs .px-tooltab span { display:none; }
+  #b-help, .px-status, .px-foot-r > .px-seg, #fit-page-btn { display:none; }
+  .px-foot { grid-template-columns:auto 1fr auto; gap:.25rem; padding:0 .3rem; }
+}

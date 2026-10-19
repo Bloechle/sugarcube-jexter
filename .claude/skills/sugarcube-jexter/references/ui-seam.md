@@ -172,6 +172,13 @@ asked at pointerdown, and the axis is a parameter. The console is dragged by its
 **A pane's blocks share the pane's gutter** (`--px-gutter`), and `white-space:nowrap` on an info line
 is a bug: those lines are sentences, and nowrap silently truncates them mid-word.
 
+**A phone (≤ 760 px, 2026-10-19)**: the rail starts folded (prism.js `wireChrome`) and both panes open
+OVER the stage, opaque (prism.css, last block); the tabs keep their icons, the footer keeps the rail, the
+pager and the zoom; a book whose first page is wider than the stage opens at the stage's width, not
+100%. Prism is also served by a host that is not an engine (a web reader of results): `?epub=<url>`
+fetches the book, takes its name from the response's Content-Disposition, and with no `ok` at
+`/api/health` the engine-only affordances stay hidden.
+
 ### Forms — a tool for data that has no ink (2026-09-13)
 
 `forms.js` is the surface for the one thing a reader shows nothing of: form fields live in

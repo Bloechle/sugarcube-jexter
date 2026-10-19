@@ -91,12 +91,24 @@ async function main() {
   try { await initSW(); }
   catch (e) { toast(e.message, { tone: 'danger' }); return; }   // no Service Worker → nothing can be served
 
-  // Optional: ?epub=<same-origin url> loads a co-located sample (still client-side).
+  // Optional: ?epub=<same-origin url> opens a book a host serves (still client-side). Its name is the one
+  // the response gives (Content-Disposition), else the URL's last segment — a host's route for a result
+  // ends in "result", which names nothing a reader could recognise.
   const src = new URLSearchParams(location.search).get('epub');
   if (src) {
-    try { openEpub(await (await fetch(src)).arrayBuffer(), src.split('/').pop()); }
-    catch (e) { toast(`Could not fetch "${src}": ${e.message}`, { tone: 'danger' }); }
+    try {
+      const res = await fetch(src);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      openEpub(await res.arrayBuffer(), fileNameOf(res.headers.get('content-disposition')) || src.split('/').pop());
+    } catch (e) { toast(`Could not fetch "${src}": ${e.message}`, { tone: 'danger' }); }
   }
+}
+
+/** The file name a Content-Disposition carries: the exact UTF-8 one (RFC 5987) first, else the plain one. */
+function fileNameOf(cd) {
+  const exact = /filename\*=UTF-8''([^;]+)/i.exec(cd || '');
+  if (exact) try { return decodeURIComponent(exact[1]); } catch { /* a malformed escape: take the plain name */ }
+  return /filename="?([^";]+)"?/i.exec(cd || '')?.[1] || '';
 }
 
 /* -- Service Worker: the client-side server ------------------------- */
@@ -257,6 +269,8 @@ async function loadEpub(id, name) {
   // you have just converted drops you in its middle with no way to know why. A book opens at its cover.
   state.current = 0;
   setMode(state.mode);   // data-mode + segmented + layout + pager
+  // At 100% a page is wider than a phone: there, a book opens at the stage's width instead.
+  if (state.pages[0].w > $('#epub-scroll').clientWidth) fitZoom('width');
 }
 
 // ONE pass per page: size + rotation (layout) + concatenated text (search).
@@ -865,6 +879,8 @@ function wireChrome() {
   wireSplitters();
   wireConsole();
   $('#toggle-rail').on('click', () => $('body').cls('~rail-collapsed'));
+  // A phone gives the page the width: the rail starts folded there and opens over the stage (prism.css).
+  if (matchMedia('(max-width: 760px)').matches) $('body').cls('+rail-collapsed');
   // The tool panel folds the same way, from the corner it lives in. Purely visual: the tool stays
   // active, its ribbon stays, only the pane is out of the way — so nothing has to be re-selected.
   $('#toggle-drawer').on('click', () => $('body').cls('~drawer-collapsed'));
