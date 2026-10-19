@@ -341,8 +341,13 @@ arXiv:2504.10258, 2025), which fixes plain recursive XY-cut on three points:
 - **Relative-depth valleys** — cuts run on projection profiles and a valley is scored by its depth
   relative to the surrounding peaks (with a noise floor), so a near-empty corridor still cuts and a
   page margin never does.
-- **Adaptive thresholds** — the minimum gap per axis derives from the document's own median block
-  dimensions, not a fixed constant.
+- **Adaptive thresholds** — the minimum gap per axis derives from the page's own items: a horizontal
+  cut from the median item height, a vertical one from the TEXT's line (the low decile of item heights),
+  the way poppler and pdftotext++ bound a gutter by the font size — not from the block width, which made a
+  newspaper or two-column gutter (11–22 pt) narrower than any cut it allowed. A gutter that narrow cuts
+  only with a column on each side, taller than two lines: a label and its value apart on one line stay
+  together. The projection weighs each item by its ink extent, not by count, so a column set as one tall
+  paragraph is as deep as thirteen stacked ones.
 
 Pure geometry, deterministic, no ML.
 

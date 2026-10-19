@@ -147,7 +147,7 @@ final class Fixtures {
         cs.endText();
     }
 
-    /** What a fixture's text must read, line by line, word for word (the WORDS gate). */
+    /** What a fixture's text must read, line by line, word for word and in this order (the WORDS gate). */
     static final Map<String, List<String>> WORDS = new LinkedHashMap<>();
 
     /**
@@ -177,15 +177,28 @@ final class Fixtures {
         words.add(tj(cs, bold, 14, x, y, "LE GRAND ENTRETIEN", new int[]{ 350, 350 }, 1.6f, 100));
         y -= 34;
         words.add(tj(cs, bold, 30, x, y, "Une rentrée sous tension", new int[]{ 200, 200, 200 }, 0, 93));
-        // two columns, the right one half a line lower: a union band chained them into one line
-        String[] left = { "La commune investit dans", "ses écoles cette année", "un montant record pour" };
-        String[] right = { "Les travaux commencent", "au printemps prochain", "sous réserve du budget" };
+        // two columns as a newspaper sets them — narrow, a 4 mm gutter, the right one half a line lower: a
+        // union band chained them into one line, and a gutter measured against the column's width (15 % of
+        // it) was never cut, so the page read across its columns
+        String[] left = { "La commune investit dans", "ses écoles cette année", "un montant record pour", "la ville et la région" };
+        String[] right = { "Les travaux commencent", "au printemps prochain", "sous réserve du budget", "voté en décembre" };
         y -= 30;
-        for (int i = 0; i < left.length; i++) {
-            words.add(tj(cs, times, 9, x, y - i * 11, left[i], null, 0, 100));
-            words.add(tj(cs, times, 9, x + 62 * MM, y - 5.5f - i * 11, right[i], null, 0, 100));
-        }
+        float col = 40 * MM, gutter = 4 * MM;
+        for (int i = 0; i < left.length; i++) words.add(justified(cs, times, 9, x, y - i * 11, left[i], col));
+        for (int i = 0; i < right.length; i++) words.add(justified(cs, times, 9, x + col + gutter, y - 5.5f - i * 11, right[i], col));
         WORDS.put("text_press", words);
+    }
+
+    /** One justified line: its word gaps share whatever {@code width} leaves after the words. */
+    private static String justified(PDPageContentStream cs, PDFont f, float size, float x, float y, String line,
+                                    float width) throws IOException {
+        String[] w = line.split(" ");
+        float ink = 0;
+        for (String s : w) ink += f.getStringWidth(s) / 1000 * size;
+        int gap = Math.round((width - ink) / (w.length - 1) / size * 1000);
+        int[] gaps = new int[w.length - 1];
+        java.util.Arrays.fill(gaps, gap);
+        return tj(cs, f, size, x, y, line, gaps, 0, 100);
     }
 
     /** One line in one TJ: the words of {@code line}, each pair parted by {@code gaps[i]} thousandths of an em

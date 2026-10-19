@@ -33,8 +33,9 @@ import java.util.function.Function;
  *   <li><b>Relative-depth valleys</b> — a valley is scored by its depth relative to the surrounding
  *       peaks (with a noise floor), not by raw width, so a near-empty corridor still cuts and page
  *       margins never do (paper's density-aware splitting).</li>
- *   <li><b>Adaptive thresholds</b> — the minimum gap per axis is derived from the document's own
- *       median block dimensions, not a fixed constant.</li>
+ *   <li><b>Adaptive thresholds</b> — the minimum gap per axis is derived from the page's own items:
+ *       the median height for a horizontal cut, the text's line for a vertical one, never a fixed
+ *       constant; the projection weighs each item by its ink extent.</li>
  * </ol>
  * Density-driven axis selection prefers the deeper valley (horizontal on a tie → top before bottom;
  * vertical → left before right). Pure geometry, deterministic, no ML.
@@ -76,6 +77,8 @@ public final class XYCut {
     private static final int    CROSS_MIN_OVERLAPS  = 2;
     /** Minimum relative valley depth (0–1) to accept a cut. */
     private static final double MIN_VALLEY_DEPTH    = 0.10;
+    /** × the median block width: a vertical gap this wide splits whatever stands beside it. */
+    private static final double BLOCK_GUTTER        = 0.15;
     /** Profile floor: coverage ≤ NOISE × peak counts as empty. */
     private static final double NOISE               = 0.05;
     /** Profile resolution cap (buckets); larger spans are scaled into this. */
@@ -183,7 +186,11 @@ public final class XYCut {
         if (vd > MIN_VALLEY_DEPTH) {
             List<Item<T>> left = new ArrayList<>(), right = new ArrayList<>();
             for (Item<T> it : items) (it.cx < vV.cut ? left : right).add(it);
-            if (!left.isEmpty() && !right.isEmpty()) { splitInto(left, m, leaves); splitInto(right, m, leaves); return; }
+            // A gutter narrower than a block's share is a gutter only when a column stands on each side, taller
+            // than twice the text's line: a label and its value set apart on ONE line are not two columns.
+            boolean columns = vV.span >= m.medianWidth * BLOCK_GUTTER
+                    || bbox(left).height() > 2 * m.line && bbox(right).height() > 2 * m.line;
+            if (!left.isEmpty() && !right.isEmpty() && columns) { splitInto(left, m, leaves); splitInto(right, m, leaves); return; }
         }
         List<Item<T>> leaf = new ArrayList<>(items);
         leaf.sort(Comparator.comparingDouble((Item<T> it) -> -it.cy).thenComparingDouble(it -> it.cx));
@@ -211,7 +218,16 @@ public final class XYCut {
         m.medianWidth  = JxNum.median(w);
         m.medianHeight = JxNum.median(h);
         m.minHGap = m.medianHeight * 0.8;    // ≈ one line height for a horizontal split
-        m.minVGap = m.medianWidth  * 0.15;   // ≈ 15 % of a median block for a vertical split
+        // A gutter is measured against the TEXT, not the block: 15 % of a column-wide block is wider than the
+        // gutter of every newspaper and of most two-column papers (a 240 pt column asks 36 pt, the gutter is
+        // 22), so no vertical cut was ever allowed there and the columns were read line by line, interleaved.
+        // A line is the text's scale: the low decile of item heights (a one-line item exists on any page that
+        // has columns) bounds the gap, the way poppler and pdftotext++ bound it by the font size.
+        double[] hs = h.clone();
+        java.util.Arrays.sort(hs);
+        double line = hs[hs.length / 10];
+        m.line = line;
+        m.minVGap = Math.min(m.medianWidth * BLOCK_GUTTER, line > 0 ? line : Double.MAX_VALUE);
         return m;
     }
 
@@ -264,12 +280,16 @@ public final class XYCut {
         int res = Math.max(1, Math.min(MAX_RES, (int) Math.ceil(span)));
         double f = res / span, origin = yAxis ? region.y() : region.x();
         float[] p = new float[res];
+        // Coverage is INK EXTENT, not a count: each item adds its extent across the projection. Counted, a
+        // column set as one tall paragraph weighs 1 against 13 stacked paragraphs beside it, and the gutter
+        // between them read as a shallow valley (0.15) that never cut — the page read across its columns.
         for (Item<T> it : items) {
             double c0 = yAxis ? it.b.y()      : it.b.x();
             double c1 = yAxis ? it.b.maxY() : it.b.right();
+            float across = (float) (yAxis ? it.b.width() : it.b.height());
             int s = clampIdx((int) ((c0 - origin) * f), res);
             int e = clampIdx((int) ((c1 - origin) * f), res);
-            for (int i = s; i <= e; i++) p[i]++;
+            for (int i = s; i <= e; i++) p[i] += across;
         }
         return new Axis(p, origin, f);
     }
@@ -302,6 +322,7 @@ public final class XYCut {
                     best.cut   = ax.origin() + ((start + end) / 2.0) / ax.f();
                     best.depth = depth;
                     best.width = w;
+                    best.span  = w / ax.f();
                 }
             } else i++;
         }
@@ -335,7 +356,7 @@ public final class XYCut {
         final T v; final JxRect b; final double cx, cy;
         Item(T v, JxRect b) { this.v = v; this.b = b; this.cx = b.cx(); this.cy = b.cy(); }
     }
-    private static final class Metrics { double medianWidth, medianHeight, minHGap, minVGap; }
+    private static final class Metrics { double medianWidth, medianHeight, minHGap, minVGap, line; }
     private record Axis(float[] hist, double origin, double f) {}
-    private static final class Valley  { double cut, depth, width; }
+    private static final class Valley  { double cut, depth, width, span; }   // width in buckets, span in page units
 }
