@@ -43,8 +43,10 @@ public final class Gates {
     private static final String PAGE = "page-001.xhtml", FONTS = "pages/fonts.svg";
 
     private static final List<String> warnings = new ArrayList<>();
+    private static String current;          // the PDF being gated, printed once if one of its gates fails
+    private static boolean reported;
     private static final Logger READER = Logger.getLogger(OCDReader.class.getName());   // held: JUL keeps loggers weakly
-    private static int failed;
+    private static int failed, checks;
 
     public static void main(String[] args) throws Exception {
         if (System.getenv("SOURCE_DATE_EPOCH") == null) {      // an unpinned clock alone fails REPRO
@@ -56,7 +58,8 @@ public final class Gates {
         Path tmp = Files.createTempDirectory("gates");
         for (String a : args) {
             File pdf = new File(a);
-            System.out.println("== " + pdf.getName());
+            current = pdf.getName();
+            reported = false;
             byte[] src = Files.readAllBytes(pdf.toPath());
             byte[] ocd = to(src, "ocd");
             Path container = tmp.resolve(pdf.getName() + ".ocd.epub");
@@ -73,7 +76,7 @@ public final class Gates {
             gate("EDITED",   () -> edited(ocd, tmp));
             gate("HOSTILE",  () -> hostile(ocd, tmp));
         }
-        System.out.println(failed == 0 ? "ALL GATES GREEN" : failed + " GATE(S) FAILED");
+        System.out.println(failed == 0 ? "ALL GATES GREEN: " + checks + " checks on " + args.length + " PDFs" : failed + " GATE(S) FAILED");
         System.exit(failed == 0 ? 0 : 1);
     }
 
@@ -99,10 +102,12 @@ public final class Gates {
 
     private static void gate(String name, Check c) {
         List<String> problems;
+        checks++;
         try { problems = c.run(); }
         catch (Throwable t) { problems = List.of("threw " + t); }
-        if (problems.isEmpty()) { System.out.printf("   %-9s ok%n", name); return; }
+        if (problems.isEmpty()) return;
         failed++;
+        if (!reported) { System.out.println(current); reported = true; }
         System.out.printf("   %-9s FAILED%n", name);
         problems.stream().limit(12).forEach(p -> System.out.println("      " + p));
         if (problems.size() > 12) System.out.println("      … " + (problems.size() - 12) + " more");
@@ -277,18 +282,22 @@ public final class Gates {
         edits.put("badmat", s -> s.replaceFirst("transform=\"matrix\\([^\"]*\\)\"", "transform=\"matrix(nope)\""));
         edits.put("badfont", s -> s.replaceFirst("data-font=\"[^\"]*\"", "data-font=\"NoSuchFont\""));
         edits.put("badclip", s -> once(s, "url(#c", "url(#zz"));
+        edits.put("badpath", s -> s.replaceFirst("(<path id=\"[^\"]+\"[^>]*? d=\"M[^\"]*)\"", "$1 L1 1#\""));   // once looped forever
 
+        Set<String> optional = Set.of("badclip", "badpath");
         List<String> bad = new ArrayList<>();
         var variants = new LinkedHashMap<String, byte[]>();
         for (var e : edits.entrySet()) {
             String edited = e.getValue().apply(page);
             if (edited.equals(page)) {                 // a payload that hits nothing tests nothing
-                if (!e.getKey().equals("badclip")) bad.add(e.getKey() + ": the payload found nothing to hit");
-                continue;                              // a page that does not clip has no clip to break
+                if (!optional.contains(e.getKey())) bad.add(e.getKey() + ": the payload found nothing to hit");
+                continue;                              // a page with no clip or no path has none to break
             }
             variants.put(e.getKey(), rezip(good, (n, b) -> n.endsWith(PAGE) ? edited.getBytes(StandardCharsets.UTF_8) : b));
         }
         variants.put("nofonts", rezip(good, (n, b) -> n.endsWith(FONTS) ? null : b));
+        variants.put("deepjson", rezip(good, (n, b) -> n.endsWith("meta.json")                       // once a StackOverflowError
+                ? ("[".repeat(100_000) + "]".repeat(100_000)).getBytes(StandardCharsets.UTF_8) : b));
         variants.put("trunc", Arrays.copyOf(good, good.length / 2));
 
         for (var v : variants.entrySet()) {
@@ -303,7 +312,7 @@ public final class Gates {
         return bad;
     }
 
-    /** "refused: …", "warned: …", "LEAK …" or "silent". A read that never returns is a refusal that failed. */
+    /** "refused: …", "warned: …", "crashed: …", "LEAK …" or "silent". A read that never returns fails too. */
     private static String readHostile(File f) throws Exception {
         warnings.clear();
         ExecutorService ex = Executors.newSingleThreadExecutor(r -> { Thread t = new Thread(r); t.setDaemon(true); return t; });
@@ -317,6 +326,8 @@ public final class Gates {
                     return warnings.isEmpty() ? "silent" : "warned: " + warnings.get(0);
                 } catch (Exception e) {
                     return "refused: " + e.getClass().getSimpleName();
+                } catch (Error e) {                    // a StackOverflowError is not a refusal, it is a crash
+                    return "crashed: " + e.getClass().getSimpleName();
                 }
             }).get(60, TimeUnit.SECONDS);
         } catch (TimeoutException e) {

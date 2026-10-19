@@ -41,22 +41,25 @@ public final class TesseractOcrClient implements OcrClient {
     @Override public String engine() { return "tesseract"; }
 
     @Override public List<Word> read(byte[] image, String lang) throws IOException {
-        Path in = Files.createTempFile("jexter-ocr-", ".img");
+        Path in = Files.createTempFile("jexter-ocr-", ".img"), out = Files.createTempFile("jexter-ocr-", ".tsv");
         try {
             Files.write(in, image);
+            // stdout goes to a file: reading the pipe first would block until tesseract ends, so a hung
+            // process would hang the conversion and the timeout below would never be reached.
             Process p = new ProcessBuilder(exe, in.toString(), "stdout", "-l",
                     lang == null || lang.isBlank() ? defaultLang : lang, "tsv")
+                    .redirectOutput(out.toFile())
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start();
-            String tsv = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-            if (!p.waitFor(TIMEOUT_S, TimeUnit.SECONDS)) { p.destroyForcibly(); throw new IOException("tesseract timed out"); }
+            if (!p.waitFor(TIMEOUT_S, TimeUnit.SECONDS)) { p.destroyForcibly(); throw new IOException("tesseract timed out after " + TIMEOUT_S + " s"); }
             if (p.exitValue() != 0) throw new IOException("tesseract exited with " + p.exitValue());
-            return parse(tsv);
+            return parse(Files.readString(out, StandardCharsets.UTF_8));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("interrupted", e);
         } finally {
             Files.deleteIfExists(in);
+            Files.deleteIfExists(out);
         }
     }
 

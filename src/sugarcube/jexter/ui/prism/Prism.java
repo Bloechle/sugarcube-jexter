@@ -1,7 +1,6 @@
 package sugarcube.jexter.ui.prism;
 
 import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
 
 import sugarcube.jexter.core.JxStringer;
 import sugarcube.jexter.core.JxLog;
@@ -69,19 +68,18 @@ public final class Prism extends WebApp {
         return new String[]{"web", "sugarcube/jexter/ui/prism/web",
                 "src/sugarcube/jexter/ui/prism/web", "build/src/sugarcube/jexter/ui/prism/web"};
     }
-    @Override protected void routes(HttpServer server) {
+    @Override protected void routes(Routes routes) {
         installLogBridge();                                   // mirror JxLog → /api/log (in-page console)
         bindModel();                                          // bind an LLM iff a key is in env or saved config
         OcrEngines.bindFromEnv();                             // bind an OCR engine iff the environment names one
-        server.createContext("/api/convert",  this::convert); // the one engine route: bytes (+ to/opts) → artifact bytes
-        server.createContext("/api/options",  this::options); // the ConvertOptions registry (+ bound-model status)
-        server.createContext("/api/targets",  this::targets); // valid `to` ids
-        server.createContext("/api/health",   this::health);  // liveness probe (parity with the cloud)
-        server.createContext("/api/ai/config",this::aiConfig);// AI: bind the LLM connection from the UI
-        server.createContext("/api/ai/stop",  this::aiStop);  // AI: interrupt an in-flight refine (page-windowed → stops at the next page)
-        server.createContext("/api/font",     this::font);    // a TTF/OTF → the container's own font block
-        server.createContext("/api/log",      this::log);     // JxLog SSE (F2)
-        server.createContext("/api/progress", this::progress);// conversion progress SSE
+        routes.add("/api/convert",  this::convert); // the one engine route: bytes (+ to/opts) → artifact bytes
+        routes.add("/api/options",  this::options); // the ConvertOptions registry (+ bound-model status)
+        routes.add("/api/targets",  this::targets); // valid `to` ids
+        routes.add("/api/ai/config",this::aiConfig);// AI: bind the LLM connection from the UI
+        routes.add("/api/ai/stop",  this::aiStop);  // AI: interrupt an in-flight refine (page-windowed → stops at the next page)
+        routes.add("/api/font",     this::font);    // a TTF/OTF → the container's own font block
+        routes.add("/api/log",      this::log);     // JxLog SSE (F2)
+        routes.add("/api/progress", this::progress);// conversion progress SSE
     }
 
     // ── /api/convert — the single conversion entry (PDF, image or OCD-EPUB → any target) ──
@@ -102,13 +100,12 @@ public final class Prism extends WebApp {
                 if (!scheme.equals("http") && !scheme.equals("https")) { error(x, new IllegalArgumentException("only http/https URLs are supported")); return; }
                 body = download(uri);
             } else {
-                body = x.getRequestBody().readAllBytes();
+                body = body(x);
             }
             if (body.length == 0) { error(x, new IllegalArgumentException("empty body — POST a PDF, an image or an OCD-EPUB, or pass ?url= / ?path=")); return; }
 
             boolean refining = "true".equalsIgnoreCase(opts.get("refineStructure"));
             if (refining) refineThread = Thread.currentThread();   // expose this worker to /api/ai/stop
-            enter();
             try {
                 // The window is watching: bind the progress channel of THIS conversion to the SSE stream.
                 // Per conversion, never global — the engine's concurrency contract is one document per thread.
@@ -121,7 +118,6 @@ public final class Prism extends WebApp {
                         sugarcube.jexter.core.JxProgress.Stage.WRITE, 0, 0, "done").toJson());
                 send(x, out);
             } finally {
-                leave();
                 if (refining) { refineThread = null; Thread.interrupted(); }   // clear any leftover interrupt before the pool reuses the thread
             }
         } catch (Exception e) { error(x, e); }
@@ -162,7 +158,7 @@ public final class Prism extends WebApp {
     // body (not the URL), is held inside the bound client, and is persisted owner-only for restarts.
     private void aiConfig(HttpExchange x) throws IOException {
         try {
-            byte[] raw = x.getRequestBody().readAllBytes();
+            byte[] raw = body(x);
             Object root = raw.length == 0 ? null : JxJson.parse(new String(raw, StandardCharsets.UTF_8));
             Map<String, Object> m = JxJson.asObj(root);
             if (m == null) m = Map.of();
@@ -387,7 +383,7 @@ public final class Prism extends WebApp {
     // path is enough; this is the same code path, reached from a browser that only has bytes.
     private void font(HttpExchange x) throws IOException {
         try {
-            byte[] ttf = x.getRequestBody().readAllBytes();
+            byte[] ttf = body(x);
             if (ttf.length == 0) throw new IllegalArgumentException("no font in the request body");
             String chars = param(x, "chars", "");
             String alias = param(x, "id", "f0");

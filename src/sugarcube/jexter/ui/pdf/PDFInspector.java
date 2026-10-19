@@ -1,7 +1,6 @@
 package sugarcube.jexter.ui.pdf;
 
 import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.cos.COSArray;
@@ -94,29 +93,28 @@ public final class PDFInspector extends WebApp {
         return new String[]{"web", "sugarcube/jexter/ui/pdf/web",
                 "src/sugarcube/jexter/ui/pdf/web", "build/src/sugarcube/jexter/ui/pdf/web"};
     }
-    @Override protected void routes(HttpServer server) {
-        server.createContext("/api/open", this::open);
-        server.createContext("/api/page", this::page);
-        server.createContext("/api/ocd", this::ocd);     // the OCD model (OCD-EPUB zip) → the client displays the stored page SVG verbatim
-        server.createContext("/api/tree", this::tree);   // COS structure (page- or document-rooted)
-        server.createContext("/api/content", this::content); // decoded content-stream operators
-        server.createContext("/api/stream", this::stream);   // decoded bytes of one indirect stream
-        server.createContext("/api/render", this::render);    // rasterize one image XObject → PNG
-        server.createContext("/api/images", this::images);    // list the document's image XObjects (+ metadata, page usage)
-        server.createContext("/api/text", this::text);
+    @Override protected void routes(Routes routes) {
+        routes.add("/api/open", this::open);
+        routes.add("/api/page", this::page);
+        routes.add("/api/ocd", this::ocd);     // the OCD model (OCD-EPUB zip) → the client displays the stored page SVG verbatim
+        routes.add("/api/tree", this::tree);   // COS structure (page- or document-rooted)
+        routes.add("/api/content", this::content); // decoded content-stream operators
+        routes.add("/api/stream", this::stream);   // decoded bytes of one indirect stream
+        routes.add("/api/render", this::render);    // rasterize one image XObject → PNG
+        routes.add("/api/images", this::images);    // list the document's image XObjects (+ metadata, page usage)
+        routes.add("/api/text", this::text);
     }
 
     // ── API: import (PDFBox loads it; we keep the live PDDocument) ────────────
     private void open(HttpExchange x) throws IOException {
         try {
             String name = param(x, "name", "document");
-            byte[] body = x.getRequestBody().readAllBytes();
+            byte[] body = body(x);
             synchronized (pdfLock) {                 // don't close `prev` while a render still holds it
                 PDDocument prev = doc;
                 doc = Loader.loadPDF(body);
                 if (prev != null) try { prev.close(); } catch (IOException ignored) { }
             }
-            baseName = name.replaceFirst("\\.[^.]+$", "");
 
             // keep the raw bytes on disk + drop any cached OCD models from the previous document,
             // so the `?src=ocd|ocd-file` rasterizers rebuild from this PDF on next request.

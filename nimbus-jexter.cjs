@@ -60,7 +60,7 @@ const cp = require('node:child_process');
 const DIR = __dirname;
 const HEADLESS = process.argv.includes('--serve');
 const RUN_ARG = (process.argv.find((a) => a.startsWith('--run=')) || '').slice(6); // headless one-shot action
-const VERSION = '1.9';   // 1.9 (2026-10-19): the `test` action — compile src/ and TEST_DIR into SCRATCH_DIR, run TEST_MAIN with SOURCE_DATE_EPOCH pinned: one command for the project's functional gate on any OS, the one CI runs too; 1.8 (2026-10-15): the AI bundler is gone (the `context` action, KEEP_FILES, SKIP_FILES) — the repo is the hand-off, AGENTS.md and the skill in .claude/skills/ travel with every clone; 1.7 (2026-10-05): OUT_DIR defaults to _artifacts, the convention every deck shares (it holds the PRODUCTS, not "production"); 1.6 (2026-09-11): the deck wears the cloud deck's chrome - a hint line under every section header, ONE tooltip system (every title is rendered by the deck: keyboard-reachable, scroll-following, styled), a grouped config drawer, a focus ring on every control, and a copy that strips the console prefixes; the blue palette, the cube mark and the tooltip of nimbus-server.cjs (whose #tip font named --sans, a token that does not exist - the shorthand was invalid and the box fell back to the body font); named after its project, like nimbus-cloud.cjs. Engine, bundler and actions unchanged; 1.5 (2026-09-02): the header no longer names a JDK version — RELEASE is the project's; 1.4 (2026-09-02): audit — no project name in the tool, one glob compiler, one in/out authority for the bundle, launchers/keep/skip through cfg, OUT_DIR under the project; 1.3 (2026-09-02): build also zips the app-image as <APP_NAME>-<APP_VERSION>-<os>.zip — the distributable; 1.2 (2026-09-01): binary containers by extension (a PDF read as utf8 is corrupt); 1.1: neutral defaults, .env is the project, library jars, zip + overview.md
+const VERSION = '1.9';   // 1.9 (2026-10-19): requests from another origin or host are refused (any web page could POST /run); the `test` action — compile src/ and TEST_DIR into SCRATCH_DIR, run TEST_MAIN with SOURCE_DATE_EPOCH pinned: one command for the project's functional gate on any OS, the one CI runs too; 1.8 (2026-10-15): the AI bundler is gone (the `context` action, KEEP_FILES, SKIP_FILES) — the repo is the hand-off, AGENTS.md and the skill in .claude/skills/ travel with every clone; 1.7 (2026-10-05): OUT_DIR defaults to _artifacts, the convention every deck shares (it holds the PRODUCTS, not "production"); 1.6 (2026-09-11): the deck wears the cloud deck's chrome - a hint line under every section header, ONE tooltip system (every title is rendered by the deck: keyboard-reachable, scroll-following, styled), a grouped config drawer, a focus ring on every control, and a copy that strips the console prefixes; the blue palette, the cube mark and the tooltip of nimbus-server.cjs (whose #tip font named --sans, a token that does not exist - the shorthand was invalid and the box fell back to the body font); named after its project, like nimbus-cloud.cjs. Engine, bundler and actions unchanged; 1.5 (2026-09-02): the header no longer names a JDK version — RELEASE is the project's; 1.4 (2026-09-02): audit — no project name in the tool, one glob compiler, one in/out authority for the bundle, launchers/keep/skip through cfg, OUT_DIR under the project; 1.3 (2026-09-02): build also zips the app-image as <APP_NAME>-<APP_VERSION>-<os>.zip — the distributable; 1.2 (2026-09-01): binary containers by extension (a PDF read as utf8 is corrupt); 1.1: neutral defaults, .env is the project, library jars, zip + overview.md
 // ── tiny .env loader (no dependency). Precedence: shell env > .env.local > .env ──
 // .env is the project's configuration and is tracked; .env.local is the machine's
 // (paths, a JDK, secrets) and is gitignored. Comments (#) and blank lines are fine.
@@ -430,7 +430,21 @@ function readBody(req) {
     return new Promise((res) => { let b = ''; req.on('data', (c) => b += c); req.on('end', () => res(b)); });
 }
 
+// Only this deck's own page may drive it. Binding 127.0.0.1 keeps other machines out, not other web
+// pages: any site can POST to a local port (a "simple" request needs no preflight), and /run compiles,
+// runs and deletes the folders its body names. So a request whose Host is not this deck (DNS
+// rebinding), whose Origin is another site, or that the browser flags cross-site is refused unread.
+const SELF = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
+function foreign(req) {
+    if (!SELF.has(req.headers.host)) return true;
+    const origin = req.headers.origin;
+    if (origin !== undefined && !(origin.startsWith('http://') && SELF.has(origin.slice(7)))) return true;
+    const site = req.headers['sec-fetch-site'];
+    return site !== undefined && site !== 'same-origin' && site !== 'none';
+}
+
 const server = http.createServer(async (req, res) => {
+    if (foreign(req)) { res.writeHead(403).end('forbidden'); return; }
     if (req.url === '/') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(PAGE); }
     if (req.url === '/api/defaults') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ defaults: DEFAULTS, app: ctx(DEFAULTS).appName, version: VERSION, tools: probeTools(DEFAULTS) })); }
     if (req.url === '/events') {

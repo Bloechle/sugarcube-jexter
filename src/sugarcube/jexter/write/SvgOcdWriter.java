@@ -2,6 +2,7 @@ package sugarcube.jexter.write;
 
 import sugarcube.jexter.core.JxName;
 import sugarcube.jexter.core.JxRect;
+import sugarcube.jexter.core.JxText;
 import sugarcube.jexter.core.JxColor;
 import sugarcube.jexter.core.JxTransform;
 import sugarcube.jexter.ocd.io.OCDVocab;
@@ -251,11 +252,8 @@ public final class SvgOcdWriter {
         sb.append(cmykAttrs(n));
     }
 
-    private static String esc(String v) {
-        var b = new StringBuilder(v.length() + 8);
-        sugarcube.jexter.core.JxText.text(b, v);
-        return b.toString();
-    }
+    /** Every attribute value goes through here: {@link JxText#attr} escapes the quote that would end it. */
+    private static String esc(String v) { return JxText.attr(v); }
 
     private static String kind(OCDGroup g) {
         if (g instanceof OCDParagraph) return "paragraph";

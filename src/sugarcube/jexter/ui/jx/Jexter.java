@@ -149,10 +149,9 @@ public final class Jexter extends WebApp {
         return new String[]{ "web", "sugarcube/jexter/ui/jx/web",
                 "src/sugarcube/jexter/ui/jx/web", "build/src/sugarcube/jexter/ui/jx/web" };
     }
-    @Override protected void routes(HttpServer server) {
-        server.createContext("/api/convert", this::convert);   // the one engine route: PDF bytes → normalized PDF bytes
-        server.createContext("/api/options", this::options);   // ConvertOptions registry (parity; the app curates its own toggles)
-        server.createContext("/api/health",  this::health);    // liveness probe
+    @Override protected void routes(Routes routes) {
+        routes.add("/api/convert", this::convert);   // the one engine route: PDF bytes → normalized PDF bytes
+        routes.add("/api/options", this::options);   // ConvertOptions registry (parity; the app curates its own toggles)
     }
 
     // ── /api/convert — PDF bytes in, normalized PDF bytes out (always selectable) ─
@@ -163,7 +162,7 @@ public final class Jexter extends WebApp {
             opts.remove("to");                                  // target is always pdf
             applyPolicy(opts);                                  // the fixed Jexter policy (header/footer detection off)
             opts.putIfAbsent("selectable", "true");             // Jexter always emits a real selectable text layer
-            byte[] body = x.getRequestBody().readAllBytes();
+            byte[] body = body(x);
             if (body.length == 0) { error(x, new IllegalArgumentException("empty body — upload a PDF")); return; }
 
             Conversion.Output out = Conversion.convert(body, "pdf", opts);   // import to OCD + re-export as normalized PDF

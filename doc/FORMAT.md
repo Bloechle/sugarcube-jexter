@@ -527,6 +527,9 @@ reader is **liberal but never silent**:
   is baked into the path's page-space geometry, never dropped.
 - **No DOCTYPE is accepted**, so external entities and entity expansion cannot
   reach the parser at all.
+- **Path data and JSON are parsed to the end or refused.** A `d` is M/L/H/V/C/Q/Z and numbers — any other
+  command or a stray character is refused with its position (a parser that could not advance once looped
+  until the heap was gone); a JSON member nested deeper than 256 levels is refused, never left to the stack.
 
 ### What a round-trip preserves
 

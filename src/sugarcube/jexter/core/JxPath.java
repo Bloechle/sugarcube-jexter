@@ -141,8 +141,11 @@ public final class JxPath extends Path2D.Double {
         return sb.toString();
     }
 
-    /** Parse an SVG path {@code d} string (M/L/H/V/C/Q/Z, absolute &amp; relative). */
-    public static JxPath parseSvg(String d) {
+    /** Parse an SVG path {@code d} string (M/L/H/V/C/Q/Z, absolute &amp; relative) — what every writer
+     *  here emits. Anything else is refused with where it stands, never skipped and never read as 0:
+     *  a {@code d} can come from a hand-edited or hostile container, and a parser that cannot advance
+     *  past a stray character once looped until the heap was gone. */
+    private static JxPath parseSvg(String d) {
         JxPath path = new JxPath();
         if (d == null || d.isBlank()) return path;
 
@@ -173,7 +176,7 @@ public final class JxPath extends Path2D.Double {
                     path.quadTo(x1, y1, cx, cy);
                 }
                 case 'Z' -> { path.closePath(); cx = sx; cy = sy; }
-                default  -> tok.skip();   // unsupported (A/S/T) — skip defensively
+                default  -> throw tok.malformed(cmd == 0 ? "path data must start with a command" : "unsupported path command '" + cmd + "'");
             }
         }
         return path;
@@ -351,7 +354,12 @@ public final class JxPath extends Path2D.Double {
                 else break;
             }
             try { return java.lang.Double.parseDouble(s.substring(start, i)); }
-            catch (Exception e) { return 0d; }
+            catch (NumberFormatException e) { throw malformed("a number was expected"); }
+        }
+
+        IllegalArgumentException malformed(String what) {
+            int from = Math.max(0, i - 20), to = Math.min(s.length(), i + 20);
+            return new IllegalArgumentException("malformed path data at " + i + ": " + what + " in \"…" + s.substring(from, to) + "…\"");
         }
     }
 }

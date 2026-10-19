@@ -1,6 +1,7 @@
 package sugarcube.jexter.ui;
 
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
 import sugarcube.jexter.core.JxStringer;
@@ -26,7 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * WebApp — shared base for the local browser-driven apps (Prism, PDFInspector, Jexter).
  *
- * <p>Both are the same kind of app: a zero-dependency {@link HttpServer} serving a
+ * <p>All three are the same kind of app: a zero-dependency {@link HttpServer} serving a
  * static qry-stack front-end plus a tiny JSON/binary API, opened in a chromeless
  * Chromium window whose lifetime drives the process. This base owns everything that
  * is not document-specific — argument parsing and server bootstrap, the static-file
@@ -34,6 +35,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * so nothing is ever fetched from the network and the apps work offline from the first start), the
  * SSE heartbeat and shutdown watchdog, window launching, and the small HTTP/JSON
  * utilities. Subclasses add only their state and their {@code /api/*} handlers.
+ *
+ * <p><b>Every route goes through one guard</b> ({@link #guarded}). Binding 127.0.0.1 keeps other machines
+ * out, not other web pages: any site the user visits can POST to a local port, and a DNS-rebinding page
+ * can even read the answer. These apps read files by path, fetch URLs and bind an LLM key, so a request is
+ * served only when its {@code Host} names this server, its {@code Origin} (when sent) is this server, and
+ * the browser does not flag it cross-site.
  *
  * <pre>  java &lt;App&gt; [--port N] [--web DIR] [--serve]</pre>
  * Opens a Chromium app window by default; {@code --serve} (alias {@code --no-open})
@@ -63,14 +70,13 @@ public abstract class WebApp {
             Map.entry("wasm", "application/wasm"));
 
 
-    protected volatile String baseName = "document";
     protected Path webDir;       // serves the app's own web/ (index.html, entry js) — disk mode
     protected Path sharedDir;    // serves /shared/* (sugarcube-mark.svg, js/); may be null
 
     // Classpath fallback: when the web/ assets are not on disk (e.g. a packaged
     // jar / jpackage app-image) they are served from the classpath instead.
     protected boolean fromClasspath;
-    protected String webResRoot;     // e.g. "sugarcube/jexter/ui/lab/web"
+    protected String webResRoot;     // e.g. "sugarcube/jexter/ui/prism/web"
     protected String sharedResRoot;  // e.g. "sugarcube/jexter/ui/shared/web"; may be null
 
     // window-lifecycle bookkeeping (see /api/alive + armShutdownWatchdog)
@@ -87,8 +93,12 @@ public abstract class WebApp {
     protected abstract int defaultPort();
     /** Candidate relative dirs to locate this app's {@code web/} (first existing wins). */
     protected abstract String[] webCandidates();
-    /** Register the app's {@code /api/*} contexts (handlers live in the subclass). */
-    protected abstract void routes(HttpServer server);
+    /** Register the app's {@code /api/*} routes (handlers live in the subclass); each one is guarded. */
+    protected abstract void routes(Routes routes);
+
+    /** How a subclass adds a route: always through the guard, never on the raw server. */
+    @FunctionalInterface
+    protected interface Routes { void add(String path, HttpHandler handler); }
 
     // ── Bootstrap ───────────────────────────────────────────────────────────────
     protected final void launch(String[] args) throws Exception {
@@ -133,16 +143,15 @@ public abstract class WebApp {
                     + (occupant != null ? " by \"" + occupant + "\"" : "") + " \u2014 serving on an ephemeral port instead.");
         }
         port = server.getAddress().getPort();
+        this.port = port;
 
-        routes(server);                                    // app-specific /api/* handlers
-        server.createContext("/api/app",   x -> {          // identity probe (single-instance check)
-            byte[] b = title().getBytes(StandardCharsets.UTF_8);
-            x.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
-            x.sendResponseHeaders(200, b.length);
-            try (OutputStream os = x.getResponseBody()) { os.write(b); }
-        });
-        server.createContext("/api/alive", this::alive);   // SSE heartbeat: the window keeps this open
-        server.createContext("/",          this::statics);
+        HttpServer s = server;
+        Routes routes = (path, h) -> s.createContext(path, guarded(h));
+        routes(routes);                                    // app-specific /api/* handlers
+        routes.add("/api/app",    x -> send(x, 200, "text/plain; charset=utf-8", title().getBytes(StandardCharsets.UTF_8)));
+        routes.add("/api/health", this::health);           // liveness, parity with the cloud probe
+        routes.add("/api/alive",  this::alive);            // SSE heartbeat: the window keeps this open
+        routes.add("/",           this::statics);
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
 
@@ -217,15 +226,45 @@ public abstract class WebApp {
         }
     }
 
-    /** Requests in flight. The watchdog reads the heartbeat to decide the window is gone, but a browser
-     *  can drop and re-open an SSE stream while a tab is busy — and a conversion holds the tab busy for
-     *  tens of seconds. Exiting then kills the work AND the server that was doing it, which reads as a
-     *  crash. So: never exit while something is being served. */
+    /** Requests in flight, counted by the guard for every app. The watchdog reads the heartbeat to decide
+     *  the window is gone, but a browser can drop and re-open an SSE stream while a tab is busy — and a
+     *  conversion holds the tab busy for tens of seconds. Exiting then kills the work AND the server that
+     *  was doing it, which reads as a crash. So: never exit while something is being served. A stream
+     *  (the heartbeat, a log) is not work: it would hold the process open forever. */
     private final AtomicInteger inFlight = new AtomicInteger();
+    private volatile int port;
 
-    protected void enter() { inFlight.incrementAndGet(); }
+    // ── The guard ─────────────────────────────────────────────────────────────
 
-    protected void leave() { inFlight.decrementAndGet(); }
+    private HttpHandler guarded(HttpHandler h) {
+        return x -> {
+            String refused = refusal(x);
+            if (refused != null) {
+                send(x, refused.startsWith("method") ? 405 : 403, "text/plain; charset=utf-8", refused.getBytes(StandardCharsets.UTF_8));
+                return;
+            }
+            boolean work = !String.valueOf(x.getRequestHeaders().getFirst("Accept")).contains("text/event-stream");
+            if (work) inFlight.incrementAndGet();
+            try { h.handle(x); }
+            finally { if (work) inFlight.decrementAndGet(); }
+        };
+    }
+
+    /** Why this request is not served, or null. */
+    private String refusal(HttpExchange x) {
+        String m = x.getRequestMethod();
+        if (!m.equals("GET") && !m.equals("HEAD") && !m.equals("POST")) return "method " + m + " not allowed";
+        if (!isSelf(x.getRequestHeaders().getFirst("Host"))) return "foreign Host";              // DNS rebinding
+        String origin = x.getRequestHeaders().getFirst("Origin");
+        if (origin != null && !(origin.startsWith("http://") && isSelf(origin.substring(7)))) return "foreign Origin";
+        String site = x.getRequestHeaders().getFirst("Sec-Fetch-Site");
+        if (site != null && !site.equals("same-origin") && !site.equals("none")) return "cross-site request";
+        return null;
+    }
+
+    private boolean isSelf(String hostPort) {
+        return hostPort != null && (hostPort.equals("127.0.0.1:" + port) || hostPort.equals("localhost:" + port));
+    }
 
     /** Exit a few seconds after the window closes (window mode only; never in --serve). */
     private void armShutdownWatchdog() {
@@ -251,13 +290,10 @@ public abstract class WebApp {
         if (p.equals("/")) p = "/index.html";
         byte[] data = readAsset(p);
         if (data == null) { x.sendResponseHeaders(404, -1); x.close(); return; }
-        String e = ext(p);
-        x.getResponseHeaders().set("Content-Type", MIME.getOrDefault(e, "application/octet-stream"));
         // Local app/shared assets change with every dev iteration; never let the browser serve a
         // stale entry (a cached old JS against a new HTML mismatches element IDs and renders nothing).
         x.getResponseHeaders().set("Cache-Control", "no-cache, must-revalidate");
-        x.sendResponseHeaders(200, data.length);
-        try (OutputStream os = x.getResponseBody()) { os.write(data); }
+        send(x, 200, MIME.getOrDefault(ext(p), "application/octet-stream"), data);
     }
 
     /** Read a web asset by request path ("/index.html", "/shared/sugarcube-mark.svg"); null if absent.
@@ -297,18 +333,39 @@ public abstract class WebApp {
     protected static long    longParam(HttpExchange x, String k, long def)     { try { return Long.parseLong(param(x, k, "" + def)); } catch (Exception e) { return def; } }
     protected static double  doubleParam(HttpExchange x, String k, double def) { try { return Double.parseDouble(param(x, k, "" + def)); } catch (Exception e) { return def; } }
 
+    /** The one way a response leaves: status, type, bytes. */
+    protected static void send(HttpExchange x, int status, String type, byte[] body) throws IOException {
+        x.getResponseHeaders().set("Content-Type", type);
+        x.sendResponseHeaders(status, body.length == 0 ? -1 : body.length);
+        try (OutputStream os = x.getResponseBody()) { os.write(body); }
+    }
     protected static void json(HttpExchange x, String body) throws IOException {
-        byte[] b = body.getBytes(StandardCharsets.UTF_8);
-        x.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
-        x.sendResponseHeaders(200, b.length);
-        try (OutputStream os = x.getResponseBody()) { os.write(b); }
+        send(x, 200, "application/json; charset=utf-8", body.getBytes(StandardCharsets.UTF_8));
     }
+    /** {@code {"error": …}} with the status the failure means: 413 too large, 400 a bad request, else 500. */
     protected static void error(HttpExchange x, Exception e) throws IOException {
-        byte[] b = ("{\"error\":" + jstr(e.getMessage() == null ? e.toString() : e.getMessage()) + "}").getBytes(StandardCharsets.UTF_8);
-        x.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
-        x.sendResponseHeaders(500, b.length);
-        try (OutputStream os = x.getResponseBody()) { os.write(b); }
+        int status = e instanceof TooLarge ? 413 : e instanceof IllegalArgumentException ? 400 : 500;
+        send(x, status, "application/json; charset=utf-8",
+                ("{\"error\":" + jstr(e.getMessage() == null ? e.toString() : e.getMessage()) + "}").getBytes(StandardCharsets.UTF_8));
     }
+
+    /** Uploads stop here: a document, a font, a settings body — never an unbounded stream into memory. */
+    protected static final long MAX_BODY = 512L << 20;
+
+    protected static final class TooLarge extends IOException {
+        private static final long serialVersionUID = 1L;
+        TooLarge(long max) { super("request body larger than " + (max >> 20) + " MB"); }
+    }
+
+    /** The request body, refused past {@code max} bytes. */
+    protected static byte[] body(HttpExchange x, long max) throws IOException {
+        try (var in = x.getRequestBody()) {
+            byte[] b = in.readNBytes((int) Math.min(max + 1, Integer.MAX_VALUE - 8));
+            if (b.length > max) throw new TooLarge(max);
+            return b;
+        }
+    }
+    protected static byte[] body(HttpExchange x) throws IOException { return body(x, MAX_BODY); }
 
     /** JSON string literal (quoted + escaped). Delegates to {@link JxStringer#quoted}
      *  so escaping lives in exactly one place. */
@@ -391,13 +448,9 @@ public abstract class WebApp {
         }
         return null;
     }
-    /** {@code /api/health} — liveness, parity with the cloud probe. One body, on the base: it was
-     *  character-identical in two apps, and an app that adds the route should not re-type the answer. */
-    protected void health(HttpExchange x) throws IOException {
-        byte[] b = "ok".getBytes(StandardCharsets.UTF_8);
-        x.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
-        x.sendResponseHeaders(200, b.length);
-        try (OutputStream os = x.getResponseBody()) { os.write(b); }
+    /** {@code /api/health} — liveness, parity with the cloud probe; every app answers it. */
+    private void health(HttpExchange x) throws IOException {
+        send(x, 200, "text/plain; charset=utf-8", "ok".getBytes(StandardCharsets.UTF_8));
     }
 
 }

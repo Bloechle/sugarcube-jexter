@@ -530,7 +530,10 @@ tail -6 /tmp/srv.log
 ```
 
 Rules: the trailing `-1` is just the bounded JVM being reaped — the `curl` outputs
-are authoritative. **Always redirect to a file**; never begin a cell with
+are authoritative. Every route is GUARDED (`WebApp.guarded`, doc/FRONTEND.md): curl's default Host
+(`127.0.0.1:<port>`) passes; a request sent with another `Host`, a foreign `Origin` or
+`Sec-Fetch-Site: cross-site` gets 403 — that is the guard working, not the route failing. A harness that
+serves Prism from ANOTHER origin (the Chromium bench's own node server) does not go through it at all. **Always redirect to a file**; never begin a cell with
 `pkill`/`sleep` on a still-live server (same pipe-wait → `-1`). `--serve` skips the
 window (so no shutdown watchdog); pass `--web <dir>` in dev so the disk assets
 resolve. `/api/alive` is SSE (curl would hang) — probe `/` or an app `/api/*` JSON

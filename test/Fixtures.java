@@ -520,11 +520,13 @@ final class Fixtures {
      * The tracks that ride BESIDE the ink, one of each so a loss is unambiguous: a text field with a
      * value and a checkbox that is on, a highlight and a note, two layers (one on, one off) with real
      * content, an external and an internal link, a two-level outline. No paint or text gate sees these.
+     * The hidden layer's name and the external URI carry quotes and markup: they are written into
+     * attributes, and an unescaped quote once made the whole container unreadable.
      */
     private static void rich(Doc d) throws IOException {
         PDRectangle size = new PDRectangle(400, 300);
         var ocProps = new PDOptionalContentProperties();
-        PDOptionalContentGroup on = new PDOptionalContentGroup("Visible layer"), off = new PDOptionalContentGroup("Hidden layer");
+        PDOptionalContentGroup on = new PDOptionalContentGroup("Visible layer"), off = new PDOptionalContentGroup("Hidden \"draft\" layer");
         ocProps.addGroup(on);
         ocProps.addGroup(off);
         ocProps.setGroupEnabled(off, false);
@@ -580,7 +582,7 @@ final class Fixtures {
         note.setContents("a sticky note");
 
         List<PDAnnotation> annots = new ArrayList<>(List.of(PDAnnotation.createAnnotation(text), PDAnnotation.createAnnotation(box), hl, note));
-        annots.add(uriLink(new PDRectangle(40, 214, 180, 18), "https://example.org"));
+        annots.add(uriLink(new PDRectangle(40, 214, 180, 18), "https://example.org/?q=\"quoted\"&a=<b>"));   // markup in values
         annots.add(goTo(new PDRectangle(230, 214, 130, 18), p2, 300));
         p1.setAnnotations(annots);
 

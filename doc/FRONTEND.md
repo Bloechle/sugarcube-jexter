@@ -24,13 +24,13 @@ that consumer's business, outside this repository.
 | `GET`  | `/api/targets` | — | `{ targets:[ "svg","pdf","epub","epub-reflow","html","md","doctags","ocd","stages","audit","zones","patch" ] }` — `Conversion.Target`, the only list |
 | `GET`  | `/api/health`  | — | `"ok"` (liveness) |
 
-- **`to`** is the only consumed query key; every other key is forwarded verbatim
+- **`to`** is the only consumed query key (the desktop adds `url`, `path` and `name`, below); every other key is forwarded verbatim
   to `ConvertOptions` — the introspectable registry, serialized once by
   `ConvertOptions.optionsJson` and shared by both engines, so they emit a
   byte-identical option shape. A consumer that checks what it asks for against
   `/targets` and `/options` can never ask for something the engine has dropped.
-- **Input is sniffed, never declared:** `%PDF…` ⇒ import + export; `PK…` (OCD-EPUB)
-  ⇒ re-export. So `to=ocd` on a PDF is *open*; `to=ocd&<opts>` on a PDF is
+- **Input is sniffed, never declared:** `%PDF…` ⇒ import + export; a PNG / JPEG / TIFF
+  signature ⇒ image import (+ OCR when an engine is bound) + export; `PK…` (OCD-EPUB) ⇒ re-export. So `to=ocd` on a PDF is *open*; `to=ocd&<opts>` on a PDF is
   *reconvert*; `to=pdf|epub|…` on either is *export*. There is no separate
   open / ocd / reimport / export route.
 - **Stateless.** Neither engine retains the document; the front-end holds the
@@ -47,9 +47,20 @@ that consumer's business, outside this repository.
 | Method | Route | Body / query | Returns |
 |--------|-------|--------------|---------|
 | `POST` | `/api/ai/config` | `{ provider, endpoint, key, model, effort, keyless, clear }` | bind / unbind a model |
+| `GET`  | `/api/ai/stop` | — | interrupt an in-flight refine (it stops at the next page) |
+| `POST` | `/api/font?chars=…` | a TTF / OTF | the container's own font block for those characters (Edit's "write text") |
 | `GET`  | `/api/log` | — | Server-Sent Events: `JxLog` records (the **F2** console) |
 | `GET`  | `/api/progress` | — | Server-Sent Events: `{stage, done, total, detail}` while a conversion runs |
 | `GET`  | `/api/alive` | — | SSE heartbeat. `WebApp` runs a watchdog that exits the process if no client ever connects; the chrome opens this at boot so the local server stays up. |
+| `GET`  | `/api/app` | — | the app's title (the single-instance probe); every `WebApp` answers it, and `/api/health` |
+
+**Every desktop route is guarded** (`WebApp.guarded`, one place for all three apps). Binding 127.0.0.1
+keeps other machines out, not other web pages: any site can POST to a local port, and a DNS-rebinding
+page can read the answer. A request is served only when its `Host` is `127.0.0.1:<port>` or
+`localhost:<port>`, its `Origin` (when sent) is the app itself, `Sec-Fetch-Site` (when sent) is
+`same-origin` or `none`, and the method is GET, HEAD or POST — otherwise 403 (405 for a method). A body
+over 512 MB is refused with 413, a bad request answers 400 with `{"error": …}`, a failure 500. The guard
+also counts the requests in flight, so the window watchdog never exits in the middle of a conversion.
 
 The desktop `/api/convert` also accepts `?url=<http(s)>` (the engine fetches it
 server-side — no browser CORS) and `?path=<local file>` (re-open a file off disk).

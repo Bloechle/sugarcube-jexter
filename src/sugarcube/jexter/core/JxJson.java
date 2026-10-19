@@ -30,9 +30,9 @@ import java.util.Map;
  *   }
  * }</pre>
  *
- * Malformed input throws {@link Error} with the offending offset. Parsing is
- * recursive, so depth is bounded by the stack; this is for our own documents,
- * not adversarial input.
+ * Malformed input throws {@link Error} with the offending offset — every failure, never a
+ * NumberFormatException or a StackOverflowError: the reader parses the members of containers that
+ * arrive from anywhere, so nesting is capped ({@value #MAX_DEPTH}) rather than left to the stack.
  */
 public final class JxJson {
 
@@ -42,8 +42,11 @@ public final class JxJson {
         public Error(String msg, int pos) { super(msg + " at offset " + pos); }
     }
 
+    /** Deeper than any document of ours by two orders of magnitude; shallow enough for any stack. */
+    public static final int MAX_DEPTH = 256;
+
     private final String s;
-    private int i;
+    private int i, depth;
 
     private JxJson(String s) { this.s = s; }
 
@@ -76,11 +79,16 @@ public final class JxJson {
         }
     }
 
+    private void deeper() {
+        if (++depth > MAX_DEPTH) throw new Error("nesting deeper than " + MAX_DEPTH, i);
+    }
+
     private Map<String, Object> object() {
+        deeper();
         Map<String, Object> m = new LinkedHashMap<>();
         i++;                                              // consume '{'
         ws();
-        if (peek() == '}') { i++; return m; }
+        if (peek() == '}') { i++; depth--; return m; }
         while (true) {
             ws();
             if (peek() != '"') throw new Error("expected string key", i);
@@ -93,23 +101,24 @@ public final class JxJson {
             ws();
             char c = peek();
             if (c == ',') { i++; continue; }
-            if (c == '}') { i++; return m; }
+            if (c == '}') { i++; depth--; return m; }
             throw new Error("expected ',' or '}'", i);
         }
     }
 
     private List<Object> array() {
+        deeper();
         List<Object> a = new ArrayList<>();
         i++;                                              // consume '['
         ws();
-        if (peek() == ']') { i++; return a; }
+        if (peek() == ']') { i++; depth--; return a; }
         while (true) {
             ws();
             a.add(value());
             ws();
             char c = peek();
             if (c == ',') { i++; continue; }
-            if (c == ']') { i++; return a; }
+            if (c == ']') { i++; depth--; return a; }
             throw new Error("expected ',' or ']'", i);
         }
     }
@@ -135,7 +144,8 @@ public final class JxJson {
                     case 't':  b.append('\t'); break;
                     case 'u':
                         if (i + 4 > s.length()) throw new Error("bad \\u escape", i);
-                        b.append((char) Integer.parseInt(s.substring(i, i + 4), 16));
+                        try { b.append((char) Integer.parseInt(s.substring(i, i + 4), 16)); }
+                        catch (NumberFormatException bad) { throw new Error("bad \\u escape", i); }
                         i += 4;
                         break;
                     default: throw new Error("bad escape '\\" + e + "'", i - 1);
@@ -161,7 +171,8 @@ public final class JxJson {
         if (!isDouble) {
             try { return Long.parseLong(tok); } catch (NumberFormatException ignore) { /* overflow → double */ }
         }
-        return Double.parseDouble(tok);
+        try { return Double.parseDouble(tok); }
+        catch (NumberFormatException bad) { throw new Error("bad number '" + tok + "'", start); }
     }
 
     private Object lit(String word, Object val) {
