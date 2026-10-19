@@ -488,7 +488,7 @@ public final class OCDReader {
             }
             case "path" -> {
                 if (!el.hasAttribute("id")) return;            // glyph defs live in <defs>; content paths carry ids
-                OCDPath p = path(el, css, grads, clipDefs);
+                OCDPath p = path(el, page, css, grads, clipDefs);
                 cmyk(el, p);
                 p.z(z[0] += 1f);
                 register(out, p, parent, wrapClip);
@@ -526,7 +526,7 @@ public final class OCDReader {
         // The font size is STATED (data-size) — it is also folded into the run matrix so the em-normalized
         // glyphs place, but the matrix alone cannot give it back: the determinant conflates it with an
         // anisotropic run matrix (Tz, a squeezed CTM). §B4.
-        JxTransform T = mat6(inParens(el.getAttribute("transform")));
+        JxTransform T = transformOf(el.getAttribute("transform"));
         double fs = dbl(el.getAttribute("data-size"), 0);
         OCDText t = new OCDText(font != null ? font.id() : el.getAttribute("data-font"), fs);
         t.id(el.getAttribute("id"));
@@ -594,10 +594,15 @@ public final class OCDReader {
         return t;
     }
 
-    private static OCDPath path(Element el, Map<String, String> css, Map<String, OCDGradient> grads,
+    private static OCDPath path(Element el, OCDPage page, Map<String, String> css, Map<String, OCDGradient> grads,
                                 Map<String, JxPath> clipDefs) {
         Map<String, String> d = decls(css, el.getAttribute("class"));
         JxPath geo = JxPath.ofSvg(el.getAttribute("d"));
+        // A path is in page space and its transform is the page flip (§B3). A viewer that moved it (Prism's
+        // editor composes the move in front of the flip) left more than the flip: that remainder is baked
+        // into the geometry, never dropped. A malformed transform is refused by mat6, with what it read.
+        JxTransform extra = page.fromSvg().concat(transformOf(el.getAttribute("transform")));
+        if (!extra.isIdentity()) geo = geo.transformed(extra.awt());
         if ("evenodd".equals(d.get("fill-rule"))) geo = geo.evenOdd();
         OCDPath p = new OCDPath(geo);
         p.id(el.getAttribute("id"));
@@ -630,10 +635,7 @@ public final class OCDReader {
         // transform = "matrix(pageFlip) matrix(t) translate(0 1) scale(1 -1)" — ALWAYS. An image states its
         // own placement whether it is clipped or not (§B3: a clip rides on a wrapper whose two nested flips
         // cancel), so the leading page flip is always the one to strip.
-        List<JxTransform> fns = transformList(el.getAttribute("transform"));
-        JxTransform P = JxTransform.IDENTITY;
-        for (JxTransform f : fns) P = P.concat(f);
-        P = page.fromSvg().concat(P);                                              // strip the page flip
+        JxTransform P = page.fromSvg().concat(transformOf(el.getAttribute("transform")));   // strip the page flip
         JxTransform TS = new JxTransform(1, 0, 0, -1, 0, 1);   // translate(0,1)·scale(1,-1), self-inverse
         im.transform(P.concat(TS));
 
@@ -825,7 +827,7 @@ public final class OCDReader {
                         : new double[]{ dbl(g.getAttribute("fx"), 0), dbl(g.getAttribute("fy"), 0), 0,
                                         dbl(g.getAttribute("cx"), 0), dbl(g.getAttribute("cy"), 0), dbl(g.getAttribute("r"), 0) };
                 JxTransform t = g.hasAttribute("gradientTransform")
-                        ? mat6(inParens(g.getAttribute("gradientTransform"))) : JxTransform.IDENTITY;
+                        ? transformOf(g.getAttribute("gradientTransform")) : JxTransform.IDENTITY;
                 var offs = new ArrayList<Float>(); var cols = new ArrayList<Integer>();
                 for (Element st : children(g)) {
                     if (!"stop".equals(st.getLocalName())) continue;
@@ -987,13 +989,9 @@ public final class OCDReader {
 
     // ── parsing helpers ──────────────────────────────────────────────────────────
     private static final Pattern CSS_RULE  = Pattern.compile("\\.([A-Za-z0-9_-]+)\\{([^}]*)}");
-    private static final Pattern FN        = Pattern.compile("(matrix|translate|scale)\\(([^)]*)\\)");
+    private static final Pattern FN        = Pattern.compile("\\s*([A-Za-z]+)\\s*\\(([^)]*)\\)\\s*,?\\s*");
 
     private static String attr(Element el, String name) { return el.hasAttribute(name) ? el.getAttribute(name) : null; }
-    private static String inParens(String s) {
-        int a = s.indexOf('('), b = s.lastIndexOf(')');
-        return a >= 0 && b > a ? s.substring(a + 1, b) : s;
-    }
     /** Six numbers, or a message that says what was read instead. A container can be hand-edited or
      *  written by another tool, and a bare {@code NumberFormatException} from six frames down names neither
      *  the value nor the grammar it broke — the one thing a caller needs. */
@@ -1010,19 +1008,36 @@ public final class OCDReader {
         }
         return JxTransform.fromMatrix6(v);   // PDF/SVG order, which is also the record's own
     }
-    /** Every transform function in the list, each as a matrix, in written order. */
-    private static List<JxTransform> transformList(String s) {
-        var out = new ArrayList<JxTransform>();
-        Matcher m = FN.matcher(s == null ? "" : s);
-        while (m.find()) {
+    /** An SVG transform list, composed in written order: {@code matrix}, {@code translate}, {@code scale} and
+     *  {@code rotate} — what the writers emit and what a viewer composes in front when it moves a node. Anything
+     *  else is refused with the list that was read: a function skipped in silence is a node silently misplaced. */
+    private static JxTransform transformOf(String s) {
+        JxTransform t = JxTransform.IDENTITY;
+        if (s == null || s.isBlank()) return t;
+        Matcher m = FN.matcher(s);
+        int at = 0;
+        while (at < s.length() && m.find(at) && m.start() == at) {
             String[] a = m.group(2).trim().split("[\\s,]+");
-            switch (m.group(1)) {
-                case "matrix"    -> out.add(mat6(m.group(2)));
-                case "translate" -> out.add(JxTransform.translate(Double.parseDouble(a[0]), a.length > 1 ? Double.parseDouble(a[1]) : 0));
-                case "scale"     -> out.add(JxTransform.scale(Double.parseDouble(a[0]), a.length > 1 ? Double.parseDouble(a[1]) : Double.parseDouble(a[0])));
-            }
+            t = t.concat(switch (m.group(1)) {
+                case "matrix"    -> mat6(m.group(2));
+                case "translate" -> JxTransform.translate(num(a, 0, s), a.length > 1 ? num(a, 1, s) : 0);
+                case "scale"     -> JxTransform.scale(num(a, 0, s), a.length > 1 ? num(a, 1, s) : num(a, 0, s));
+                case "rotate"    -> {
+                    JxTransform r = JxTransform.rotate(Math.toRadians(num(a, 0, s)));
+                    if (a.length < 3) yield r;
+                    double cx = num(a, 1, s), cy = num(a, 2, s);
+                    yield JxTransform.translate(cx, cy).concat(r).concat(JxTransform.translate(-cx, -cy));
+                }
+                default -> throw new IllegalArgumentException("unsupported transform " + m.group(1) + "() in \"" + s + '"');
+            });
+            at = m.end();
         }
-        return out;
+        if (at < s.length()) throw new IllegalArgumentException("malformed transform list: \"" + s + '"');
+        return t;
+    }
+    private static double num(String[] a, int i, String list) {
+        try { return Double.parseDouble(a[i]); }
+        catch (RuntimeException e) { throw new IllegalArgumentException("not a number in transform \"" + list + '"'); }
     }
     private static int argb(String color, String opacity) {
         JxColor c = JxColor.ofHex(color.trim());

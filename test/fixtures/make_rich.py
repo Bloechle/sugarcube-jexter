@@ -16,13 +16,13 @@ Carried here, one of each so a loss is unambiguous:
   - Links     : one external URI, one internal destination
   - Outline   : a two-level bookmark tree
 
-    python make_rich.py [out.pdf]        # default /tmp/rich.pdf
+    python make_rich.py [out.pdf]        # default rich.pdf
 """
 import sys
 import pikepdf
 from pikepdf import Array, Dictionary, Name, String
 
-out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/rich.pdf"
+out = sys.argv[1] if len(sys.argv) > 1 else "rich.pdf"
 pdf = pikepdf.new()
 
 font = pdf.make_indirect(Dictionary(

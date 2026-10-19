@@ -17,7 +17,7 @@ Usage
 
 The on-the-fly entry point for other code:
     from generate_matrix import build_one, FEATURES
-    expected = build_one("color_cmyk", "/tmp/x.pdf")
+    expected = build_one("color_cmyk", "x.pdf")
 """
 from __future__ import annotations
 import argparse, json, os, sys, tempfile, datetime
@@ -587,7 +587,7 @@ def build_one(fid, out_path):
 
 def build_all(out_dir, only=None, category=None):
     os.makedirs(out_dir, exist_ok=True)
-    entries = []
+    entries, failed = [], []
     for fid, (cat, title, fn, custom) in FEATURES.items():
         if only and fid not in only:
             continue
@@ -600,6 +600,7 @@ def build_all(out_dir, only=None, category=None):
             entries.append(entry)
             print(f"  [ok] {fid:24s} -> {entry['file']}")
         except Exception as e:
+            failed.append(fid)
             print(f"  [FAIL] {fid:24s} {type(e).__name__}: {e}", file=sys.stderr)
     manifest = {
         "generator": "generate_matrix.py", "version": GEN_VERSION,
@@ -611,6 +612,8 @@ def build_all(out_dir, only=None, category=None):
     with open(os.path.join(out_dir, "manifest.json"), "w") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
     print(f"\nWrote {len(entries)} PDFs + manifest.json to {out_dir}")
+    if failed:   # a corpus that shrinks in silence tests less than it claims
+        sys.exit(f"{len(failed)} feature(s) could not be built: {', '.join(failed)}")
     return manifest
 
 def main():

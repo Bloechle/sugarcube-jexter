@@ -135,6 +135,12 @@ javac --release 21 -Xlint:all -Werror -cp "lib/*" -d target/classes $(find src -
 
 `mvn -q package` works too (IDE convenience; the `pom.xml` points at the same jars).
 
+Then the functional gate, as CI runs it (Python with `test/fixtures/requirements.txt`):
+
+```bash
+bash test/run.sh                            # ALL GATES GREEN, ~20 s
+```
+
 > On Windows / PowerShell, use `;` as the classpath separator instead of `:`
 > (e.g. `-cp "lib/*;target/classes"`).
 
@@ -188,10 +194,10 @@ it with `node nimbus-jexter.cjs`. Everything else is the engine, all under
 |---|---|
 | `core` | The `Jx*` toolkit: `JxPath` (single path type), `JxTransform`/`JxRect`/`JxPoint`, `JxColor` (sRGB int argb), `JxStringer` (streaming JSON), `JxJson` (JSON parser), `JxMedia` (mp4/mp3 probe), `JxName`/`JxNum`/`JxText`, `JxZip`, `JxLog` (thin `System.Logger` facade). |
 | `ocd.model` | The model (27 classes). *Presentation:* `OCDNode` (sealed → `OCDText`/`OCDPath`/`OCDImage`/`OCDGroup`/`OCDMedia`/`OCDBreak`), container subtypes of `OCDGroup` (`OCDParagraph` — text block with `OCDBreak` line breaks, `OCDLayerContent` — bound to an `OCDLayer`, `OCDGraphic` — clustered vector drawing), `OCDMedia` (sealed → `OCDVideo`/`OCDAudio`), `OCDGradient` (linear/radial fill on `OCDPath`), `OCDFont`/`OCDGlyph`, `OCDClip`, `OCDLayer`, `OCDPage`, `OCDDocument`. *Annotations:* `OCDLink`, `OCDAnnotation` (review markup), `OCDFormField` (AcroForm widgets). *Logical:* `OCDMeta`, `OCDOutline`, `OCDStructNode` (a structure-tree node) + `OCDStructure` (a named, provenance-carrying tree; a document holds several). |
-| `ocd.io` | `OCDReader` — the OCD-EPUB reader (three tiers: skeleton, one page, full model; SVG-OCD v2 pages are self-contained, fonts parse from `pages/fonts.svg`), `OCDVocab` (shared serialization vocabulary). |
+| `ocd.io` | `OCDReader` — the OCD-EPUB reader (three tiers: skeleton, one page, full model; pages are self-contained, fonts parse from `pages/fonts.svg`), `OCDVocab` (shared serialization vocabulary). |
 | `ocd.render` | `OCDRenderer` (model → Java2D raster) + `BlendComposite`. |
 | `ocd.analysis` | `Cleaner` (flatten to the ink base — drop blank glyphs/runs and `OCDBreak`s, splice render-neutral wrappers, mint leaf ids) → `Liner` / `Segmenter` (line clustering + recursive XY-cut block segmentation on the shared `XYCut` engine, which also owns reading order via `XYCut.order`) + `Spacer` (the single word-space authority) + `Paragrapher` (one `OCDParagraph` per block, `OCDBreak` line breaks); `StructureBuilder` / `BookmarkStructureBuilder` (heuristic & PDF-bookmark structure trees), `Furniture` (running header/footer — single authority), `GraphicClusterer` (vector clustering → `OCDGraphic`), `FontProfile` (heading typography), `LanguageDetector`, `Refiner` + `StructureReconciler` (optional LLM structure), `AnalysisStages` (pipeline-stage projection for Prism). |
-| `pdfimport` | `PdfImporter` + `PdfStreamEngine` (paths, glyph runs, MCID tracking), `FontExtractor`, `TaggedStructureBuilder` (PDF/UA), `PdfRenderer`, `ConvertOptions`. The only PDFBox-coupled **import** layer (`write.PdfWriter` uses PDFBox for PDF export). |
+| `pdfimport` | `PdfImporter` + `PdfStreamEngine` (paths, glyph runs, MCID tracking), `FontExtractor`, `TaggedStructureBuilder` (PDF/UA), `PdfRenderer`. The only PDFBox-coupled **import** layer (`write.PdfWriter` uses PDFBox for PDF export). |
 | `font` | `GlyfOtf`, `CffOtf`, `JxFont` (facade + reverse cmap), `Foundry` (build an embeddable font from traced glyph outlines). |
 | `trace` | From-scratch **Potrace** raster→vector tracer (`Potrace`, `MedianCut`, `Bitmap`, `TracedShape`, `TraceOptions`, `Tracer`): a raster image → `OCDGraphic`, no PDFBox. See [doc/TRACER.md](doc/TRACER.md). |
 | `write` | `Conversion` — the one entry point + target registry (PDF · EPUB · EPUB-reflow · HTML · Markdown · SVG · DocTags) and CLI; every writer shares one contract (`write(doc, OutputStream, ConvertOptions)`). `PdfWriter`, `EpubWriter` (fixed-layout) + `ReflowEpubWriter` (reflowable) over shared `EpubPackage`, `HtmlWriter` (reflowable), `SvgWriter`, `MarkdownWriter` + `DocTagsWriter` (LLM/RAG), `OCDIndex`, `WriterCli` (the drop-a-file launcher). |
@@ -201,6 +207,11 @@ it with `node nimbus-jexter.cjs`. Everything else is the engine, all under
 | `ui.prism` | `Prism` — the document workbench: fixed-layout reader (Service-Worker-served pages), editor (media augmentations), Pages (light table: order, insert, duplicate, delete; crop as the page window, rotation as page metadata), Redact, Analysis mode (bounds/flow overlays, page DOM tree, Inspect), search, TTS, exports. |
 | `ui.pdf` | `PDFInspector` — the raw PDFBox web inspector (standalone, same look as Prism). |
 | `ui.jx` | `Jexter` — a standalone **PDF normalizer** (crude PDF in, clean selectable PDF out): drag-and-drop `WebApp` **and** headless — single file, folder batch, and a `--hotfolder` daemon (`--recursive` mirrors the sub-tree, `--threads` runs in parallel, `--done` moves each processed source into a `Done` sub-folder (or any folder: `--done=<path>`), `--suffix=` names the outputs as the window's Settings do, outputs written atomically; a source delivered again under the same name is normalized again). The window's Settings (gear, top right; a **?** beside an option explains it) hold where results go, the name ending, how many PDFs convert at once and the hot folder; the command line does not read them. `Jexter` is the engine + server; `JexterCli` owns the headless orchestration. |
+
+`test/` holds the functional gate CI runs on every push: `bash test/run.sh` builds the
+fixture corpus (`test/fixtures/`, Python) into `target/corpus` and runs `test/Gates.java`
+over it — reproducibility of every target, byte and model round-trips, the read tiers,
+clip references and hostile containers.
 
 **Model invariants:** page user space is Y-up; geometry is local + per-node
 transform (glyphs in em, images/media in the unit square, paths in page space);

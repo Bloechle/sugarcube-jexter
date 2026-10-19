@@ -5,9 +5,9 @@
 // it settled: a clip path coming back 164.007 -> 164.0069 (float round-trip), and a data-o reading index
 // shifting by three (an image's order read off its wrapper instead of the image).
 //
-//   javac -cp "lib/*:target/classes" -d out scripts/ContainerDiff.java
-//   java  -cp "lib/*:target/classes:out" ContainerDiff a.ocd.epub b.ocd.epub
-//   java  -cp "lib/*:target/classes:out" ContainerDiff x.ocd.epub          # x vs write(read(x))
+//   (from the repo root, the engine compiled into target/classes; no compile step: single-file mode)
+//   java -cp "target/classes:lib/*" test/ContainerDiff.java a.ocd.epub b.ocd.epub
+//   java -cp "target/classes:lib/*" test/ContainerDiff.java x.ocd.epub   // x vs write(read(x))
 
 import sugarcube.jexter.write.Conversion;
 

@@ -9,8 +9,10 @@ The case that matters is the LAST element: ONE P holding TWO MCIDs, a paragraph 
 lines. A builder that maps one element per block passes every easy tag and still splits that
 one - which is the whole point of honouring a structure instead of re-deriving it.
 
-    python make_tagged.py     # writes /tmp/tagged2.pdf
+    python make_tagged.py [out.pdf]     # default tagged.pdf
 """
+import sys
+
 import pikepdf
 from pikepdf import Array, Dictionary, Name, String
 
@@ -66,9 +68,10 @@ doc_elem.P = root
 pdf.Root.StructTreeRoot = root
 pdf.Root.MarkInfo = Dictionary(Marked=True)
 pdf.Root.Lang = String("fr-CH")
-pdf.save("/tmp/tagged2.pdf")
+out = sys.argv[1] if len(sys.argv) > 1 else "tagged.pdf"
+pdf.save(out)
 
-q = pikepdf.open("/tmp/tagged2.pdf")
+q = pikepdf.open(out)
 print("Marked      :", bool(q.Root.MarkInfo.Marked))
 print("StructTree  :", "/StructTreeRoot" in q.Root)
 kids = q.Root.StructTreeRoot.K[0].K

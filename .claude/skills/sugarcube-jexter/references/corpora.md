@@ -90,16 +90,16 @@ face with no doubled style token (`-Italic-Italic`).
   with no two clips alike, a geometry-deduping clip renamer is the identity and
   the whole class of clip-id bugs stays invisible while `write(read(x)) = x`
   reports green. It also carries text clipped to nothing, so any lost clip is
-  loud rather than subtle. Probe it with `scripts/Clips.java` (clip table + a
-  census of every referenced id — a reference not in the table is the bug) and
+  loud rather than subtle. Gate it with `java -cp "target/classes:lib/*" test/Gates.java the.pdf` (CLIPS names every
+  reference not in the table, on the import and on the model read back) and
   shoot it with `scripts/ocd_page_bench.mjs`.
 - Any page where a block's runs interleave in paint order with another block's
   (mastheads, knockout labels on tiles) exercises the paragraph z-contiguity
-  invariant; `scripts/Straddle.java` reports straddling paragraphs and the
-  intruding nodes, and must print `STRADDLING=0`.
+  invariant; the STRADDLE gate names each straddling paragraph and the
+  intruding node.
 
-Before trusting any corpus page as a round-trip witness, run `scripts/ModelRt.java`
-on it: a page with no anisotropic runs, no shared-geometry clips and no rotation
+Before trusting any corpus page as a round-trip witness, run `java -cp "target/classes:lib/*" test/Gates.java the.pdf`
+on it (the MODEL gate): a page with no anisotropic runs, no shared-geometry clips and no rotation
 cannot exercise the cases that actually break, and will report green while proving
 nothing.
 

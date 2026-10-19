@@ -5,7 +5,7 @@ can round-trip to the byte, every projection can be identical — and the tool c
 writing text at size zero, or leaking its own chrome into the document. Everything in this folder was
 written because something silently broke, and each file exists to keep that thing from breaking again.
 
-**None of these replaces the engine gates** (`scripts/gates.sh`, the byte A/B, epubcheck). They cover
+**None of these replaces the engine gates** (`test/run.sh` in the repo, the byte A/B, epubcheck). They cover
 the other half: the browser.
 
 ## Running them

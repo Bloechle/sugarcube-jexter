@@ -59,10 +59,9 @@ command, do not replace the tool.**
 |---|---|---|
 | see a candidate against the PDFBox reference, pixel for pixel, with a heatmap | `scripts/compare.py` (+ `RenderPdf.java`, `RenderOcd.java`, `render_html.py`) | §5c |
 | raster the MODEL, from a PDF or from an `.ocd.epub` | `RenderOcd.java` · `pdfimport.PdfImporter` main (`<pdf> [page0] [out.png] [dpi]`) | §5c |
-| run every container gate in the order that makes a failure readable | `scripts/gates.sh` | §5c |
-| byte-stability, reproducibility, `write(read(x)) == x` | `RoundTrip.java`, `ModelRt.java` | §5 |
-| links, fields, annotations, layers, outline — before and after a trip | `Rich.java` + `make_rich.py` | §5 |
-| a broken or malicious container | `make_hostile.py` + `Hostile.java` | §5 |
+| every functional gate (repro, byte + model round-trip, read tiers, straddle, clips, hostile) over the whole fixture corpus — what CI runs | `test/run.sh` → `test/Gates.java` (in the repo, not here) | §5c |
+| which container member drifted, in context | `test/ContainerDiff.java` | §5c |
+| links, fields, annotations, layers, outline — before and after a trip | `Rich.java` + `test/fixtures/make_rich.py` | §5 |
 | drive the real Prism in Chromium against the real engine | `scripts/bench/prism_bench.mjs` + the scenarios | §4 · bench/README |
 | a text/structure comparison against docling | the `docling` skill (`.claude/skills/docling/`, in this repo) | — |
 | a customer batch: source vs DELIVERED vs NEW, per reported page, two engines, + an all-pages "made worse" sweep | `scripts/batch_score.py` | §5c, press batch 2026-09-21 |
@@ -152,7 +151,8 @@ then read **`AGENTS.md`** (the card), **`README.md`** and the four documents und
 package map, conventions, fidelity numbers — and open sources on demand. Every path under
 `scripts/` and `references/` in this file is relative to **this skill's folder**,
 `.claude/skills/sugarcube-jexter/` in the clone: run them as
-`bash .claude/skills/sugarcube-jexter/scripts/gates.sh …` from the repo root, or `cd` there.
+`python .claude/skills/sugarcube-jexter/scripts/compare.py …` from the repo root, or `cd` there. The
+functional gate is NOT here: it is `test/` at the repo root (`bash test/run.sh`), and CI runs it.
 
 ## 2 · Build
 
@@ -572,10 +572,10 @@ with declared truth in `manifest.json` (deterministic via reportlab `invariant=1
 manifest schema in **`references/features.md`**.
 
 ```bash
-python scripts/generate_matrix.py --list
-python scripts/generate_matrix.py --all --out out/synthetic         # whole matrix + manifest.json
-python scripts/generate_matrix.py --feature color_cmyk --feature image_cmyk_jpeg   # targeted
-python scripts/generate_matrix.py --category text --out out/text            # one category
+python test/fixtures/generate_matrix.py --list                       # (from the repo root)
+python test/fixtures/generate_matrix.py --all --out out/synthetic     # whole matrix + manifest.json
+python test/fixtures/generate_matrix.py --feature color_cmyk --feature image_cmyk_jpeg   # targeted
+python test/fixtures/generate_matrix.py --category text --out out/text            # one category
 ```
 
 **Real-world corpus** — diagnostic PDFs from public GitHub corpora (pdf.js, etc.);
@@ -586,8 +586,8 @@ python scripts/fetch_corpus.py --curated --out out/corpus
 python scripts/fetch_corpus.py --source pdfjs --pick rotation.pdf cmykjpeg.pdf
 ```
 
-**The PDF/UA path has a fixture too — run it.** `python scripts/make_tagged.py` writes
-`/tmp/tagged2.pdf` with a real `StructTreeRoot`, a ParentTree and `MarkInfo/Marked`. Its
+**The PDF/UA path has a fixture too — the gate runs it.** `python test/fixtures/make_tagged.py out.pdf` writes
+a PDF with a real `StructTreeRoot`, a ParentTree and `MarkInfo/Marked`. Its
 point is the LAST element: **one `/P` holding TWO MCIDs**, a paragraph split over two
 lines. A builder that maps one element per block passes every easy tag and still splits
 that one — which is the whole reason to honour a stated structure instead of re-deriving
@@ -674,27 +674,27 @@ and the OCDRenderer/Java2D paths). Crammed/overlapping glyphs shortcut:
 python scripts/glyph_probe.py --font <Font>.otf --family <Font>   # width ratio ~ 2 => units-per-em bug
 ```
 
-**One command runs every container gate**, in the order that makes a failure
-diagnosable — `bash scripts/gates.sh in.pdf` (needs `JEXTER_CP` and `PDFBOX_JAR`;
-`SOURCE_DATE_EPOCH` is pinned inside, because an unpinned clock alone fails
-reproducibility). Gate 2 reads its verdict out of `ModelRt`'s report, not from an exit
-code: `ModelRt` is a report tool and exits 0 whatever it finds, and piping it into
-`grep` would hand you grep's status anyway — wired that way the gate can never go red.
-**Sweep the whole matrix, not one file** (`generate_matrix.py --all`, then the four
-probes per PDF): one document tells you nothing about a class of defect, and the
-27-feature sweep is what separated a real divergence from a false positive appearing on
-a third of the corpus.
+**One command runs every functional gate, and CI runs it on every push**: `bash test/run.sh` builds
+the corpus (the 28-feature matrix, `rich`, `tagged`) into `target/corpus`, then `test/Gates.java` runs
+every check over it plus `welcome.pdf`, in one JVM (~20 s; the old one-JVM-per-probe shell took 4 min).
+`SOURCE_DATE_EPOCH` is pinned inside, because an unpinned clock alone fails REPRO. Every check reports
+its verdict through the exit code — a gate that reads a report it prints can be wired never to go red,
+and two of the old ones were (ModelRt's verdict was grepped out of French prose; Clips never failed).
+**Sweep the whole matrix, not one file**: one document tells you nothing about a class of defect.
 
 | | |
 |---|---|
-| **1 `RoundTrip`** | reproducibility per target, `pdf→doctags ≡ pdf→ocd→doctags`, `write(read(x)) == x` |
-| **2 `ModelRt`** | `read(write(x)) == x` at the MODEL level — the gate byte-stability cannot see |
-| **3 `Straddle`** | paragraphs must wrap a contiguous paint span — `STRADDLING=0` |
-| **4 `Clips`** | every clip reference resolves — references against the table |
-| **5 `Hostile`** | broken and malicious containers, from `make_hostile.py` |
+| **REPRO** | every target, converted twice, byte-identical |
+| **DOCTAGS** | `pdf→doctags ≡ pdf→ocd→doctags` |
+| **STABLE** | `write(read(x)) == x` in bytes |
+| **MODEL** | `read(write(m)) == m` field by field, paint rank kept — what bytes cannot see |
+| **TIERS** | `readMembers` / `readPage` / `pageCount` agree with `read`, page for page |
+| **STRADDLE** | no paragraph wraps a paint span another node sits inside |
+| **CLIPS** | every clip reference resolves, on the imported model AND the model read back |
+| **HOSTILE** | xxe, billion, badmat refused; badfont, badclip, nofonts refused or warned; trunc refused; a silent read or a hang fails |
 
-A red 1 says a byte moved; `ContainerDiff` then says WHICH member and shows the
-divergence in context. A red 2 with a green 1 is the interesting case: a field
+A red STABLE says a byte moved; `test/ContainerDiff.java` then says WHICH member and shows the
+divergence in context. A red MODEL with a green STABLE is the interesting case: a field
 written wrong and read back wrong the same way. `SigDump` is the sixth, run by
 hand: it dumps the LLM signal harvest, one line per block, to diff two builds —
 a refactor must produce zero differing lines. And `ocd_page_bench.mjs` is the
@@ -803,7 +803,7 @@ gate touches them: a whole track can vanish with every other gate green.
 `scripts/Rich.java` compares those tracks across a round-trip. Feed it a document
 that HAS them; most corpus pages have none, and it will report a cheerful zero —
 **the synthetic matrix carries no fields, annotations or layers at all**, so run
-`python scripts/make_rich.py /tmp/rich.pdf` first (2 links · 2 fields with values ·
+`python test/fixtures/make_rich.py rich.pdf` first (2 links · 2 fields with values ·
 2 annotations · 2 OCG layers, one on one off · a two-level outline). Measured on it:
 every track survives the OCD-EPUB round-trip intact, field values included.
 
@@ -836,7 +836,7 @@ are promising before you promise it — and re-measure this table rather than qu
 **Byte-stability is not fidelity.** `write(read(x)) == x` proves the writer is
 deterministic; it proves nothing about a field dropped on BOTH sides — write it
 wrong, read it back wrong the same way, and the bytes agree while the model has
-quietly changed. `scripts/ModelRt.java` is the gate that catches that: it compares
+quietly changed. The MODEL gate (`test/Gates.java`) is what catches that: it compares
 `read(write(x))` to `x` node by node, field by field. Run it on any new corpus
 page before believing a round-trip claim. It reports three things and only the
 first is a defect:
@@ -2402,16 +2402,8 @@ scripts/  — rasterizers (the two reference surfaces)
   RenderPdf.java          — PDFBox reference raster (1-based page)
   RenderOcd.java          — OCD-EPUB candidate raster via OCDReader + OCDRenderer (1-based)
 scripts/  — ground truth
-  generate_matrix.py      — the 28-feature synthetic matrix + manifest.json
-  verify_matrix.py        — standalone structural check of the matrix
   make_feature_matrix.py  — 11 hand-crafted single-feature PDFs (systematic rendering gate)
-  make_tagged.py          — a genuinely TAGGED PDF (StructTreeRoot + MCIDs) — the only way to
-                            exercise TaggedStructureBuilder; one P holding TWO MCIDs is the case
   make_corpus.py          — the release-bench corpus
-  make_hostile.py         — broken + malicious containers, for the Hostile gate
-  make_rich.py            — the fixture Rich needs: links, form fields with values, annotations,
-                            TWO OCG layers (one ON one OFF) and a two-level outline. The synthetic
-                            matrix carries none of these, so without it Rich reports a cheerful zero
   fetch_corpus.py         — curated diagnostic PDFs from public corpora
   fetch_wild_corpus.sh    — real-world PDFs from 9 reader test suites (the diversity gate).
                             All sources are codeload/raw.githubusercontent — ALLOWED domains, so this
@@ -2419,14 +2411,13 @@ scripts/  — ground truth
                             (BouncyCastle is runtime-optional), 4 that PDFBox itself cannot open or
                             reports as pageless. RUN THIS: it found a text-truncation defect that all
                             27 synthetic features missed
-scripts/  — the container gates (gates.sh runs 1–5 in diagnosable order)
-  gates.sh                — the one command; pins SOURCE_DATE_EPOCH itself
-  RoundTrip.java          — 1 · reproducibility, doctags idempotence, write(read(x)) == x
-  ModelRt.java            — 2 · read(write(x)) == x at the MODEL level (what bytes cannot see)
-  Straddle.java           — 3 · paragraphs wrap a contiguous paint span (STRADDLING=0)
-  Clips.java              — 4 · every clip reference resolves against the table
-  Hostile.java            — 5 · broken/malicious containers die correctly
-  ContainerDiff.java      — WHICH member diverged, shown in context (run after a red gate 1)
+test/ (in the REPO, not this skill) — the functional gate CI runs
+  run.sh                  — builds the corpus into target/corpus, runs Gates.java; pins SOURCE_DATE_EPOCH
+  Gates.java              — REPRO · DOCTAGS · STABLE · MODEL · TIERS · STRADDLE · CLIPS · HOSTILE
+  ContainerDiff.java      — WHICH member diverged, shown in context (run after a red STABLE)
+  fixtures/               — generate_matrix.py (28 features + manifest.json), make_rich.py (links,
+                            fields with values, annotations, two OCG layers, a two-level outline),
+                            make_tagged.py (StructTreeRoot + MCIDs; one P holding TWO MCIDs)
 scripts/  — the surfaces no gate covers
   TextFid.java            — read-out vs PDFTextStripper: characters lost AND invented
   Rich.java               — links / fields / annotations / layers / outline across a round-trip

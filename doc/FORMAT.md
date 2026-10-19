@@ -227,10 +227,11 @@ container. `to=ocd` on a PDF is *open*; on an OCD-EPUB it is *re-export*.
 
 - One number formatter, sorted font aliases / gids / cmaps, document-stable ids:
   the same model serializes to identical bytes, so containers diff cleanly.
-- Standing gates: page byte-stability (60/60 on Fedlex), `fonts.svg` byte-stability,
-  doctags idempotence (`pdf→doctags ≡ pdf→ocd→doctags`), fonts reread exactly,
-  `ocd→pdf` (selectable text extractable) and `ocd→epub` from a reread container,
-  `javac` 0 errors / 0 warnings.
+- Standing gates, run by CI on every push over the fixture corpus (`test/Gates.java`):
+  reproducibility of every target, doctags idempotence (`pdf→doctags ≡ pdf→ocd→doctags`),
+  `write(read(x)) == x` in bytes and `read(write(m)) == m` in the model, the read tiers
+  agreeing with the full read, every clip reference resolving, and the broken-container
+  contract below on hostile variants. Plus `javac` 0 errors / 0 warnings and doclint.
 
 ## A8. What this container is not
 
@@ -519,6 +520,11 @@ reader is **liberal but never silent**:
   every gate reports green. The model handed back is always self-consistent.
 - **A malformed value is refused with its context** — which grammar it broke and
   what was read instead, never a bare parse exception.
+- **A `transform` is read whole, never by its first function.** A viewer that moves a node
+  composes the move IN FRONT of what the writer wrote (`translate(…) rotate(…) matrix(flip)`),
+  so the reader composes the list — `matrix`, `translate`, `scale`, `rotate` — and refuses any
+  other function by name. A path's transform is the page flip; whatever a viewer added before it
+  is baked into the path's page-space geometry, never dropped.
 - **No DOCTYPE is accepted**, so external entities and entity expansion cannot
   reach the parser at all.
 

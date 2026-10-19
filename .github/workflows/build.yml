@@ -1,5 +1,6 @@
 # The delivery gate, on every push: the tree must compile at 0 errors and
-# 0 warnings, and nothing may reference a file that is not there.
+# 0 warnings, nothing may reference a file that is not there, and the engine must
+# pass its functional gates (test/Gates.java) over the fixture corpus.
 # No Maven, no network — the two dependencies are vendored in lib/, which is
 # exactly why they are kept there.
 name: build
@@ -8,6 +9,9 @@ on:
   push:
     branches: [main]
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   compile:
@@ -28,8 +32,9 @@ jobs:
       - name: javac — 0 errors, 0 warnings
         run: |
           find src -name '*.java' > sources.txt
-          javac --release 21 -Xlint:all -Werror -cp "lib/*" -d target/ci-classes @sources.txt
-          echo "compiled $(wc -l < sources.txt) files"
+          javac --release 21 -encoding UTF-8 -Xlint:all -Werror -cp "lib/*" -d target/ci-classes @sources.txt
+          javac --release 21 -encoding UTF-8 -Xlint:all -Werror -cp "target/ci-classes:lib/*" -d target/ci-test test/*.java
+          echo "compiled $(wc -l < sources.txt) files + the gate"
 
       # javac sees a DANGLING doc comment; it cannot see a MISATTACHED one. A comment whose
       # declaration was removed silently re-attaches to whatever follows and then lies —
@@ -45,7 +50,7 @@ jobs:
       - name: javadoc — every reference resolves
         run: |
           grep -v '^src/jj2000/' sources.txt > ours.txt
-          javadoc -quiet -Xdoclint:all,-missing -d target/ci-doc -cp "lib/*" -sourcepath src @ours.txt
+          javadoc -quiet -encoding UTF-8 -Xdoclint:all,-missing -d target/ci-doc -cp "lib/*" -sourcepath src @ours.txt
 
       # The client is half the product: ocd.js is the grammar authority and book.js the document
       # authority, yet only the build orchestrator was syntax-checked. A parse error in any of
@@ -146,3 +151,17 @@ jobs:
           for b in bad: print("broken:", b)
           sys.exit(1 if bad else 0)
           PY
+
+      # The compile gates prove the code builds; this one proves it still WORKS: every target
+      # reproducible, write(read(x)) == x in bytes and in the model, the read tiers agreeing, no
+      # dangling clip, hostile containers refused or warned — over the whole fixture corpus.
+      - name: Set up Python (the fixture generators)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Functional gates
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq fonts-dejavu-core fonts-ipafont-gothic > /dev/null
+          pip install --quiet -r test/fixtures/requirements.txt
+          CLASSES=target/ci-classes bash test/run.sh

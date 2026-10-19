@@ -58,8 +58,8 @@ both in the page, both invisible to the Java reader:
 1. **The clip id was renamed.** The `<defs>` say `clip4` (a presentation id
    minted per entry and deduped on geometry) while the node says `c7` (the model
    id). Read back, the clip table holds `clip0..clipN` and every model-side
-   reference dangles. Symptom census: `scripts/Clips.java` prints the table AND
-   every referenced id — any reference absent from the table is the bug. Only
+   reference dangles. Symptom census: the CLIPS gate (`test/Gates.java`) names
+   every reference absent from the table — that reference is the bug. Only
    documents with two clips of EQUAL geometry expose it; elsewhere the renaming
    is the identity.
 2. **The clip was never native.** The node carries only `data-clip="c7"`. The
@@ -78,7 +78,7 @@ recovered by factoring it back out; the product paints correctly, so no raster
 comparison can see the error, and it only shows up downstream — as a bad analysis
 signal, a heading that stops being detected, a font size that drifts. Measured
 case: `fontSize` recovered as `√|det|` of the run matrix, which conflates it with
-an anisotropic run (`Tz`, a squeezed CTM). Run `scripts/ModelRt.java`: it compares
+an anisotropic run (`Tz`, a squeezed CTM). Run the MODEL gate (`test/Gates.java`): it compares
 the model field by field across the round-trip and names the field. Then STATE the
 value in the grammar instead of deriving it.
 

@@ -67,7 +67,8 @@ Desktop.ini
 $RECYCLE.BIN/
 
 # -- Compiled documentation — ships as a GitHub release asset, never committed --
+# (git has no trailing comments: a "# …" after a pattern becomes part of the pattern)
 /*.pdf
-doc/typst/jexter.pdf          # compiled overview — ships as a release asset, never committed
+doc/typst/jexter.pdf
 
 *.javaold

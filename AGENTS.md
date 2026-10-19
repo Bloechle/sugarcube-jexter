@@ -87,7 +87,12 @@ Skill < this card < the source: a disagreement is a signal — fix the skill in 
 - **Build** — `node nimbus-jexter.cjs` (deck) or `node nimbus-jexter.cjs --run=jar|build <abs path>`;
   CI is `.github/workflows/build.yml`: `javac --release 21 -Xlint:all -Werror` over the WHOLE tree
   (`src/jj2000` included) + doclint over **our** files only (`grep -v '^src/jj2000/'`, with
-  `-sourcepath src` so vendored types still resolve) + `node --check` + link check. `mvn -q package` is an IDE convenience, not the build.
+  `-sourcepath src` so vendored types still resolve) + `node --check` + link check + the **functional gates**.
+  `mvn -q package` is an IDE convenience, not the build.
+- **Test** — `bash test/run.sh` (what CI runs): builds the fixture corpus into `target/corpus` (`test/fixtures/`,
+  Python: `requirements.txt`) and runs `test/Gates.java` over it — REPRO, DOCTAGS, STABLE, MODEL, TIERS,
+  STRADDLE, CLIPS, HOSTILE, one JVM, ~20 s. A red STABLE names the container: `test/ContainerDiff.java` shows
+  which member moved. A change is done when this is green; a new defect class gets its check here.
   JDK 21 is the gate, and the whole tree is ALSO clean under JDK 25 — which is what `nimbus --run=jar` uses on a
   machine with a newer JDK. JDK 23+ added `dangling-doc-comments`, which no `@SuppressWarnings` can reach and JDK 21
   does not know as a flag: keep file-header comments `/*`, never `/**`.
