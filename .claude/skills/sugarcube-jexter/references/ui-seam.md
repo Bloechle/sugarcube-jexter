@@ -6,29 +6,25 @@ open, re-zipped on export).
 
 ## The three layers
 
-1. **`shared/web/js/ocd.js`** — the client grammar: `loadOcd` (read),
-   `OcdDoc.create/open` (author/checkout), `OcdPage.adopt(svg)` (live frame page),
-   `pageShell(svgSrc, w, h, n)` — THE page-member shell.
+1. **`shared/web/js/ocd.js`** — the client grammar: `loadOcd` (read), `parseFonts`,
+   `OcdPage.adopt(svg, fonts)` (a live frame page: read, author runs, `xhtml()`),
+   `pageShell(svgSrc, w, h, n)` — THE page-member shell — and `inReadingOrder` / `readingRuns`.
 2. **`shared/web/js/book.js`** — the document authority. Tools speak `book.*`
-   only: lifecycle `open/close/reload` (reload = re-zip members → openEpub — the
-   canonical rebuild after any structural change) · read `get/json/isOpen/isOcd/
-   member/pagePath` · mutation hub `put` (memory + SW, awaitable, notifies
-   `onChange(cb(path))`) + `opf` + `declare` (idempotent manifest add — THE
-   manifest authority) · resources `addImage/addMedia/removeResource` · structure
-   `addPage/registerLayer` · displayed DOM `page/eachPage/eachFrame/frameDoc/
-   onFrame` · projection `persist/flush`.
+   only: `open` · `bytes()` (the container as it stands) · read `get/json/isOpen/member/pagePath/
+   fonts` · mutation hub `put` (memory + SW, awaitable, notifies `onChange(cb(path))`) + `declare`
+   (idempotent manifest add — THE manifest authority) · resources `addImage/addMedia/addFont/freeAlias`
+   · displayed DOM `page/eachFrame/frameDoc/frameCss/onFrame/refreshPage` · projection `persist/flush`.
 3. **Tools** — ONE `<script>` tag each, over the engine seam `engine.js`: `augment.js`,
    `analysis.js`, `editor.js`, `redact.js`, `compare.js`, `forms.js`, `pages.js`, plus
    `trace.js` / `tts.js` / `gizmo.js`; script order defines tab order, and `experimental:
-   true` hides a tab outside dev mode without unloading it. (`compose.js` is REMOVED from
-   the public build — reference copy in `_private/attic/`; `audit.js` was merged into
-   `redact.js` on 2026-09-14; `edit.js` is `augment.js` and `jexter.js` became
-   `engine.js` + `analysis.js` on 2026-09-07.) A
-   tool: `P.registerTool({id,…,onEnter,onLeave})` (it was `registerMode`), subscribes `P.on('tool'|
-   'book'|'close'|'page'|'frame')` (multicast bus), may provide `P.hooks.openPdf/
-   highlight/ttsNodes` (singular providers). Tool chrome carries `data-ui`
-   (+ `data-z="under|over"`) — stripped by `persist()` and `build()`, never in
-   the container. The chassis's single write primitive is `P.putMember`.
+   true` hides a tab outside dev mode without unloading it. A
+   tool: `P.registerTool({id,…,onEnter,onLeave})`, subscribes `P.on('tool'|
+   'book'|'close'|'page'|'frame'|'mode'|'export')` (multicast bus), may provide `P.hooks.openSource/
+   highlight/ttsNodes` (singular providers), guards its keys with `P.keyFor(id, e)`. Tool chrome
+   carries `data-ui` (+ `data-z="under|over"`) — stripped by `OcdPage.xhtml()`, never in the
+   container; a frame stylesheet goes through `book.frameCss`. The chassis's single write primitive
+   is `P.putMember`. The chassis itself is `prism.js` over `events.js` (the bus), `tools.js` (the
+   registry, tabs, ribbon, drawers, keys), `console.js` (F2) and `search.js`.
 
 Hard-won rules:
 - **A mode's chrome is a right drawer declared in index.html** (`<aside id="<mode>-drawer"
@@ -166,7 +162,7 @@ variable and the edge they border on.
 carrying its own width, head and gutter — so the splitter had to *find* the visible one, and three
 gutters had drifted (`.6` / `.5` / **`.1rem`**, the numeric fields flush against the edge). Now
 `#pane-right` owns width, head, scrolling and fold, and a tool owns a `.px-pane-slot` inside it —
-the ribbon's own pattern, one row down. `P.drawer(id)` returns the SLOT; the head is rendered from the
+the ribbon's own pattern, one row down. `drawer(id)` (tools.js) returns the SLOT; the head is rendered from the
 registry on every `setTool`. Adding a tool touches no shell.
 
 One drag serves all three (rail, pane, console): `grow` says which way the pane grows, `panel()` is
@@ -354,7 +350,7 @@ UTF-8 — so the whole finding was the harness lying about the thing it was meas
 through a FILE (`@path`, read as UTF-8). Checking which side is at fault before believing a defect is
 the only reason this cost minutes instead of a wrong fix in the engine.
 
-**A CSS class prefix is HALF of a contract.** `trace.js` (ex-`reveal.js`) draws a caption whose rules
+**A CSS class prefix is HALF of a contract.** `trace.js` draws a caption whose rules
 live in `prism.css`, chassis-level because it floats over the page frame. Renaming the module's prefix
 alone left the element unstyled — and an unstyled tooltip is not invisible: measured `display:block`,
 **1500 × 438**, `pointer-events:auto`, opacity 1 whether on or off, i.e. a block over the app that
@@ -475,25 +471,14 @@ a 56 ms raster, while decoding and re-encoding it at thumbnail size cost 16 ms t
 glyph outlines.
 
 
-## Open / Save / Export — the chassis owns the user's files (2026-10-06)
+## Open / Export — the user's files
 
-`prism.js`: `openPicked()` (Ctrl O, `#m-open`) = `showOpenFilePicker({ id: 'prism-open' })` → the
-document keeps `state.handle` (cleared by closeBook, by the `<input>` and by a drop). `saveBook()`
-(Ctrl S, `#m-save`): `book.isOcd()` else the Export dialog; `book.flush()`; `P.bookBytes()` written
-to `state.handle` when it is an `.ocd.epub` (requestPermission readwrite first), else ONE save dialog
-(`pickSave(exportName('.ocd.epub'))`) whose handle becomes `state.handle`. Save writes the container
-as it is — pending redactions stay pending (Export applies them). `pickSave` passes
-`startIn: state.handle` (the source's folder) else `id: 'prism-save'`. Bench without a real disk:
-an init script stubs `showOpenFilePicker` / `showSaveFilePicker` with fake handles (`getFile`,
-`requestPermission`, `createWritable` collecting the bytes, base64 back through `page.evaluate`),
-and the real Prism is served from the edited tree with
-`java -cp "$OUT:lib/*" sugarcube.jexter.ui.prism.Prism --serve --port 7345 --web src/…/prism/web`
-(shared/ is found beside it). Measured: in-place write, export dialog in the source folder, PDF →
-one dialog then in place, the saved container → Conversion → the same 14 pages.
-
-Same day, later: the chassis's own pickSave / saveAs / picker code was REPLACED by qry's
-`openFile` / `saveFile` (shared/web/vendor/qry refreshed — shared by all three apps). `P.saveWhere()`
-gives the dialog's start (`{startIn: state.handle}` else `{id: 'prism-save'}`); `exportAs` =
-`saveFile(convert, name, P.saveWhere())` with the augmentation confirm INSIDE `convert` (a "no"
-throws `declined`; qry builds the data before opening the writer, so the picked file is untouched).
-Bench re-run: export writes the 143 KB PDF, Save in place, PDF → one dialog then in place.
+Open is the file input (Ctrl O, `#m-open`, or a drop): a PDF or an image goes to the engine
+(`P.hooks.openSource`), an OCD-EPUB opens as it is. There is no save-in-place: what leaves the
+machine is an Export, and an OCD export keeps everything (augmentations ride the container as a
+passenger). `engine.js` `exportAs` = qry's `saveFile(build, name)`: the save dialog opens FIRST, while
+the click still allows it, and `build` runs once a place is chosen — the augmentation question
+inside it (a "no" throws, qry has not opened the writer, the picked file is untouched), then the
+conversion with any pending redaction applied. An OCD export emits `export`, which clears Augment's
+dirty flag. Headless, the native picker is refused at once and qry falls back to a download, so the
+bench needs no stub (`augwarn` / `augocd`).

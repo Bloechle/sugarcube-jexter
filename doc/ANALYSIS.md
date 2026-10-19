@@ -80,10 +80,12 @@ from.
 
 ## Verification
 
-Every change is held to gates, in order: **javac 0/0** → **structure counts** (`HEADING / PARAGRAPH`
-against a baseline) → **spacing/geometry normalized** → **render-neutral** (`Fid2 = 0.0`, raster-diff vs
-the baseline build) → **idempotent** (`pdf→doctags == ocd→doctags`). Measure before committing; revert on
-the evidence.
+Every change is held to the functional gates (`node nimbus-jexter.cjs --run=test`, `test/Gates.java`):
+the ones that speak for this layer are **PIXELS** (the analysis never repaints: the model still renders
+what PDFBox renders), **AGAIN** (a second `Analysis.run` writes the same container), **DOCTAGS**
+(`pdf→doctags == pdf→ocd→doctags`), **NAV**, **TAGS**, **FURNITURE** and **STRADDLE**. Beyond them,
+compare structure counts (`HEADING / PARAGRAPH`) against a baseline build on a real corpus. Measure
+before committing; revert on the evidence.
 
 ---
 How a flat PDF page becomes a structured, projectable document — stage by stage.
@@ -189,9 +191,10 @@ level so the painted glyph shapes are never altered.)*
 ### 2. IdStamper — the single id authority
 
 Mints deterministic ids for nodes. Every structure reference points at a node by id, so this is the
-one place ids come from. It runs once early (`stamp`) to id the original content, and again later
-(`fill`, idempotent) to id the synthetic nodes — paragraphs and graphics — that the structure will
-reference, **without ever disturbing an id that is already referenced**.
+one place ids come from, through one idempotent call, `fill`: `Cleaner` calls it to id the leaves, and
+the pipeline calls it again after the physical layer to id the synthetic nodes — paragraphs and
+graphics — that the structure will reference, **without ever disturbing an id that is already
+referenced** (each per-kind sequence continues from the highest id present).
 
 ### 3. Furniture — running furniture by recto/verso stack stability
 
@@ -468,7 +471,7 @@ not obvious. Left as plain content for the interactive structure editor.
 Neither mutates the model, and neither sits in `Analysis.run` — mistaking them for pipeline stages is
 the classic misreading of this layer:
 
-- **`BlockSignals`** walks the flow in reading order and emits one `Block` per content unit — grid box,
+- **`BlockSignals`** walks the flow in reading order and emits one `BlockFeatures` per content unit — grid box,
   dominant typography, density, alignment, colour, background, per-column position. It is the signal
   harvest the LLM pass consumes; pure read-only analysis.
 - **`AnalysisStages`** is the `stages` projection: it exposes the geometry of every stage

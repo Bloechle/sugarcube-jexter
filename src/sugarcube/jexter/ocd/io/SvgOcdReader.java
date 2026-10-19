@@ -70,7 +70,7 @@ final class SvgOcdReader {
         return new JxRect(media.x() + x, (media.y() + media.height()) - (y + h), w, h);
     }
 
-    // ── page: SVG-OCD v2 — the page is the single source (text, order, lines, links, boxes) ──
+    // ── page: SVG-OCD — the page is the single source (text, order, lines, links, boxes) ──
     /** One SVG-OCD page → its {@link OCDPage}: boxes, content in reading order, links, clips. */
     static OCDPage page(Element svg, OCDDocument doc) {
         return new SvgOcdReader(svg, doc).page;
@@ -163,7 +163,7 @@ final class SvgOcdReader {
         String tag = el.getLocalName();
         String ocd = el.getAttribute("data-ocd");
         switch (tag) {
-            case "g" -> {                       // le nom de BALISE SVG, pas le vocabulaire OCD
+            case "g" -> {                       // the SVG TAG name, not the OCD vocabulary
                 switch (ocd) {
                     case "paragraph" -> {
                         OCDParagraph g = new OCDParagraph();

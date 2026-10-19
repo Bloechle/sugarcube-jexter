@@ -25,15 +25,15 @@ import static sugarcube.jexter.core.JxText.attr;
 import static sugarcube.jexter.core.JxNum.fmt;
 
 /**
- * Emits an {@link OCDPage} as an <b>SVG-OCD v2</b> page — the canonical, SELF-CONTAINED page
+ * Emits an {@link OCDPage} as an <b>SVG-OCD</b> page — the canonical, SELF-CONTAINED page
  * serialization of the OCD-EPUB format: paths only (every glyph is a {@code <use>} of an
- * em-normalized outline in {@code <defs>}), no fonts — and, since v2, the page also carries its
- * text stream, reading order, line structure, links and page boxes. There is no page JSON member
- * anymore: the page is the single source of truth.
+ * em-normalized outline in the shared font sheet), and the page also carries its text stream,
+ * reading order, line structure, links and page boxes: the page is the single source of truth.
  *
- * <p>Grammar v2 (all OCD semantics ride on {@code data-*} attributes, stripped by generic export):
+ * <p>The grammar (doc/FORMAT.md Part B; all OCD semantics ride on {@code data-*} attributes,
+ * stripped by generic export):
  * <ul>
- *   <li>{@code <svg data-ocd="page" data-version="2" data-mediabox="x y w h" [data-bleedbox|data-trimbox|data-artbox]
+ *   <li>{@code <svg data-ocd="page" data-version="N" data-mediabox="x y w h" [data-bleedbox|data-trimbox|data-artbox]
  *       [data-dpi] [data-rotate] [data-blending]>} — viewBox = the CROP WINDOW over the media frame, Y-up→SVG flip exactly
  *       as {@link SvgPaint} (the same audited math as {@code write.SvgWriter});</li>
  *   <li>{@code OCDParagraph} → {@code <g id data-ocd="paragraph">} containing {@code <g data-ocd="line">}
@@ -142,11 +142,9 @@ public final class SvgOcdWriter {
     private static java.util.List<OCDNode> spliceGraphics(java.util.List<OCDNode> in) {
         var out = new java.util.ArrayList<OCDNode>(in.size());
         for (OCDNode n : in) {
-            // Un OCDGraphic neutre au rendu est DISSOUS, et ce n'est pas un oubli : ses enfants
-            // n'occupent PAS une plage de z contiguë — d'autres contenus se peignent entre eux
-            // (mesuré sur une une de presse : enfants z 287/225/255/316, voisins 131/196/283/221).
-            // Les enfermer dans un <g> les forcerait dans un seul créneau de profondeur, et un
-            // chemin passerait par-dessus le texte : vérifié au pixel dans un navigateur.
+            // A render-neutral OCDGraphic is DISSOLVED, on purpose: its children do NOT hold a
+            // contiguous z range — other content paints between them. Wrapping them in one <g>
+            // would force them into a single depth slot, and a path would paint over text.
             if (n instanceof OCDGraphic g && g.transform().isIdentity()
                     && !g.hasClip() && !g.hasBlend() && g.alpha() == 1f)
                 out.addAll(spliceGraphics(g.children()));
@@ -340,7 +338,7 @@ public final class SvgOcdWriter {
         for (OCDText.Glyph g : t.glyphs()) {
             String def = glyphDef(font, ff, g.gid(), glyphs);
             if (def == null) continue;                        // no outline: recorded in data-blanks above, paints nothing
-            // x="0" est la valeur par défaut de SVG et celle que le lecteur applique : ne pas l'écrire.
+            // x="0" is SVG's default and the reader's: not written.
             String gx = f(g.x() / k);
             sb.append("<use href=\"fonts.svg#").append(def);
             if (!"0".equals(gx)) sb.append("\" x=\"").append(gx);
@@ -361,9 +359,8 @@ public final class SvgOcdWriter {
         }
     }
 
-    /** The shared font file ({@code pages/fonts.svg}) — since fonts.json died, this is THE
-     *  single font representation: per font a {@code <g id="fN" data-font data-id …metrics…
-     *  data-cmap>} carrying the COMPLETE model (weight, style, ascent/descent, cap/x-height,
+    /** The shared font file ({@code pages/fonts.svg}) — THE single font representation: per font a
+     *  {@code <g id="fN" data-font data-id …metrics… data-cmap>} carrying the COMPLETE model (weight, style, ascent/descent, cap/x-height,
      *  space width, explicit cmap sorted by codepoint) and EVERY glyph as {@code <path
      *  id="qN-gid" d data-advance [data-text] [data-glyphname]>} — inkless glyphs (spaces) keep an empty
      *  {@code d} so their advance and unicode survive. Sorted fonts, sorted gids, sorted cmap:

@@ -2,13 +2,12 @@
 
 Split out of the market audit on 2026-10-15, when the skill moved into this public repo: what
 buyers pay and the product decision stay PRIVATE (account skill `repo-skills`,
-`references/market.md`); what binds the CODE is here. `convert/` in the older lines is today's
-`pdfimport/` (renamed 2026-09-07).
+`references/market.md`); what binds the CODE is here.
 
 ## Engineering notes (binding — the gaps not to hide)
 
 - **PDF/UA writing lives in `PdfWriter`** and is the exact inverse of
-  `convert/TaggedStructureBuilder`: wrap each paragraph's text in `BDC /P <</MCID n>>`
+  `pdfimport/TaggedStructureBuilder`: wrap each paragraph's text in `BDC /P <</MCID n>>`
   via `PDPageContentStream.beginMarkedContent`, build `PDStructureTreeRoot` from
   `OCDStructNode` (`H1..H6`, `P`, `Document`), mark furniture `/Artifact`, set
   `MarkInfo /Marked true`, `/Lang` from the model, XMP `pdfuaid:part`, and write the
@@ -93,12 +92,12 @@ altered in a `Touched` set, `cut` only removes/replaces. ~200 lines audit, ~230 
 Round-trip: the `redaction` role on the new box and the REDACT annot value both survive
 write(read(x)); gates.sh ALL GREEN on a redacted output; CI 21 + JDK 25 0/0; doclint 0.
 
-Prism mode done 2026-09-03 (`ui/prism/web/redact.js`, ~170 lines, one `<script>` after reveal.js):
-Audit → `backend.convert(P.bookBytes(), 'audit')`, findings drawn as `.rd-find` rects in a `data-ui`
+Prism tool (`ui/prism/web/redact.js`):
+Audit → `backend.convert(book.bytes(), 'audit')`, findings drawn as `.rd-find` rects in a `data-ui`
 layer appended to the page svg, tooltip = hidden text; drag = zone (rubber band
 through `svg.getScreenCTM().inverse()`, kept in PAGE space); Apply → `convert(bytes, 'ocd',
 {redact: <findings + zones in the audit's JSON shape; a drawn zone is a finding with box ''>})` then
-`book.open`. `P.bookBytes` is now exposed by engine.js (was module-private). Page↔svg: svg (sx, sy)
+`book.open`. Page↔svg: svg (sx, sy)
 = (x − bx, by + bh − y − h) from `data-mediabox`. Seam pitfalls: `g.ownerSVGElement` is
 null under linkedom — use `closest('svg')`; the engine refuses a PARTIAL payload (one box of two)
 with HTTP 500 `{"error":…}` — that is the gate, not a bug; `reason()` unwraps it for the toast.

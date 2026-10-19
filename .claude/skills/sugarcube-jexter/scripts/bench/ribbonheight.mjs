@@ -1,4 +1,4 @@
-// heights2.mjs — the ribbon is ONE row: the same height on every tool and at every width.
+// ribbonheight.mjs — the ribbon is ONE row: the same height on every tool and at every width.
 //
 // It used to PRINT the height and assert nothing, so `forms ribbon=84px` sat in its output next to
 // seven 72s for as long as anybody ran it (found 2026-09-14). It now fails: the heights must all be

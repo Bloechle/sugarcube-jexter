@@ -23,7 +23,7 @@ import static sugarcube.jexter.core.JxName.safe;
  *       glyphs as {@code <use>}d paths, no characters, <b>no fonts at all</b>), {@code images/},
  *       {@code media/}, cover, {@code nav.xhtml}/NCX, OPF. Opens pixel-faithfully in any EPUB
  *       reader with zero font dependency (text is simply not selectable there).</li>
- *   <li><b>Authoritative face</b> — the pages themselves ARE the model (SVG-OCD v2: text,
+ *   <li><b>Authoritative face</b> — the pages themselves ARE the model (SVG-OCD: text,
  *       reading order, lines, links, roles as data), fonts live once in {@code pages/fonts.svg}
  *       (outlines + metrics + cmap — the single representation), and the few non-visual
  *       members ride as JSON under {@code ocd/}: {@code meta.json}, {@code outline.json},

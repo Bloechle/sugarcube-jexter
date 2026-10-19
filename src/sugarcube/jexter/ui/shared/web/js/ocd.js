@@ -121,11 +121,7 @@ export function parseFonts(text) {
             weight: attr(head, 'data-weight') || 'normal',
             style: attr(head, 'data-style') || 'normal',
             embedded: head.includes('data-embedded'),
-            // The metric names the FORMAT states (§B6) and SvgOcdWriter writes. They were the v1 short
-            // ones (`data-asc` · `data-desc` · `data-cap` · `data-x` · `data-sp`), so every metric of
-            // every font came back 0: Prism's and PDFInspector's font panels lost their cap-height and
-            // x-height guides outright and fell back to .75/.25 for the baseline, and `f.space` — the
-            // advance an authored run gives a character the face cannot paint — was never the face's.
+            // the metric names FORMAT §B6 states and SvgOcdWriter writes — a name it does not write reads 0
             ascent: +attr(head, 'data-ascent') || 0, descent: +attr(head, 'data-descent') || 0,
             cap: +attr(head, 'data-capheight') || 0, xh: +attr(head, 'data-xheight') || 0,
             space: +attr(head, 'data-space') || 0,
@@ -439,18 +435,11 @@ export class OcdPage {
             if (g && g.d) { this.glyphDef(f, g); t.appendChild(svgel('use', { href: `#${f.alias}-${g.gid}`, x: F(gx + shift) })); }
             else blanks.push(`${i}:${g ? g.gid + ':' : ''}${F(gx + shift)}`);
         });
-        // data-blanks, the ONE spelling: SvgOcdWriter writes it, OCDReader reads it, FORMAT §B4 states
-        // it. This path said `data-b` — the v1 name — so every sentinel a client authored was invisible
-        // to the engine, which is exactly the truncation the comment above describes.
+        // FORMAT §B4: every character is a <use> or a data-blanks entry, or the reader truncates the run
         if (blanks.length) t.setAttribute('data-blanks', blanks.join(' '));
-        // The GRAMMAR's names, not the v1 short ones. `OCDReader` switches on `data-ocd` and knows
-        // `paragraph` / `line`; anything else falls into its default branch, which is the pure paint
-        // carrier — so a run wrapped in `p`/`l` was spliced out of its paragraph on the first engine read
-        // and came back a loose page-root run. Measured 2026-09-14 on an authored page: `p` and `l`
-        // present before the round trip, gone after, the run reparented to the page.
-        // The paragraph id follows the engine's pN scheme for the same reason the run id follows tN — a
-        // structure reference names a node by id, and a page that mixes two id schemes is a page whose
-        // ids nobody can predict.
+        // The grammar's kinds: OCDReader treats any other data-ocd as a paint carrier and splices the run
+        // out of its paragraph. Ids follow the engine's pN / tN schemes — a structure reference names a
+        // node by id, and a page mixing two schemes has ids nobody can predict.
         const l = svgel('g', { 'data-ocd': 'line' });
         const p = svgel('g', { id: this.#nextId('p', 'paragraph'), 'data-ocd': 'paragraph' });
         l.appendChild(t); p.appendChild(l);

@@ -258,16 +258,4 @@ public final class PdfRenderer extends PdfStreamEngine {
         for (GroupCtx c : gstack) if (c.blend() != null) blend = c.blend();
         if (blend != null) n.blend(blend);
     }
-
-    // -- CLI: render a page straight from PDF (fidelity testing) -----------------
-    public static void main(String[] args) throws Exception {
-        if (args.length < 1) { System.err.println("usage: PdfRenderer <pdf> [page0] [out.png] [dpi]"); System.exit(2); }
-        int pi = args.length > 1 ? Integer.parseInt(args[1]) : 0;
-        String out = args.length > 2 ? args[2] : "pdf-direct.png";
-        double dpi = args.length > 3 ? Double.parseDouble(args[3]) : 144;
-        try (PDDocument pdf = org.apache.pdfbox.Loader.loadPDF(new java.io.File(args[0]))) {
-            javax.imageio.ImageIO.write(render(pdf, pi, dpi), "png", new java.io.File(out));
-        }
-        System.out.println("rendered " + args[0] + " page " + pi + " -> " + out);
-    }
 }

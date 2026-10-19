@@ -30,8 +30,8 @@ import java.util.Locale;
  * (so the 'o' and the 'l' keep their true relative heights), assembles an {@link OCDFont}, and
  * compiles it to an embeddable font via {@link JxFont} — TrueType/glyf by default, CFF on request.
  *
- * <p>Surface-agnostic on purpose: the local {@code FontStudio} WebApp and the cloud
- * {@code FontServlet} both delegate here, so the foundry logic lives in exactly one place.
+ * <p>Surface-agnostic on purpose: any host (a local app, a service) delegates here, so the
+ * foundry logic lives in exactly one place.
  *
  * <p>A glyph may arrive already vectorized ({@code em} instead of {@code png}) — that branch exists for
  * an EXISTING font loaded for editing, and {@code pdfimport.TtfImporter} is what produces it. This class

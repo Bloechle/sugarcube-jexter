@@ -26,6 +26,7 @@ _*
 *.rej
 *.tmp
 *.log
+*.javaold
 
 # ── Engine artifacts produced while testing ──────────────────────────────────
 *.ocd.epub
@@ -66,9 +67,7 @@ Thumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
-# -- Compiled documentation — ships as a GitHub release asset, never committed --
+# ── Compiled documentation: a GitHub release asset, never committed ─────────
 # (git has no trailing comments: a "# …" after a pattern becomes part of the pattern)
 /*.pdf
 doc/typst/jexter.pdf
-
-*.javaold

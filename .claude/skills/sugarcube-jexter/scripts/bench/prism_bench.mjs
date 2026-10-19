@@ -32,7 +32,11 @@ const ROOT = process.env.BENCH_ROOT || '/tmp/bench';
 // silently measure the "after" tree.
 const SITE = process.env.BENCH_SITE || path.join(ROOT, 'site');
 const JAVA = process.env.JAVA_BIN || '/opt/jdk21/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
-const CP = process.env.JEXTER_CP_FULL || '/home/claude/jx/SugarcubeJexter/lib/*:/home/claude/out';
+// the engine behind /api/convert: say WHICH build, or a fresh change is measured against an old one
+const CP = process.env.JEXTER_CP_FULL
+  || (process.env.JEXTER_CP && process.env.PDFBOX_JAR
+        ? `${process.env.PDFBOX_JAR.replace(/[^/]+$/, '')}*:${process.env.JEXTER_CP}`
+        : 'lib/*:target/classes');
 const CHROME = process.env.CHROME_BIN || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const PORT = +(process.env.BENCH_PORT || 8110);
 

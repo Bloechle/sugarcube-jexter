@@ -35,14 +35,13 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 
 /**
- * Prism — the jexter document workbench as a local web app: the PRISM reader chassis (the
- * original EPUB tree served client-side by a Service Worker, untouched) fused with the
- * engine API of the former Jexter Lab, on the SAME stateless contract as the sugarcloud
- * convert service. The front-end holds the source and the book; the server just turns
- * bytes into bytes through {@link Conversion}.
+ * Prism — the jexter document workbench as a local web app: the reader chassis (the EPUB tree
+ * served client-side by a Service Worker, untouched) over the engine, on the same stateless
+ * convert contract as any conversion service (doc/FRONTEND.md). The front-end holds the source
+ * and the book; the server just turns bytes into bytes through {@link Conversion}.
  *
  * <pre>
- *   POST /api/convert?to=&lt;ocd|svg|pdf|epub|epub-reflow|html|md|doctags&gt;[&amp;&lt;opt&gt;=&lt;val&gt;…]
+ *   POST /api/convert?to=&lt;a target id&gt;[&amp;&lt;opt&gt;=&lt;val&gt;…]
  *        body: a PDF (%PDF) → import + export · OR an OCD-EPUB (PK zip) → re-export
  *        or:   ?url=&lt;http(s)&gt; to fetch the source server-side first
  *        → the artifact (media type + filename from jexter)

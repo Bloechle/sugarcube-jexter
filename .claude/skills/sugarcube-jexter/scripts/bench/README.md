@@ -1,4 +1,4 @@
-# The Chromium bench — 22 scenarios, and what each one HOLDS
+# The Chromium bench — the scenarios, and what each one HOLDS
 
 Prism is half the product and none of it is reachable from a Java gate: a module can parse, a container
 can round-trip to the byte, every projection can be identical — and the tool can still be dark, or be
@@ -13,6 +13,7 @@ the other half: the browser.
 ```bash
 npm i playwright-core                       # + a Chromium; PLAYWRIGHT_BROWSERS_PATH points at it
 python3 ../make_bench_fixtures.py /tmp/fix  # the documents (see its header)
+cp target/corpus/rich.pdf /tmp/fix/         # the form, links and layers: written by the gates' corpus
 for f in /tmp/fix/*.pdf; do java -cp "$CP" sugarcube.jexter.Conversion \
                                 "$f" "${f%.pdf}.ocd.epub"; done
 cp /tmp/fix/*.ocd.epub $BENCH_ROOT/site/    # the bench serves the site itself
@@ -27,15 +28,16 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node sweep.mjs
 and `/api/font` by shelling out to the engine, and exports `openPrism` / `drag` / `serve` / `watchToasts`.
 `openPrism` opens in DEV mode unless told otherwise: Redact and Augment are dev tabs, and a scenario
 driving one outside dev mode clicks nothing. `watchToasts(page)` collects qry's toasts as they appear
-(`{ text, tone }`) — install it before the action. `formsvalue` needs a form: `BENCH_BOOK=/rich.ocd.epub`.
+(`{ text, tone }`) — install it before the action. `forms_fill` and `formsvalue` open `/rich.ocd.epub` by default (run the gates once first: they write
+`target/corpus/rich.pdf`).
 
-`inspect2.mjs` and `jexterapp.mjs` are the exception: they drive the OTHER two apps, which serve
+`inspector.mjs` and `jexterapp.mjs` are the exception: they drive the OTHER two apps, which serve
 themselves. Start the app and drive it **in one shell** — a background server does not survive between
 tool calls:
 
 ```bash
 java -cp "$CP" sugarcube.jexter.ui.pdf.PDFInspector --serve --port 7346 --web src/.../pdf/web &
-sleep 9 && node inspect2.mjs
+sleep 9 && node inspector.mjs
 ```
 
 ## What each one holds
@@ -64,7 +66,7 @@ sleep 9 && node inspect2.mjs
 | `retype` | the font picker, rewriting a run in place, and ONE Ctrl+Z putting the old one back |
 | `fontroute` | `/api/font` → `book.addFont` → a run in a font the container never had |
 | `seamcut` | the `engine.js` / `analysis.js` boundary: every name that crosses it is live |
-| `heights2` | the ribbon stays one height at every width, on every tool — it ASSERTS it now, and names the offending tool and the tallest item in its row. It used to print `forms ribbon=84px` next to seven 72s |
+| `ribbonheight` | the ribbon stays one height at every width, on every tool — it ASSERTS it now, and names the offending tool and the tallest item in its row. It used to print `forms ribbon=84px` next to seven 72s |
 | `devtabs` | an unfinished tool is HIDDEN, never removed: absent from the bar outside dev mode, amber-dotted inside it, and `setTool` on a hidden id lands on home rather than stranding the reader |
 | `formsvalue` | Forms' Value control keeps the selected field's name (as its placeholder, since a wide control takes no caption) and writes through |
 | `readingorder` | read-aloud AND the search index read a page in READING order — `data-order`, not the DOM's — on a page painted bottom-up |
@@ -75,7 +77,7 @@ sleep 9 && node inspect2.mjs
 | `animleak` | the animation wrapper does NOT reach the member when another tool persists the page |
 | `animcontent` | and unwrapping keeps the content: 18 runs and 822 `<use>` before and after |
 | `efficacy` | every command of every tool: does anything OBSERVABLE change, or is it a no-op? |
-| `inspect2` | PDF Inspector opens a PDF and answers on all four tabs |
+| `inspector` | PDF Inspector opens a PDF and answers on all four tabs |
 | `jexterapp` | Jexter normalizes one, end to end |
 
 ## A fifth way this harness has lied
@@ -102,10 +104,10 @@ It was unreachable for a long time, and every export test passed by never runnin
    redaction-on-export included, out of reach.
 2. **The jx-only buttons must be revealed** — `b.removeAttribute('hidden')` in the same `evaluate` as
    the click.
-3. **`P.pickSave` must be stubbed** — it opens a NATIVE file picker, which throws headless, so
-   `exportAs` returns before anything under test runs. Stub the chassis plumbing, never the subject.
+3. **Nothing to stub for the save** — qry's `saveFile` falls back to a download when the native picker
+   is refused, as it is headless. Stub the chassis plumbing when you must, never the subject.
 
-`augexport3` (a non-OCD target warns and cancelling keeps the work) and `augexport4` (OCD does NOT warn,
+`augwarn` (a non-OCD target warns and cancelling keeps the work) and `augocd` (OCD does NOT warn,
 because the engine carries passengers) are the two that hold this.
 
 One benign artifact remains: the heartbeat `EventSource` logs a MIME error in this bench. It aborts and

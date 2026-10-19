@@ -297,7 +297,7 @@ is one `<svg>`:
 ```xml
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
      viewBox="0 0 595.3 841.9" width="595.3" height="841.9"
-     data-ocd="page" data-version="3" xml:lang="fr"
+     data-ocd="page" data-version="4" xml:lang="fr"
      data-mediabox="0 0 595.3 841.9" [data-bleedbox|data-trimbox|data-artbox]
      [data-dpi] [data-rotate] [data-blending]>
 ```
@@ -693,7 +693,7 @@ any reader, no script:
 One shared sibling file carries every font of the document — paint **and** model:
 
 ```xml
-<svg xmlns="http://www.w3.org/2000/svg" data-ocd="fonts" data-version="3">
+<svg xmlns="http://www.w3.org/2000/svg" data-ocd="fonts" data-version="4">
 <defs>
 <g id="f0" data-font="ArialMT" data-id="ArialMT" [data-name] [data-family]
    [data-weight="bold"] [data-style="italic"] [data-embedded="1"]

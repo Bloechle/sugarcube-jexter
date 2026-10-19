@@ -4,7 +4,7 @@ import java.util.List;
 
 /** The per-block feature vector harvested by {@link BlockSignals} and serialized by {@link Refiner} for the
  *  LLM structure pass — id + grid box + typographic / textual / spatial / colour signals. Package-private. */
-final class Block {
+final class BlockFeatures {
         String id; int page; int gx0, gy0, gx1, gy1;       // grid box (top-down)
         double size; boolean bold, italic, bullet, caps, ends, mono; // typographic / textual
         int    digits, rot, lines; String align, color, family;      // density / rotation / silhouette / colour / face

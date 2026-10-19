@@ -160,11 +160,9 @@ jobs:
 
       # The skill's scripts are tools a session runs against the engine, and nothing compiled them: a
       # rename in src broke one for a whole batch of work, unseen. They build against the classes the
-      # gates just compiled (bench/ apart: it carries its own copy of a script, same class name).
+      # gates just compiled.
       - name: Skill scripts compile
-        run: |
-          javac -encoding UTF-8 -cp "target/classes:lib/*" -d target/skill-classes .claude/skills/*/scripts/*.java
-          javac -encoding UTF-8 -cp "target/classes:lib/*" -d target/skill-bench .claude/skills/*/scripts/bench/*.java
+        run: javac -encoding UTF-8 -cp "target/classes:lib/*" -d target/skill-classes .claude/skills/*/scripts/*.java .claude/skills/*/scripts/bench/*.java
 
       # The tree is also clean under JDK 25, the current desktop JDK: its lints (dangling-doc-comments,
       # JDK 22+) are ones a JDK 21 javac cannot see. Last, so every step above runs on the 21 floor.

@@ -19,7 +19,7 @@ even when rate-limited.
 
 ## Fedlex — structure-recovery GT (outline, not tags)
 
-For the **structure-recovery axis** (§5d of `SKILL.md`): a corpus of Swiss federal
+For the **structure-recovery axis** (SKILL.md §4, "Structure recovery"): a corpus of Swiss federal
 law PDFs (Fedlex `cc-*` classified-compilation ordinances + the LAA `Fedlex.pdf`).
 Deeply nested (Titre › Chapitre › Section › Art.), so a strong heading-detection
 stress test. The GT is the **outline (bookmarks)** — NOT the tag tree, which files

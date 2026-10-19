@@ -24,7 +24,7 @@ the bookmark structure path), plus the real `welcome.pdf` from the repo
 - **B · Round-trip** — `x = rt2 = rt3` (double round-trip), all members
   byte-identical via `diff -rq` on the unzipped trees.
 - **C · Idempotence** — `pdf→X ≡ pdf→ocd→X` for md/doctags/html byte-exact;
-  svg is the known-benign FP-residue exception (see SKILL §7).
+  svg is the known-benign FP-residue exception (SKILL.md §5, "Known-benign").
 - **D · Validity** — re-exported PDFs reopen under PDFBox (pages + text; the
   DEFAULT export is the outline facsimile ⇒ extracted text is EMPTY by design —
   gate text through `--selectable`, and check the accents survive:
@@ -371,7 +371,7 @@ any warning (found: SvgWriter.class 20:48 vs SvgWriter.java 21:11 — the whole
 inline-fonts feature existed in source and was absent from every jar of the
 session). Before ANY measurement session: `rm -rf target && node nimbus-jexter.cjs
 --run=jar`, then PROVE the surface with
-`javap -cp _prod/sugarcube-jexter.jar -p <touched class>`
+`javap -cp _artifacts/sugarcube-jexter.jar -p <touched class>`
 (check the new method signatures exist). A behavior probe on one edited class
 does not clear the others.
 

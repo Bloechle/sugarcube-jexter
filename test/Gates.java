@@ -6,6 +6,12 @@
 //   MODEL     read(write(m)) == m field by field, and paint order kept. Bytes agree when a field is
 //             written wrong and read back wrong the same way; this is the gate that sees it.
 //   TIERS     readMembers / readPage / pageCount give what read gives, page for page.
+//   NAV       every bookmark and internal link lands where PDFBox resolves it (names and GoTo included).
+//   TAGS      a tagged PDF's tree lands as the author wrote it, by STANDARD type, no content claimed twice.
+//   PIXELS    the model paints what PDFBox paints (< 1 % of a page off), and the direct renderer agrees
+//             with the model's render (< 0.25 %): a gap there is lost in the model, not in the painting.
+//   FURNITURE running heads and folios stay on the page and out of every structure the writers read.
+//   AGAIN     a second Analysis.run writes the same container, and reading the stages changes nothing.
 //   STRADDLE  no paragraph wraps a paint span another node sits inside (it could not be stored atomically).
 //   CLIPS     every clip reference resolves, on the imported model and on the model read back.
 //   COPY      a page and its copy project identically, and editing the copy leaves the page alone.

@@ -47,8 +47,7 @@ import java.util.Map;
  * Renders an {@link OCDPage} to a {@link BufferedImage} with Java2D — the OCD
  * side of the fidelity harness (compared against PDFBox's {@code PDFRenderer}).
  *
- * <p>Port of the old {@code doc.PageRenderer} to the new model. Because the model
- * stores live {@link JxPath} geometry and {@link OCDGlyph} outlines (not SVG
+ * <p>Because the model stores live {@link JxPath} geometry and {@link OCDGlyph} outlines (not SVG
  * strings) and packed {@code int} argb (not CSS), there is no SVG parsing and no
  * colour parsing: paths and glyph outlines are painted directly, colours are
  * {@code new Color(argb, true)}.

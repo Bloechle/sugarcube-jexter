@@ -18,7 +18,7 @@ and extract them by hand (no install, no root).
   works. True across all versions (11 → 25).
 - ~~GitHub release tarballs → 403~~ — **no longer true** (verified 2026-09-01):
   `release-assets.githubusercontent.com` is on the allowlist, so the Temurin 25 tarball
-  in SKILL.md §0 downloads (140 MB) and `javac 25` runs the CI gate byte-for-byte.
+  in SKILL.md §1 downloads (140 MB) and `javac 25` runs the CI gate byte-for-byte.
   The `.deb` route below stays the fast path (JDK 21, ~50 MB) when no 22+ lint is needed.
 
 ## What works: extract the Ubuntu OpenJDK `.deb`s

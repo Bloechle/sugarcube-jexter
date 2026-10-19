@@ -230,7 +230,7 @@ Four documents under [`doc/`](doc/), one per subsystem:
 - **[doc/FORMAT.md](doc/FORMAT.md)** — the **OCD-EPUB** working format, normative.
   *Part A* is the container (OCF layout, manifest, the `ocd/` JSON members field
   by field); *Part B* is the page & font grammar, the strongly-typed SVG dialect
-  the pages are written in (`data-version="2"`).
+  the pages are written in (`data-version="4"`).
 - **[doc/ANALYSIS.md](doc/ANALYSIS.md)** — the geometry-first structure recovery
   pass: single-authority stages, XY-Cut++ reading order, nav-guided heading
   recovery, and what is deliberately deferred. `ocd/analysis/Analysis.java` remains the

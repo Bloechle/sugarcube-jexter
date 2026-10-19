@@ -3,10 +3,7 @@
 // The overlays (bounds, reading flow, a pipeline stage), the click-to-inspect join between the DOM and
 // the members, the page's node tree, and Re-analyze. Trace — the real-geometry pointer — is `trace.js`;
 // this tool only flips its flag, and that module turns itself off when the tool changes.
-//
-// Split out of the engine seam (then `jexter.js`, now `engine.js`) on 2026-09-07: the file registering this tool was also Prism's engine seam,
-// and a newcomer looking for either found both. The seam is `engine.js`, and everything this file needs
-// from it is imported by name.
+// Everything it needs from the engine seam (`engine.js`) is imported by name.
 import { jx, engine, pageIndexOf, activeStructure } from './engine.js';
 import { SVG_NS, inReadingOrder, readingRuns } from '/shared/js/ocd.js';  // the overlay namespace, and the one reading-order authority
 import * as backend from './backend.js';
@@ -19,8 +16,8 @@ const P = window.prism;
    The stored SVG carries identity on the elements (id, data-ocd, data-f/-fs);
    the member carries the text. Inspect = read BOTH, reconstruct nothing. */
 
-// 'graphic' n'apparaît PAS dans une page : le groupement vectoriel vit dans le modèle, pas
-// dans le conteneur — ses chemins n'ont pas une plage de z contiguë (voir SvgOcdWriter).
+// 'graphic' never appears in a page: the vector grouping lives in the model, not the container —
+// its paths hold no contiguous z range (see SvgOcdWriter).
 const KIND = { run: 'text run', paragraph: 'paragraph', line: 'line', group: 'group', media: 'media', page: 'page' };
 const SEL_FILL = 'rgba(59,130,246,.28)';
 

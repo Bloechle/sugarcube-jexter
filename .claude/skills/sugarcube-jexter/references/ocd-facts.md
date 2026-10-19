@@ -77,16 +77,14 @@ via `OCDReader.read`) both run. Real mapping:
 
 ### Stage ② (OCD-EPUB reread) — wired
 
-The round-trip is a matched pair across two packages: **`ocd.io.OcdEpubWriter`**
+The round-trip is a matched pair in one package: **`ocd.io.OcdEpubWriter`**
 writes the self-contained **`.ocd.epub`** (a valid fixed-layout EPUB 3 that is also
-the model container — SVG-OCD v2 pages via `SvgOcdWriter`, the shared font file
+the model container — SVG-OCD pages via `SvgOcdWriter`, the shared font file
 `pages/fonts.svg`, the `ocd/` JSON members via `OcdMembers`), and
 **`ocd.io.OCDReader.read(File)`** parses it back to an `OCDDocument`.
 
-> **The legacy JSON `.ocd` container is gone**, and with it `OCDWriter` / `OCDJson`
-> — do not look for them. `OCDReader` survived the format change with the same
-> entry point, which is why the scripts below still work unchanged. The normative
-> spec is `doc/FORMAT.md` (Part A container / Part B grammar, `data-version="2"`).
+> The normative spec is `doc/FORMAT.md` (Part A container / Part B grammar). A container
+> of another version is refused by the reader: reconvert it from its source.
 
 `readOcd()` is wired straight to the reader:
 

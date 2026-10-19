@@ -89,7 +89,7 @@ public final class Refiner {
         if (doc == null || client == null) return new Result(false, "no document or model");
         try {
             if (cancelled()) return new Result(false, "cancelled before start");
-            List<Block> blocks = BlockSignals.harvest(doc);
+            List<BlockFeatures> blocks = BlockSignals.harvest(doc);
             at("harvest", blocks.size() + " content blocks");
             if (blocks.size() < 2) { JxLog.debug(Refiner.class, "structure refine skipped \u2014 too few blocks", null); return new Result(false, "too few content blocks to refine"); }
 
@@ -120,8 +120,8 @@ public final class Refiner {
             Object structure = JxJson.opt(root, "structure");
             if (structure == null) { JxLog.warn(Refiner.class, "structure refine \u2014 reply has no 'structure'"); return new Result(false, "the model reply had no structure"); }
 
-            Map<String, Block> byId = new LinkedHashMap<>();
-            for (Block b : blocks) byId.put(b.id, b);
+            Map<String, BlockFeatures> byId = new LinkedHashMap<>();
+            for (BlockFeatures b : blocks) byId.put(b.id, b);
             Set<String> used = new HashSet<>();
 
             OCDStructNode tree = buildNode(structure, byId, used);
@@ -183,18 +183,18 @@ public final class Refiner {
      * then owns the one global decision a per-page model cannot make: a consistent heading hierarchy.
      * A page that fails (transport / bad JSON) is skipped and counts against the coverage floor.
      */
-    private static Result refineWindowed(OCDDocument doc, ConvertOptions opts, LlmClient client, List<Block> blocks) {
+    private static Result refineWindowed(OCDDocument doc, ConvertOptions opts, LlmClient client, List<BlockFeatures> blocks) {
         double median  = bodyMedian(blocks);
         String bodyFam = bodyFamily(blocks, median);
         String profile = profileHeader(blocks, median, bodyFam);
         double med     = median <= 0 ? 1 : median;
 
-        Map<Integer, List<Block>> byPage = new TreeMap<>();
-        for (Block b : blocks) byPage.computeIfAbsent(b.page, k -> new ArrayList<>()).add(b);
+        Map<Integer, List<BlockFeatures>> byPage = new TreeMap<>();
+        for (BlockFeatures b : blocks) byPage.computeIfAbsent(b.page, k -> new ArrayList<>()).add(b);
         List<Integer> nums = new ArrayList<>(byPage.keySet());
 
         Map<String, Integer> sizeByRef = new HashMap<>();          // page#leaf \u2192 size as % of body (for the reconciler)
-        for (Block b : blocks) {
+        for (BlockFeatures b : blocks) {
             int spct = (int) Math.round(b.size / med * 100);
             for (String leaf : b.leaves) sizeByRef.put(b.page + "#" + leaf, spct);
         }
@@ -208,9 +208,9 @@ public final class Refiner {
         for (int i = 0; i < nums.size(); i++) {
             if (cancelled()) { stopped = true; break; }                 // stop between pages — keep what's done
             int pageNo = nums.get(i);
-            List<Block> cur  = byPage.get(pageNo);
-            List<Block> prev = i > 0               ? byPage.get(nums.get(i - 1)) : List.of();
-            List<Block> next = i < nums.size() - 1 ? byPage.get(nums.get(i + 1)) : List.of();
+            List<BlockFeatures> cur  = byPage.get(pageNo);
+            List<BlockFeatures> prev = i > 0               ? byPage.get(nums.get(i - 1)) : List.of();
+            List<BlockFeatures> next = i < nums.size() - 1 ? byPage.get(nums.get(i + 1)) : List.of();
             attempted += cur.size();
             at("page", "page " + (pageNo + 1) + " (" + (i + 1) + "/" + total + ")");
 
@@ -229,8 +229,8 @@ public final class Refiner {
             Object structure = JxJson.opt(replyRoot, "structure");
             if (structure == null) continue;
 
-            Map<String, Block> byId = new LinkedHashMap<>();
-            for (Block b : cur) byId.put(b.id, b);                  // ground only to this page; neighbour ids are ignored by construction
+            Map<String, BlockFeatures> byId = new LinkedHashMap<>();
+            for (BlockFeatures b : cur) byId.put(b.id, b);                  // ground only to this page; neighbour ids are ignored by construction
             OCDStructNode sub = buildNode(structure, byId, used);
             if (sub == null || sub.isEmpty()) continue;
 
@@ -287,13 +287,13 @@ public final class Refiner {
     /** The static document profile (global anchor): char-weighted size histogram \u2192 body size, the top
      *  sizes as multiples of body, the dominant families + bold share, mono presence, the typical gap.
      *  Identical in every window, so it never breaks the per-page task's stationarity. */
-    private static String profileHeader(List<Block> blocks, double median, String bodyFam) {
+    private static String profileHeader(List<BlockFeatures> blocks, double median, String bodyFam) {
         double med = median <= 0 ? 1 : median;
         Map<Integer, Long> sizeChars = new TreeMap<>();
         Map<String, Long>  famChars  = new LinkedHashMap<>();
         long boldChars = 0, totalChars = 0; boolean mono = false;
         List<Integer> gaps = new ArrayList<>();
-        for (Block b : blocks) {
+        for (BlockFeatures b : blocks) {
             if (!"text".equals(b.kind)) continue;
             long w = Math.max(1, b.text.length());                 // weight by characters, not by block (PDFBoT BASE_FS)
             sizeChars.merge((int) Math.round(b.size), w, Long::sum);
@@ -332,7 +332,7 @@ public final class Refiner {
 
     /** One page's window: profile + read-only neighbours (condensed) + the current page in full, the
      *  current page LAST so it lands in the prompt's high-attention slot (vs lost-in-the-middle). */
-    private static String serializeWindow(String profile, List<Block> prev, List<Block> cur, List<Block> next, double median, String bodyFam) {
+    private static String serializeWindow(String profile, List<BlockFeatures> prev, List<BlockFeatures> cur, List<BlockFeatures> next, double median, String bodyFam) {
         JxStringer js = new JxStringer(cur.size() * 160 + 1024).obj();
         js.raw("documentProfile", profile);
         js.obj("context");
@@ -344,10 +344,10 @@ public final class Refiner {
     }
 
     /** A neighbour page, read-only: just enough to resolve boundaries (id, relative size, a few flags, short text). */
-    private static String condense(List<Block> blocks, double median, String bodyFam) {
+    private static String condense(List<BlockFeatures> blocks, double median, String bodyFam) {
         double med = median <= 0 ? 1 : median;
         JxStringer js = new JxStringer(Math.max(16, blocks.size() * 48)).arr();
-        for (Block b : blocks) {
+        for (BlockFeatures b : blocks) {
             js.obj().str("id", b.id).num("size", Math.round(b.size / med * 100));
             if (b.bold)    js.num("bold", 1);
             if (b.caps)    js.num("caps", 1);
@@ -359,21 +359,21 @@ public final class Refiner {
 
     private static String capN(String s, int n) { return s.length() <= n ? s : s.substring(0, n) + "\u2026"; }
 
-    // Block harvesting, spatial enrichment and the perceptual signals now live in
-    // BlockSignals / Block — this pass only serializes what they produce.
+    // BlockFeatures harvesting, spatial enrichment and the perceptual signals now live in
+    // BlockSignals / BlockFeatures — this pass only serializes what they produce.
 
-    private static double bodyMedian(List<Block> blocks) {
+    private static double bodyMedian(List<BlockFeatures> blocks) {
         List<Double> sizes = new ArrayList<>();
-        for (Block b : blocks) if ("text".equals(b.kind) && b.size > 0) sizes.add(b.size);
+        for (BlockFeatures b : blocks) if ("text".equals(b.kind) && b.size > 0) sizes.add(b.size);
         if (sizes.isEmpty()) return 1;
         sizes.sort(Double::compare);
         return sizes.get(sizes.size() / 2);
     }
 
     /** The most common font family among body-size text blocks — the reference for the `face` flag. */
-    private static String bodyFamily(List<Block> blocks, double median) {
+    private static String bodyFamily(List<BlockFeatures> blocks, double median) {
         Map<String, Integer> freq = new HashMap<>();
-        for (Block b : blocks) {
+        for (BlockFeatures b : blocks) {
             if (!"text".equals(b.kind) || b.family == null || b.family.isEmpty()) continue;
             if (b.size < 0.85 * median || b.size > 1.2 * median) continue;
             freq.merge(b.family.toLowerCase(Locale.ROOT), 1, Integer::sum);
@@ -386,10 +386,10 @@ public final class Refiner {
 
     // ── 2 · serialise blocks for the model (grounded, vision-by-signal) ─────────────────────────
 
-    private static String serialize(List<Block> blocks, double median, String bodyFam) {
+    private static String serialize(List<BlockFeatures> blocks, double median, String bodyFam) {
         double med = median <= 0 ? 1 : median;
         JxStringer js = new JxStringer(blocks.size() * 144).arr();
-        for (Block b : blocks) {
+        for (BlockFeatures b : blocks) {
             boolean face = !b.family.isEmpty() && !b.family.toLowerCase(Locale.ROOT).equals(bodyFam) && !bodyFam.isEmpty();
             js.obj()
               .str("id", b.id)
@@ -423,7 +423,7 @@ public final class Refiner {
 
     // ── 3 · parse the model reply back into a grounded OCDStructNode tree ────────────────────────────
 
-    private static OCDStructNode buildNode(Object o, Map<String, Block> byId, Set<String> used) {
+    private static OCDStructNode buildNode(Object o, Map<String, BlockFeatures> byId, Set<String> used) {
         Map<String, Object> m = JxJson.asObj(o);
         if (m == null) return null;
         OCDStructNode s = new OCDStructNode(typeOf(JxJson.str(m, "type")));
@@ -432,7 +432,7 @@ public final class Refiner {
         if (JxJson.has(m, "text"))    s.text(JxJson.str(m, "text"));
         if (JxJson.has(m, "refs"))
             for (Object rr : JxJson.arr(m, "refs")) {
-                Block b = byId.get(String.valueOf(rr));                      // grounding: a known block id only
+                BlockFeatures b = byId.get(String.valueOf(rr));                      // grounding: a known block id only
                 if (b == null) continue;
                 for (String leaf : b.leaves) s.addRef(b.page, leaf);         // expand to leaves
                 used.add(b.id);

@@ -24,7 +24,6 @@ import sugarcube.jexter.ocd.model.OCDNode;
 import sugarcube.jexter.ocd.model.OCDPage;
 import sugarcube.jexter.ocd.render.OCDRenderer;
 
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.io.File;
@@ -317,17 +316,6 @@ public final class PdfImporter extends PdfStreamEngine {
             JxLog.debug(PdfImporter.class, "image bake failed \u2192 vector fallback", e);
             return false;
         }
-    }
-
-    // ── CLI: convert + render a page + save (fidelity testing) ───────────────────
-    public static void main(String[] args) throws Exception {
-        if (args.length < 1) { System.err.println("usage: PdfImporter <pdf> [page0] [out.png] [dpi]"); System.exit(2); }
-        OCDDocument doc = convert(new File(args[0]));
-        int pi = args.length > 1 ? Integer.parseInt(args[1]) : 0;
-        String out = args.length > 2 ? args[2] : "ocd.png";
-        double dpi = args.length > 3 ? Double.parseDouble(args[3]) : 144;
-        ImageIO.write(OCDRenderer.render(doc.page(pi), doc, dpi), "png", new File(out));
-        System.out.println("converted " + args[0] + " page " + pi + " -> " + out + "  " + doc);
     }
 
     /** First 8 hex chars of the source's SHA-256 — the document identity is content-addressed, so a

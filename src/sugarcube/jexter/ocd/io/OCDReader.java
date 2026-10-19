@@ -51,7 +51,7 @@ import static sugarcube.jexter.core.JxJson.str;
  * <ul>
  *   <li>{@link #readMembers(File)} — Tier 0: document skeleton (meta, outline, structures, fonts),
  *       no pages;</li>
- *   <li>{@link #readPage(File, int)} — Tier 1: the pocket model — one page parsed (SVG-OCD v2
+ *   <li>{@link #readPage(File, int)} — Tier 1: the pocket model — one page parsed (SVG-OCD
  *       grammar, self-contained) on top of the skeleton;</li>
  *   <li>{@link #read(File)} — Tier 2: the full model ({@code readPage} over all pages).</li>
  * </ul>

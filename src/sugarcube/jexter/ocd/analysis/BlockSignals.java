@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 /** Geometric / typographic signal harvest for the LLM structure pass: walks the OCD flow (reading order)
- *  and emits one {@link Block} per content unit — grid box, dominant typography, density, alignment, colour,
+ *  and emits one {@link BlockFeatures} per content unit — grid box, dominant typography, density, alignment, colour,
  *  background and per-column spatial position. Pure read-only analysis: no model, no mutation. */
 final class BlockSignals {
 
@@ -35,12 +35,12 @@ final class BlockSignals {
     private static final double BG_COVER      = 0.70; // a filled rect must cover this fraction of a block to count as its background
     private static final double BG_PAGE_MAX   = 0.88; // …and not span more than this fraction of the page (that is the page background)
 
-    static List<Block> harvest(OCDDocument doc) {
-        List<Block> out = new ArrayList<>();
+    static List<BlockFeatures> harvest(OCDDocument doc) {
+        List<BlockFeatures> out = new ArrayList<>();
         List<OCDPage> pages = doc.pages();
         for (int pi = 0; pi < pages.size(); pi++) {
             OCDPage page = pages.get(pi);
-            List<Block> pageBlocks = new ArrayList<>();
+            List<BlockFeatures> pageBlocks = new ArrayList<>();
             collect(doc, page.content(), pi, page, pageBlocks);
             // collect() walks the flow, which is reading order — no re-sort needed.
             enrichSpatial(pageBlocks);                                   // columns, indent, width, gap-above
@@ -56,7 +56,7 @@ final class BlockSignals {
      *  fact. The LLM must read the paragraph, not the pieces the renderer forced, so the fragments of one
      *  {@link OCDParagraph#flow()} are gathered back into one unit here — the same rule
      *  {@code StructureBuilder} applies to the logical tree. */
-    private static void collect(OCDDocument doc, List<OCDNode> nodes, int pi, OCDPage page, List<Block> out) {
+    private static void collect(OCDDocument doc, List<OCDNode> nodes, int pi, OCDPage page, List<BlockFeatures> out) {
         List<List<OCDNode>> units = new ArrayList<>();
         List<String> kinds = new ArrayList<>();
         unitize(nodes, units, kinds, new HashMap<>());
@@ -80,7 +80,7 @@ final class BlockSignals {
         }
     }
 
-    private static Block block(OCDDocument doc, List<OCDNode> unit, int pi, OCDPage page, String kind) {
+    private static BlockFeatures block(OCDDocument doc, List<OCDNode> unit, int pi, OCDPage page, String kind) {
         OCDNode head = unit.get(0);
         Sig sig = new Sig();
         for (OCDNode n : unit) {
@@ -98,7 +98,7 @@ final class BlockSignals {
         boolean italic = f != null && f.isItalic();
         String  family = f != null && f.family() != null ? f.family() : (f != null ? f.name() : "");
 
-        Block b = new Block();
+        BlockFeatures b = new BlockFeatures();
         b.id = idOf(head); b.page = pi; b.kind = kind;
         b.leaves = sig.leaves; b.text = text;
         b.size = sig.domSize;
@@ -174,10 +174,10 @@ final class BlockSignals {
         }
     }
 
-    private static void enrichSpatial(List<Block> page) {
+    private static void enrichSpatial(List<BlockFeatures> page) {
         if (page.isEmpty()) return;
         int[] bands = columnBands(page);
-        for (Block b : page) {
+        for (BlockFeatures b : page) {
             int col = 0;
             for (int i = 0; i < bands.length - 1; i++)
                 if (b.gx0 >= bands[i] && (b.gx1 + b.gx0) / 2 < bands[i + 1]) { col = i; break; }
@@ -191,10 +191,10 @@ final class BlockSignals {
         }
     }
 
-    private static int[] columnBands(List<Block> page) {
+    private static int[] columnBands(List<BlockFeatures> page) {
         boolean[] covered = new boolean[GRID + 1];
         boolean any = false;
-        for (Block b : page) {
+        for (BlockFeatures b : page) {
             if (!"text".equals(b.kind)) continue;
             if (b.gx1 - b.gx0 > SPAN_FRAC * GRID) continue;            // a spanning title/banner never defines a gutter
             for (int x = Math.max(0, b.gx0); x <= Math.min(GRID, b.gx1); x++) covered[x] = true;
@@ -218,9 +218,9 @@ final class BlockSignals {
         return out;
     }
 
-    private static int gapAbove(List<Block> page, Block b) {
+    private static int gapAbove(List<BlockFeatures> page, BlockFeatures b) {
         int nearestBottom = -1;
-        for (Block o : page) {
+        for (BlockFeatures o : page) {
             if (o == b || o.gy1 > b.gy0) continue;                     // must be strictly above (smaller y = higher)
             int ov = Math.min(b.gx1, o.gx1) - Math.max(b.gx0, o.gx0);
             if (ov <= 0) continue;                                     // must overlap horizontally
@@ -229,14 +229,14 @@ final class BlockSignals {
         return nearestBottom < 0 ? -1 : clampGrid(b.gy0 - nearestBottom);
     }
 
-    private static void enrichBackground(List<Block> page, OCDPage ocdPage) {
+    private static void enrichBackground(List<BlockFeatures> page, OCDPage ocdPage) {
         List<int[]> rects = new ArrayList<>();    // {gx0,gy0,gx1,gy1,argb}
         double pw = ocdPage.displayWidth()  <= 0 ? 1 : ocdPage.displayWidth();
         double ph = ocdPage.displayHeight() <= 0 ? 1 : ocdPage.displayHeight();
         collectFills(ocdPage, pw, ph, rects);
         if (rects.isEmpty()) return;
         long pageArea = (long) GRID * GRID;
-        for (Block b : page) {
+        for (BlockFeatures b : page) {
             if (!"text".equals(b.kind)) continue;
             long blockArea = Math.max(1L, (long) (b.gx1 - b.gx0) * (b.gy1 - b.gy0));
             int[] best = null; long bestArea = Long.MAX_VALUE;

@@ -6,7 +6,7 @@ behind both, so a target or an option is added **once**, in jexter, and both inh
 
 ```
   DESKTOP   Prism front (engine.js ─ backend.js) ─▶ Prism server (Java, com.sun.httpserver)   local, stateless
-  SERVICE   any HTTP consumer ───────────────────▶ the jexter conversion service (sugarcloud)  keyed, stateless
+  SERVICE   any HTTP consumer ───────────────────▶ a jexter conversion service               keyed, stateless
 ```
 
 Prism is a desktop workbench. The conversion service is consumed server-to-server (one API key per
@@ -73,9 +73,8 @@ The one file that knows routes and transport. The chrome imports it
 
 ```js
 convert(src, to='ocd', opts={}, onStep)  ->  { blob, bytes, filename, mediaType }   // the one workhorse
-stages(src) · options() · targets() · health()
-convertUrl(url, to, opts) · convertPath(path, to, opts)      // ?url= / ?path= (desktop server)
-ai.config(cfg) · ai.stop()                                   // bind a model; refine = convert?to=ocd&refineStructure=true
+stages(src) · options() · health()
+font(bytes, chars, id)                                       // /api/font: a font file → its block for the container
 logStreamUrl · progressUrl · aliveUrl                        // the SSE channels
 ```
 
@@ -96,7 +95,10 @@ front's `state.opts`). Both engines return the same registry
 ```
   index.html · prism.css                  served by the Prism server from .../ui/prism/web/
   backend.js    (the transport seam — above)
-  prism.js      (the chassis)
+  prism.js      (the chassis: layout, reader, menus, the window.prism seam)
+  events.js · tools.js · console.js · search.js
+                (the chassis' parts: the event bus, the tool registry and ribbon, the F2 console,
+                 page-scoped search)
   augment.js    (tool: augmentations)
   engine.js     (the SEAM: PDF import, text layer, fonts, structures, export)
   analysis.js   (tool: overlays, inspect, node tree — imports what it needs from engine.js)
@@ -107,17 +109,20 @@ front's `state.opts`). Both engines return the same registry
                  find via to=zones&match · Repair, the one crossing from verdict to work; items persist as
                  ocd/redact.json, previewed opaque at once, applied by the engine on Export or Apply; an
                  unclean result is refused)
+  editor.js · compare.js · forms.js · pages.js · tts.js · gizmo.js
+                (tools: edit, compare, forms, pages; read-aloud; the shared transform handles)
   prism-sw.js   (Service Worker)
-  /shared/js/ocd.js  (the grammar: read, create, adopt, build)
+  /shared/js/ocd.js  (the grammar: read, adopt, the page shell, reading order)
   /shared/js/book.js (THE document authority — see below)
+  /shared/js/shot.js (one cached picture of a page)
 ```
 
 ## The tool architecture — three layers, one authority
 
 The displayed DOM is the source of truth; the epub file is transport. Three layers:
 
-1. **`ocd.js`** — the client grammar: `loadOcd` (read), `OcdDoc.create/open`
-   (author), `OcdPage.adopt` (live page), `pageShell` (THE page member shell —
+1. **`ocd.js`** — the client grammar: `loadOcd` (read), `parseFonts` (the font sheet),
+   `OcdPage.adopt` (a live page: read, author runs, serialize), `pageShell` (THE page member shell —
    pages are REBUILT around the serialized `<svg>`, never string-spliced: a
    childless svg self-closes under the browser serializer), `pageSvg` (a page made
    STANDALONE: glyph refs localized, font defs embedded, for a consumer with no
@@ -164,23 +169,24 @@ The displayed DOM is the source of truth; the epub file is transport. Three laye
 
    | Concern       | Verbs |
    |---------------|-------|
-   | Lifecycle     | `open · close · reload` (reload = re-zip members → openEpub, the canonical rebuild after structural change) |
-   | Read          | `get · json · isOpen · isOcd · member · pagePath` |
-   | Mutation hub  | `put` (commits memory + SW, notifies `onChange(cb(path))`) `· opf · declare` (idempotent manifest add — THE manifest authority) |
-   | Resources     | `addImage · addMedia · removeResource` |
-   | Structure     | `addPage · registerLayer` |
-   | Displayed DOM | `page (adopted OcdPage) · eachPage · eachFrame · frameDoc · onFrame` |
+   | Lifecycle     | `open · bytes` (the container as it stands, `mimetype` stored first) |
+   | Read          | `get · json · isOpen · member · pagePath · fonts` |
+   | Mutation hub  | `put` (commits memory + SW, notifies `onChange(cb(path))`) `· declare` (idempotent manifest add — THE manifest authority) |
+   | Resources     | `addImage · addMedia · addFont · freeAlias` |
+   | Displayed DOM | `page (adopted OcdPage) · eachFrame · frameDoc · frameCss · onFrame · refreshPage` |
    | Projection    | `persist · flush` (edited pages only; data-ui chrome stripped) |
 
-3. **Tools** — one `<script>` tag each (`augment.js`, `editor.js`, `analysis.js`,
-   `ocr.js`, `redact.js`, `pages.js`); remove the tag and the tab is gone. A tool registers
+3. **Tools** — one `<script>` tag each (`augment.js`, `analysis.js`, `ocr.js`, `editor.js`,
+   `redact.js`, `compare.js`, `forms.js`, `pages.js`); remove the tag and the tab is gone. A tool registers
    itself (`P.registerTool`, `experimental: true` while it is not ready — shipping
    it is deleting one word), declares its commands (`P.ribbon(id, groups)`), keeps
    what it READS in its drawer, subscribes to chassis events (`P.on`: `'tool' ·
    'book' · 'close' · 'page' · 'frame'`, multicast), and may offer PROVIDERS to the
    chassis (`P.hooks`: `openSource · highlight · ttsNodes` — singular by design).
    Anything a tool draws for itself carries `data-ui` (+ `data-z="under|over"`)
-   and never reaches the container. The chassis owns exactly one write
+   and never reaches the container; a stylesheet it lends a page goes through
+   `book.frameCss(doc, id, css)`, which is `data-ui` too. A tool's shortcut is
+   guarded by `P.keyFor(id, e)` — its own tool is up and the key is not typed into a field. The chassis owns exactly one write
    primitive, `P.putMember`; `book.put` is its hub.
 
    The chassis lends three things no tool should re-derive:

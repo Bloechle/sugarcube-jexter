@@ -68,7 +68,7 @@ both in the page, both invisible to the Java reader:
    them a real `clip-path`; text runs had nothing.
 
 Fix both at once: the emitted id IS the model id, and every clipped node is
-wrapped in a native `clip-path` carrier (SKILL §7). Prove it with
+wrapped in a native `clip-path` carrier (SKILL.md §5, "Model and format"). Prove it with
 `scripts/ocd_page_bench.mjs` — NOT with `ocd → pdf`, which cannot see it.
 
 ### A field is wrong after `pdf → ocd → pdf`, but every pixel gate is green

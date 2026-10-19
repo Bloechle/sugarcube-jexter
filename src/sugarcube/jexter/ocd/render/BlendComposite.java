@@ -11,7 +11,7 @@ import java.awt.image.WritableRaster;
  * AWT {@link Composite} implementing all 16 PDF-standard blend modes
  * (PDF Reference §11.3.5) plus alpha support.
  * <p>
- * Usage in PageRenderer:
+ * Usage (as {@link OCDRenderer} does):
  * <pre>
  *     g2.setComposite(BlendComposite.getInstance("Multiply", 0.8f));
  *     g2.fill(shape);
