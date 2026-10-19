@@ -95,7 +95,7 @@ Skill < this card < the source: a disagreement is a signal — fix the skill in 
 - **Test** — `node nimbus-jexter.cjs --run=test` (what CI runs, any OS): compiles into `target/classes`, then
   `test/Gates.java` writes the fixture corpus into `target/corpus` (`test/Fixtures.java`, PDFBox only) and gates it — REPRO, DOCTAGS, STABLE, MODEL, TIERS,
   NAV, TAGS, PIXELS (the model's render against PDFBox's and against the direct render), AGAIN (a second analysis
-  changes nothing), FURNITURE, STRADDLE, CLIPS, COPY, EDITED, HOSTILE, one JVM, ~40 s. A red STABLE names the container: `test/ContainerDiff.java` shows
+  changes nothing), FURNITURE, STRADDLE, CLIPS, COPY, DRAWN, EDITED, HOSTILE, one JVM, ~40 s. A red STABLE names the container: `test/ContainerDiff.java` shows
   which member moved. A change is done when this is green; a new defect class gets its check here.
   JDK 21 is the gate, and CI also compiles under JDK 25 (its lints are stricter) — which is what `nimbus --run=jar` uses on a
   machine with a newer JDK. JDK 23+ added `dangling-doc-comments`, which no `@SuppressWarnings` can reach and JDK 21

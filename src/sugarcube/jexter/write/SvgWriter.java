@@ -155,7 +155,7 @@ public final class SvgWriter {
         if (t.glyphs().isEmpty()) return;
 
         OCDFont df = doc.findFont(t.fontId());
-        Map<Integer, Integer> rev = df != null ? df.reverseCmap() : Map.of();
+        Map<Integer, Integer> rev = df != null ? df.drawCodepoints() : Map.of();   // a codepoint the face maps, for every glyph
 
         var xs = new StringBuilder();
         var chars = new StringBuilder();
@@ -164,9 +164,9 @@ public final class SvgWriter {
             String ch = cp != null ? Character.toString(cp)
                                     : (g.unicode() != null && !g.unicode().isEmpty() ? g.unicode() : null);
             if (ch == null) continue;
-            // SVG positions each CHARACTER by the next x: a glyph that maps to several ("fi" kept as a ligature,
-            // a character beyond the BMP) gets one x per code point, all at the glyph's origin — one x for two
-            // once pushed every later glyph of the run one slot right.
+            // SVG positions each CHARACTER by the next x: a glyph written by several (a run whose font is not in the
+            // document, a character beyond the BMP) gets one x per code point, all at the glyph's origin — one x
+            // for two once pushed every later glyph of the run one slot right.
             for (int k = ch.codePointCount(0, ch.length()); k > 0; k--) {
                 if (!xs.isEmpty()) xs.append(' ');
                 xs.append(fmt(g.x()));

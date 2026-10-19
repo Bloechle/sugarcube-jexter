@@ -38,7 +38,7 @@ abstract sealed class OtfBuilder permits CffOtf, GlyfOtf {
         glyphs.add(null);                                          // gid 0 = .notdef
         Map<Integer, Integer> oldToNew = new java.util.HashMap<>();
         for (int g : src) { oldToNew.put(g, glyphs.size()); glyphs.add(f.glyph(g)); }
-        for (Map.Entry<Integer, Integer> e : f.cmap().entrySet()) {
+        for (Map.Entry<Integer, Integer> e : f.drawCmap().entrySet()) {   // every glyph reachable: a ligature too
             Integer dense = oldToNew.get(e.getValue());
             if (dense != null && e.getKey() >= 0 && e.getKey() <= 0xFFFF) cmap.put(e.getKey(), dense);
         }

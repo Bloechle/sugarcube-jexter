@@ -105,7 +105,7 @@ plus the workflow's client steps (every `src/**/*.js` parses as a module, no tem
 
 The gates (`test/Gates.java`, one JVM, `SOURCE_DATE_EPOCH` pinned by the deck — Gates refuses to run
 without it): REPRO · DOCTAGS · STABLE · MODEL · TIERS · NAV · TAGS · PIXELS · FURNITURE · AGAIN ·
-STRADDLE · CLIPS · COPY · EDITED · HOSTILE, each described in the file's header. **A change is done
+STRADDLE · CLIPS · COPY · DRAWN · EDITED · HOSTILE, each described in the file's header. **A change is done
 when they are green; a new defect class gets its check there.** Every check reports through the exit
 code — a gate that prints a report someone greps can be wired never to go red, and two once were.
 
@@ -309,6 +309,10 @@ Writers (`write`)
   1-bit, decided by the colour model, never the pixels.
 - Forms: a `PDAppearanceStream` is born without `/Resources` (NPE mid-field); ZapfDingbats' check is
   the CODEPOINT `U+2714`; `/QuadPoints` go UL, UR, LL, LR (the spec's order paints nothing).
+- **A glyph the cmap does not name is still drawn by a codepoint**: a ligature ("fi" in one glyph) or a second
+  glyph for a letter has no cmap entry, and writing its LETTERS draws other glyphs — « fi » showed as « f » and
+  a gap in every replica EPUB. `OCDFont.drawCodepoints()` gives every glyph one (its letter if free, the
+  presentation form ﬁ, else the Private Use Area) and the font builders compile `drawCmap()`; gate DRAWN.
 - PDFBox cannot embed CFF: `GlyfOtf` for PDF, `CffOtf` for web/EPUB. The per-format font table
   constants are tuned per upem grid — do not unify them.
 - Invisible text is text: render mode 3 is written by every text projection (`Tr 3` in PDF, zero

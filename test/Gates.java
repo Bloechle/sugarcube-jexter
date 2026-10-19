@@ -17,6 +17,8 @@
 //   STRADDLE  no paragraph wraps a paint span another node sits inside (it could not be stored atomically).
 //   CLIPS     every clip reference resolves, on the imported model and on the model read back.
 //   COPY      a page and its copy project identically, and editing the copy leaves the page alone.
+//   DRAWN     every glyph a run paints is reached through its compiled font: the codepoint the text
+//             writers emit maps, in the font's own cmap, to that glyph (a ligature drew an « f » and a gap).
 //   EDITED    a path a viewer moved (Prism's editor composes the move in front of the page flip)
 //             reads back moved — once, it was read back where it started.
 //   HOSTILE   broken and malicious variants of the container: refused with context, or read with a
@@ -110,6 +112,7 @@ public final class Gates {
             gate("STRADDLE", () -> straddle(model));
             gate("CLIPS",    () -> clips(model, OCDReader.read(container.toFile())));
             gate("COPY",     () -> copies(OCDReader.read(container.toFile())));
+            gate("DRAWN",    () -> drawn(model));
             gate("EDITED",   () -> edited(ocd, tmp));
             gate("HOSTILE",  () -> hostile(ocd, tmp));
         }
@@ -549,6 +552,41 @@ public final class Gates {
             if (!before.equals(SvgOcdWriter.render(doc, page, glyphs))) bad.add("p" + (i + 1) + " copy is aliased to the page");
         }
         return bad;
+    }
+
+    // ── DRAWN ────────────────────────────────────────────────────────────────────
+
+    /** The SVG and EPUB pages write each glyph as the codepoint {@link OCDFont#drawCodepoints} names, in a face
+     *  compiled from the model: that codepoint must map, in the compiled font's OWN cmap (parsed back by
+     *  FontBox), to that glyph. The font's glyphs are dense in model-gid order, .notdef first. */
+    private static List<String> drawn(OCDDocument doc) throws Exception {
+        List<String> bad = new ArrayList<>();
+        Map<String, org.apache.fontbox.ttf.CmapLookup> cmaps = new HashMap<>();
+        for (int i = 0; i < doc.pageCount(); i++) {
+            for (OCDText t : doc.page(i).texts().toList()) {
+                OCDFont f = doc.findFont(t.fontId());
+                if (f == null) continue;
+                org.apache.fontbox.ttf.CmapLookup cmap = cmaps.get(f.id());
+                if (cmap == null) {
+                    byte[] otf = sugarcube.jexter.font.JxFont.toOtf(f);
+                    try (var font = new org.apache.fontbox.ttf.OTFParser().parse(new org.apache.pdfbox.io.RandomAccessReadBuffer(otf))) {
+                        cmap = font.getUnicodeCmapLookup();
+                    }
+                    cmaps.put(f.id(), cmap);
+                }
+                List<Integer> order = new ArrayList<>(new TreeSet<>(f.glyphs().keySet()));
+                for (OCDText.Glyph g : t.glyphs()) {
+                    if (!f.hasGlyph(g.gid())) continue;
+                    Integer cp = f.drawCodepoints().get(g.gid());
+                    int want = order.indexOf(g.gid()) + 1;
+                    if (cp == null) bad.add("p" + (i + 1) + " " + f.id() + " gid " + g.gid() + " has no codepoint");
+                    else if (cmap.getGlyphId(cp) != want)
+                        bad.add("p" + (i + 1) + " " + f.id() + " gid " + g.gid() + " (" + g.unicode() + ") drawn by U+"
+                                + Integer.toHexString(cp) + " which the font maps to glyph " + cmap.getGlyphId(cp) + ", not " + want);
+                }
+            }
+        }
+        return bad.size() > 5 ? bad.subList(0, 5) : bad;
     }
 
     // ── EDITED ───────────────────────────────────────────────────────────────────

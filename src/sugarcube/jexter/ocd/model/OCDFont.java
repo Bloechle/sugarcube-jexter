@@ -38,6 +38,7 @@ public final class OCDFont {
     private final Map<Integer, OCDGlyph> glyphs = new LinkedHashMap<>(); // gid → glyph
     private final Map<Integer, Integer>  cmap   = new LinkedHashMap<>(); // codepoint → gid
     private       Map<Integer, Integer>  reverseCmap;                    // gid → codepoint, built once on demand
+    private       Map<Integer, Integer>  drawCodepoints;                 // gid → the codepoint that draws it, every glyph
 
     public OCDFont() {}
     public OCDFont(String name) { this.name = name; this.family = name; }
@@ -91,7 +92,7 @@ public final class OCDFont {
     // ── cmap (codepoint → gid) ──────────────────────────────────────────────────
     /** Map a codepoint; the reverse table is rebuilt on its next use (a font gains entries after its first
      *  encode when text is written into it). */
-    public OCDFont map(int codepoint, int gid) { cmap.put(codepoint, gid); reverseCmap = null; return this; }
+    public OCDFont map(int codepoint, int gid) { cmap.put(codepoint, gid); reverseCmap = null; drawCodepoints = null; return this; }
     public Integer gidOf(int codepoint)        { return cmap.get(codepoint); }
     /** Read-only: every change goes through {@link #map}, which keeps {@link #reverseCmap} true. */
     public Map<Integer, Integer> cmap()        { return java.util.Collections.unmodifiableMap(cmap); }
@@ -113,6 +114,54 @@ public final class OCDFont {
             reverseCmap = m;
         }
         return reverseCmap;
+    }
+
+    /** Unicode's presentation forms of the Latin ligatures (U+FB00–FB06): the one codepoint a ligature glyph
+     *  can be drawn by while its text stays the letters (NFKC folds ﬁ to fi). */
+    private static final int LIGATURES_FROM = 0xFB00, LIGATURES_TO = 0xFB06;
+
+    /**
+     * gid → the codepoint that DRAWS the glyph through the compiled font, for EVERY glyph — what a writer that
+     * paints text by codepoint (SVG and EPUB {@code <text>}) needs. The cmap names only the glyphs that ARE a
+     * character; a ligature ("fi" in one glyph, as pdfTeX writes it), or a second glyph for a letter the cmap
+     * already gives to another, has no codepoint of its own, and writing its letters instead draws OTHER
+     * glyphs — « fi » came out as an « f » and a gap. So such a glyph gets, in this order: the codepoint of its
+     * text when that is one character the cmap leaves free; the presentation form whose NFKC is its text
+     * (U+FB01 for "fi"), when free; else the next free codepoint of the Private Use Area. The cmap's own entries
+     * come first and are never moved; {@link #drawCmap()} is the same table forwards — the one the font
+     * builders compile, so the codepoint a writer emits is the one the font maps.
+     */
+    public Map<Integer, Integer> drawCodepoints() {
+        if (drawCodepoints == null) {
+            Map<Integer, Integer> m = new HashMap<>(reverseCmap());
+            java.util.Set<Integer> taken = new java.util.HashSet<>(cmap.keySet());
+            int pua = 0xE000;
+            for (int gid : new java.util.TreeSet<>(glyphs.keySet())) {
+                if (m.containsKey(gid)) continue;
+                String text = glyphs.get(gid).unicode();
+                Integer cp = null;
+                if (text != null && text.codePointCount(0, text.length()) == 1) {
+                    int c = text.codePointAt(0);
+                    if (c > 32 && c <= 0xFFFF && !taken.contains(c)) cp = c;
+                }
+                if (cp == null && text != null && text.length() > 1)
+                    for (int c = LIGATURES_FROM; c <= LIGATURES_TO && cp == null; c++)
+                        if (!taken.contains(c) && java.text.Normalizer.normalize(Character.toString(c), java.text.Normalizer.Form.NFKC).equals(text)) cp = c;
+                if (cp == null) { while (taken.contains(pua)) pua++; cp = pua; }
+                taken.add(cp);
+                m.put(gid, cp);
+            }
+            drawCodepoints = m;
+        }
+        return drawCodepoints;
+    }
+
+    /** {@link #drawCodepoints()} forwards: codepoint → gid, the cmap plus a codepoint for every glyph it leaves
+     *  out — what a compiled font maps. */
+    public Map<Integer, Integer> drawCmap() {
+        Map<Integer, Integer> m = new LinkedHashMap<>(cmap);
+        for (Map.Entry<Integer, Integer> e : drawCodepoints().entrySet()) m.putIfAbsent(e.getValue(), e.getKey());
+        return m;
     }
 
     // ── style helpers ───────────────────────────────────────────────────────────
