@@ -59,7 +59,7 @@ command, do not replace the tool.**
 |---|---|---|
 | see a candidate against the PDFBox reference, pixel for pixel, with a heatmap | `scripts/compare.py` (+ `RenderPdf.java`, `RenderOcd.java`, `render_html.py`) | §5c |
 | raster the MODEL, from a PDF or from an `.ocd.epub` | `RenderOcd.java` · `pdfimport.PdfImporter` main (`<pdf> [page0] [out.png] [dpi]`) | §5c |
-| every functional gate (repro, byte + model round-trip, read tiers, straddle, clips, hostile) over the whole fixture corpus — what CI runs | `test/run.sh` → `test/Gates.java` (in the repo, not here) | §5c |
+| every functional gate (repro, byte + model round-trip, read tiers, straddle, clips, hostile) over the whole fixture corpus — what CI runs | `node nimbus-jexter.cjs --run=test` → `test/Gates.java` (in the repo, not here) | §5c |
 | which container member drifted, in context | `test/ContainerDiff.java` | §5c |
 | links, fields, annotations, layers, outline — before and after a trip | `Rich.java` + `test/fixtures/make_rich.py` | §5 |
 | drive the real Prism in Chromium against the real engine | `scripts/bench/prism_bench.mjs` + the scenarios | §4 · bench/README |
@@ -152,7 +152,7 @@ package map, conventions, fidelity numbers — and open sources on demand. Every
 `scripts/` and `references/` in this file is relative to **this skill's folder**,
 `.claude/skills/sugarcube-jexter/` in the clone: run them as
 `python .claude/skills/sugarcube-jexter/scripts/compare.py …` from the repo root, or `cd` there. The
-functional gate is NOT here: it is `test/` at the repo root (`bash test/run.sh`), and CI runs it.
+functional gate is NOT here: it is `test/` at the repo root (`node nimbus-jexter.cjs --run=test`, any OS), and CI runs it.
 
 ## 2 · Build
 
@@ -674,10 +674,10 @@ and the OCDRenderer/Java2D paths). Crammed/overlapping glyphs shortcut:
 python scripts/glyph_probe.py --font <Font>.otf --family <Font>   # width ratio ~ 2 => units-per-em bug
 ```
 
-**One command runs every functional gate, and CI runs it on every push**: `bash test/run.sh` builds
-the corpus (the 28-feature matrix, `rich`, `tagged`) into `target/corpus`, then `test/Gates.java` runs
+**One command runs every functional gate, and CI runs it on every push**: `node nimbus-jexter.cjs
+--run=test` compiles, then `test/Gates.java` builds the corpus (the 28-feature matrix, `rich`, `tagged`) into `target/corpus`, then runs
 every check over it plus `welcome.pdf`, in one JVM (~20 s; the old one-JVM-per-probe shell took 4 min).
-`SOURCE_DATE_EPOCH` is pinned inside, because an unpinned clock alone fails REPRO. Every check reports
+The deck pins `SOURCE_DATE_EPOCH` (an unpinned clock alone fails REPRO; Gates refuses to run without it). Every check reports
 its verdict through the exit code — a gate that reads a report it prints can be wired never to go red,
 and two of the old ones were (ModelRt's verdict was grepped out of French prose; Clips never failed).
 **Sweep the whole matrix, not one file**: one document tells you nothing about a class of defect.
@@ -2412,8 +2412,7 @@ scripts/  — ground truth
                             reports as pageless. RUN THIS: it found a text-truncation defect that all
                             27 synthetic features missed
 test/ (in the REPO, not this skill) — the functional gate CI runs
-  run.sh                  — builds the corpus into target/corpus, runs Gates.java; pins SOURCE_DATE_EPOCH
-  Gates.java              — REPRO · DOCTAGS · STABLE · MODEL · TIERS · STRADDLE · CLIPS · HOSTILE
+  Gates.java              — builds the corpus into target/corpus (no PDF named), then REPRO · DOCTAGS · STABLE · MODEL · TIERS · STRADDLE · CLIPS · HOSTILE
   ContainerDiff.java      — WHICH member diverged, shown in context (run after a red STABLE)
   fixtures/               — generate_matrix.py (28 features + manifest.json), make_rich.py (links,
                             fields with values, annotations, two OCG layers, a two-level outline),

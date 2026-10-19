@@ -164,4 +164,4 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq fonts-dejavu-core fonts-ipafont-gothic > /dev/null
           pip install --quiet -r test/fixtures/requirements.txt
-          CLASSES=target/ci-classes bash test/run.sh
+          node nimbus-jexter.cjs --run=test

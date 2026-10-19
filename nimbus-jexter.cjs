@@ -5,10 +5,14 @@
  * Same instrument deck, same SSE wiring and the same chrome as the rest of the Nimbus
  * family (nimbus-cloud.cjs), specialised for a Java project that vendors its jars in
  * lib/. One window, click the step you want — nothing chains automatically — and the
- * real javac / jar / jpackage output streams live into the console. Three actions, one
+ * real javac / jar / jpackage output streams live into the console. Four actions, one
  * authority each (runAction):
  *
  *   02 BUILD (run on this machine — needs a JDK ≥ RELEASE for javac/jar; jpackage for the app-image)
+ *     test     → compile src/ into SCRATCH_DIR/classes (the jar stage is left alone), then run the
+ *                project's own test: TEST_MAIN, a Java source file run in single-file mode on those
+ *                classes + lib/*.jar, from the project root, with SOURCE_DATE_EPOCH pinned (the
+ *                reproducible-builds clock) unless the shell already sets it. No TEST_MAIN → no test.
  *     jar      → compile (-Xlint:all -Werror, the CI gate) → stage resources → explode
  *                lib/*.jar → clean META-INF → pack the fat jar. Clears the previous
  *                deliverables first — INCLUDING the app-image.
@@ -31,7 +35,7 @@
  *   node nimbus-jexter.cjs --serve      → headless, prints the URL
  *   node nimbus-jexter.cjs --run=build  → headless one-shot (CI): run an action, stream
  *                                      to stdout, exit with its code. <action> = any
- *                                      button id (jar|build|tools)
+ *                                      button id (test|jar|build|tools)
  *   node nimbus-jexter.cjs <projectDir> → point at a different project root (else .); every
  *                                   dir (src, lib, scratch, output) resolves under it
  *
@@ -56,7 +60,7 @@ const cp = require('node:child_process');
 const DIR = __dirname;
 const HEADLESS = process.argv.includes('--serve');
 const RUN_ARG = (process.argv.find((a) => a.startsWith('--run=')) || '').slice(6); // headless one-shot action
-const VERSION = '1.8';   // 1.8 (2026-10-15): the AI bundler is gone (the `context` action, KEEP_FILES, SKIP_FILES) — the repo is the hand-off, AGENTS.md and the skill in .claude/skills/ travel with every clone; 1.7 (2026-10-05): OUT_DIR defaults to _artifacts, the convention every deck shares (it holds the PRODUCTS, not "production"); 1.6 (2026-09-11): the deck wears the cloud deck's chrome - a hint line under every section header, ONE tooltip system (every title is rendered by the deck: keyboard-reachable, scroll-following, styled), a grouped config drawer, a focus ring on every control, and a copy that strips the console prefixes; the blue palette, the cube mark and the tooltip of nimbus-server.cjs (whose #tip font named --sans, a token that does not exist - the shorthand was invalid and the box fell back to the body font); named after its project, like nimbus-cloud.cjs. Engine, bundler and actions unchanged; 1.5 (2026-09-02): the header no longer names a JDK version — RELEASE is the project's; 1.4 (2026-09-02): audit — no project name in the tool, one glob compiler, one in/out authority for the bundle, launchers/keep/skip through cfg, OUT_DIR under the project; 1.3 (2026-09-02): build also zips the app-image as <APP_NAME>-<APP_VERSION>-<os>.zip — the distributable; 1.2 (2026-09-01): binary containers by extension (a PDF read as utf8 is corrupt); 1.1: neutral defaults, .env is the project, library jars, zip + overview.md
+const VERSION = '1.9';   // 1.9 (2026-10-19): the `test` action — compile into SCRATCH_DIR/classes, run TEST_MAIN (a single-file Java source) with SOURCE_DATE_EPOCH pinned: one command for the project's functional gate on any OS, the one CI runs too; 1.8 (2026-10-15): the AI bundler is gone (the `context` action, KEEP_FILES, SKIP_FILES) — the repo is the hand-off, AGENTS.md and the skill in .claude/skills/ travel with every clone; 1.7 (2026-10-05): OUT_DIR defaults to _artifacts, the convention every deck shares (it holds the PRODUCTS, not "production"); 1.6 (2026-09-11): the deck wears the cloud deck's chrome - a hint line under every section header, ONE tooltip system (every title is rendered by the deck: keyboard-reachable, scroll-following, styled), a grouped config drawer, a focus ring on every control, and a copy that strips the console prefixes; the blue palette, the cube mark and the tooltip of nimbus-server.cjs (whose #tip font named --sans, a token that does not exist - the shorthand was invalid and the box fell back to the body font); named after its project, like nimbus-cloud.cjs. Engine, bundler and actions unchanged; 1.5 (2026-09-02): the header no longer names a JDK version — RELEASE is the project's; 1.4 (2026-09-02): audit — no project name in the tool, one glob compiler, one in/out authority for the bundle, launchers/keep/skip through cfg, OUT_DIR under the project; 1.3 (2026-09-02): build also zips the app-image as <APP_NAME>-<APP_VERSION>-<os>.zip — the distributable; 1.2 (2026-09-01): binary containers by extension (a PDF read as utf8 is corrupt); 1.1: neutral defaults, .env is the project, library jars, zip + overview.md
 // ── tiny .env loader (no dependency). Precedence: shell env > .env.local > .env ──
 // .env is the project's configuration and is tracked; .env.local is the machine's
 // (paths, a JDK, secrets) and is gitignored. Comments (#) and blank lines are fine.
@@ -95,6 +99,7 @@ const DEFAULTS = {
     OUT_DIR:       env('OUT_DIR', '_artifacts'),                 // where deliverables land (created if missing)
     JPACKAGE_TYPE: env('JPACKAGE_TYPE', 'app-image'),       // folder + native launcher, no extra tooling
     ICON_FILE:     env('ICON_FILE', ''),                    // explicit .ico/.icns; else <name>.ico / app.ico in OUT_DIR
+    TEST_MAIN:     env('TEST_MAIN', ''),                    // the project's test: a .java run in single-file mode ('' = none)
 };
 
 // Comma lists in .env (LAUNCHERS, JAR_PACKAGES): one splitter.
@@ -189,7 +194,7 @@ function sh(bin, args, o, send) {
     return new Promise((resolve) => {
         send('line', { text: o.show || (path.basename(bin) + ' ' + args.join(' ')), kind: 'cmd' });
         let proc;
-        try { proc = cp.spawn(bin, args, { cwd: o.cwd || DIR, env: process.env }); }
+        try { proc = cp.spawn(bin, args, { cwd: o.cwd || DIR, env: o.env || process.env }); }
         catch (e) { send('line', { text: String(e.message || e), kind: 'err' }); return resolve(127); }
         child = proc;
         let tail = '';
@@ -224,14 +229,14 @@ function prepare(c, send) {
     send('line', { text: `output  ${c.outDir}`, kind: 'info' });
 }
 
-/** Compile every src/**.java against lib/*.jar into the stage. */
-async function compile(cfg, c, send) {
+/** Compile every src/**.java against lib/*.jar into the stage (or into {@code dest}). */
+async function compile(cfg, c, send, dest = c.stage) {
     const sources = walkPackages(c, (fp) => fp.toLowerCase().endsWith('.java'));
     if (!sources.length) throw new Error('no .java sources found');
     const argFile = path.join(c.scratch, 'sources.txt');
     fs.mkdirSync(c.scratch, { recursive: true });
     fs.writeFileSync(argFile, sources.map((s) => `"${s.replace(/\\/g, '/')}"`).join('\n'));
-    const code = await sh(c.javac, [...(c.libJars.length ? ['-cp', c.libJars.join(path.delimiter)] : []), '-d', c.stage,
+    const code = await sh(c.javac, [...(c.libJars.length ? ['-cp', c.libJars.join(path.delimiter)] : []), '-d', dest,
             '--release', cfg.RELEASE, '-encoding', 'UTF-8', `-Xlint:${cfg.LINT}`, '-Werror', `@${argFile}`],   // the CI gate, verbatim: a warning is a defect
         { cwd: c.root, show: `javac --release ${cfg.RELEASE}  (${sources.length} sources)` }, send);
     fs.rmSync(argFile, { force: true });
@@ -358,6 +363,20 @@ async function doBuild(cfg, exe, send) {
         send('line', { text: `    ${path.basename(c.appZip)}`, kind: 'out' });
     }
 }
+// The project's own test, on fresh classes: the jar's stage and the deliverables are not touched.
+async function doTest(cfg, send) {
+    if (!cfg.TEST_MAIN) throw new Error('no TEST_MAIN in .env — this project declares no test');
+    const c = ctx(cfg);
+    const classes = path.join(c.scratch, 'classes');
+    rmrf(classes);
+    fs.mkdirSync(classes, { recursive: true });
+    await compile(cfg, c, send, classes); guard();
+    const env = Object.assign({}, process.env, { SOURCE_DATE_EPOCH: process.env.SOURCE_DATE_EPOCH || '1000000000' });
+    const code = await sh(jdkTool('java'), ['-cp', [classes, ...c.libJars].join(path.delimiter), cfg.TEST_MAIN],
+        { cwd: c.root, env, show: `java ${cfg.TEST_MAIN}` }, send);
+    if (code !== 0) throw new Error(`${cfg.TEST_MAIN} exited ${code}`);
+    send('line', { text: 'test passed', kind: 'ok' });
+}
 // Probe the three JDK binaries once. Shared by the header readout (passive, on
 // connect) and the headless `--run=tools` diagnostic. One authority, two readers.
 function probeTools(cfg) {
@@ -385,6 +404,7 @@ function doTools(cfg, send) {
 function runAction(action, cfg, send) {
     cfg = Object.assign({}, DEFAULTS, cfg || {});
     switch (action) {
+        case 'test':    return doTest(cfg, send);           // the project's own gate, on fresh classes
         case 'build':   return doBuild(cfg, true,  send);   // full chain, through jpackage
         case 'jar':     return doBuild(cfg, false, send);   // stops before the app-image
         case 'tools':   return Promise.resolve(doTools(cfg, send));
@@ -692,6 +712,7 @@ a:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
  <symbol id="i-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
  <symbol id="i-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></symbol>
  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></symbol>
+ <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
  <symbol id="i-tool" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></symbol>
  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></symbol>
  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5"/></symbol>
@@ -732,6 +753,7 @@ a:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
            resources, the lib jars exploded in, and one fat jar. Both actions clear the previous
            deliverables first, the app-image included.</p>
         <div class="acts">
+          <button class="btn" id="b-test" title="Compile src/ into target/classes, then run the project's own test (TEST_MAIN in .env) with the reproducible clock pinned — the gate CI runs on every push. Touches neither the jar stage nor the deliverables."><svg class="ic"><use href="#i-check"/></svg>test</button>
           <button class="btn" id="b-jar" title="Compile src/ against lib/*.jar, stage the resources, explode the lib jars, clean META-INF and pack the fat jar. Stops there — and DELETES the app-image left by the last build, so there is no .exe until the next one."><svg class="ic"><use href="#i-layers"/></svg>compile jar</button>
           <button class="btn go" id="b-build" title="The jar, then jpackage: one bundled runtime, one .exe per LAUNCHERS entry (plus a .cmd each, because the .exe are javaw and mute), then the whole app-image zipped as the distributable."><svg class="ic"><use href="#i-package"/></svg>build app</button>
         </div>
@@ -827,7 +849,7 @@ EventTarget.prototype.on=function(ev,fn){ this.addEventListener(ev,fn); return t
 
 var TEXT=['PROJECT_DIR','JAR_NAME','RELEASE','JAR_MAIN','APP_NAME','APP_VERSION','VENDOR',
   'SRC_DIR','LIB_DIR','SCRATCH_DIR','OUT_DIR','JPACKAGE_TYPE','ICON_FILE'];
-var BTNS=['jar','build','tools'];
+var BTNS=['test','jar','build','tools'];
 var PRE={cmd:'$ ',err:'! ',ok:'\u2713 ',log:'\u2502 ',info:'\u00b7 '};
 var es=null,timer=null,t0=0,running=false;
 var STORE='nimbus.build.v2', DEFAULTS=null, KEYS=TEXT;

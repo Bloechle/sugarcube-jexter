@@ -33,27 +33,35 @@ from reportlab.pdfbase.ttfonts import TTFont
 # ----------------------------------------------------------------------------
 GEN_VERSION = "1.0.0"
 A4W, A4H = A4
-DEJAVU = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-DEJAVU_SERIF = "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"
-# TrueType-outline (glyf) CJK font -> ReportLab can embed it as CIDFontType2.
-# (Noto Sans CJK is CFF/PostScript-outline, which ReportLab's TTFont cannot embed;
-#  for a pure CFF/Type1C embedding sample, pull one from the fetched corpus instead.)
-CJK_TTF = "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf"
+# Each font is looked up where each OS keeps it, first hit wins. The matrix needs a TrueType (glyf)
+# Latin sans and serif, and a glyf CJK font: ReportLab embeds that as CIDFontType2 (Noto Sans CJK is
+# CFF-outlined, which ReportLab's TTFont cannot embed). The outlines differ per OS; what each feature
+# tests does not. Not found = that font's features fail the run (never skipped in silence).
+_WIN = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts")
+FONTS = {
+    "DejaVu":      ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/Library/Fonts/Arial.ttf",
+                    "/System/Library/Fonts/Supplemental/Arial.ttf", os.path.join(_WIN, "DejaVuSans.ttf"),
+                    os.path.join(_WIN, "arial.ttf")],
+    "DejaVuSerif": ["/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf", "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
+                    os.path.join(_WIN, "DejaVuSerif.ttf"), os.path.join(_WIN, "times.ttf")],
+    "CJK":         ["/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
+                    os.path.join(_WIN, "msgothic.ttc")],
+}
 
 _FONTS_READY = False
 def _ensure_fonts():
     global _FONTS_READY
     if _FONTS_READY:
         return
-    for name, path, kw in [("DejaVu", DEJAVU, {}),
-                            ("DejaVuSerif", DEJAVU_SERIF, {}),
-                            ("CJK", CJK_TTF, {})]:
+    for name, paths in FONTS.items():
         if name in pdfmetrics.getRegisteredFontNames():
             continue
-        try:
-            pdfmetrics.registerFont(TTFont(name, path, **kw))
-        except Exception as e:
-            print(f"  [warn] font '{name}' ({path}) not registered: {e}", file=sys.stderr)
+        path = next((p for p in paths if os.path.exists(p)), None)
+        if path is None:
+            print(f"  [warn] font '{name}' not found in: {', '.join(paths)}", file=sys.stderr)
+            continue
+        # a .ttc collection (MS Gothic): its first face
+        pdfmetrics.registerFont(TTFont(name, path, subfontIndex=0) if path.endswith(".ttc") else TTFont(name, path))
     _FONTS_READY = True
 
 _ASSET_DIR = None

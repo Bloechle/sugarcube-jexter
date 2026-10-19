@@ -135,10 +135,10 @@ javac --release 21 -Xlint:all -Werror -cp "lib/*" -d target/classes $(find src -
 
 `mvn -q package` works too (IDE convenience; the `pom.xml` points at the same jars).
 
-Then the functional gate, as CI runs it (Python with `test/fixtures/requirements.txt`):
+Then the functional gate, as CI runs it — any OS, Python with `test/fixtures/requirements.txt`:
 
 ```bash
-bash test/run.sh                            # ALL GATES GREEN, ~20 s
+node nimbus-jexter.cjs --run=test           # compile, build the corpus, ALL GATES GREEN (~30 s)
 ```
 
 > On Windows / PowerShell, use `;` as the classpath separator instead of `:`
@@ -208,9 +208,9 @@ it with `node nimbus-jexter.cjs`. Everything else is the engine, all under
 | `ui.pdf` | `PDFInspector` — the raw PDFBox web inspector (standalone, same look as Prism). |
 | `ui.jx` | `Jexter` — a standalone **PDF normalizer** (crude PDF in, clean selectable PDF out): drag-and-drop `WebApp` **and** headless — single file, folder batch, and a `--hotfolder` daemon (`--recursive` mirrors the sub-tree, `--threads` runs in parallel, `--done` moves each processed source into a `Done` sub-folder (or any folder: `--done=<path>`), `--suffix=` names the outputs as the window's Settings do, outputs written atomically; a source delivered again under the same name is normalized again). The window's Settings (gear, top right; a **?** beside an option explains it) hold where results go, the name ending, how many PDFs convert at once and the hot folder; the command line does not read them. `Jexter` is the engine + server; `JexterCli` owns the headless orchestration. |
 
-`test/` holds the functional gate CI runs on every push: `bash test/run.sh` builds the
-fixture corpus (`test/fixtures/`, Python) into `target/corpus` and runs `test/Gates.java`
-over it — reproducibility of every target, byte and model round-trips, the read tiers,
+`test/` holds the functional gate CI runs on every push: `test/Gates.java` builds the
+fixture corpus (`test/fixtures/`, Python) into `target/corpus` and gates it
+(`node nimbus-jexter.cjs --run=test`) — reproducibility of every target, byte and model round-trips, the read tiers,
 clip references and hostile containers.
 
 **Model invariants:** page user space is Y-up; geometry is local + per-node
