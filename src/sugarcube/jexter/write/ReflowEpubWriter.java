@@ -11,8 +11,8 @@ import java.util.List;
 import java.util.Map;
 
 import static sugarcube.jexter.write.EpubPackage.OPF;
-import static sugarcube.jexter.write.EpubPackage.safe;
-import static sugarcube.jexter.write.EpubPackage.xml;
+import static sugarcube.jexter.core.JxName.safe;
+import static sugarcube.jexter.core.JxText.text;
 
 /**
  * Writes a {@link OCDDocument} as a <b>reflowable EPUB3</b> — the content-first counterpart of the
@@ -85,7 +85,7 @@ public final class ReflowEpubWriter {
                 %s</main>
                 </body>
                 </html>
-                """.formatted(xml(c.title()), c.html());
+                """.formatted(text(c.title()), c.html());
     }
 
     // ── navigation ─────────────────────────────────────────────────────────────────
@@ -94,7 +94,7 @@ public final class ReflowEpubWriter {
         var toc = new StringBuilder();
         for (HtmlWriter.Chapter c : chapters)
             toc.append("    <li><a href=\"").append(c.id()).append(".xhtml\">")
-               .append(xml(c.title())).append("</a></li>\n");
+               .append(text(c.title())).append("</a></li>\n");
         String start = chapters.get(0).id() + ".xhtml";
         zip.deflated(OPF + "nav.xhtml", EpubPackage.navDoc(EpubPackage.title(doc), toc.toString(), start, ""));
     }

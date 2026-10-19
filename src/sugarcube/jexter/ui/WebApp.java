@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Locale;
@@ -210,20 +211,52 @@ public abstract class WebApp {
     /** SSE heartbeat. The browser holds this open (EventSource); when the window
      *  closes, the connection drops and the client count falls back to zero. */
     private void alive(HttpExchange x) throws IOException {
-        x.getResponseHeaders().set("Content-Type", "text/event-stream");
-        x.getResponseHeaders().set("Cache-Control", "no-cache");
-        x.sendResponseHeaders(200, 0);
         clients.incrementAndGet();
         everConnected = true;
-        try (OutputStream os = x.getResponseBody()) {
-            while (true) {
-                os.write(": ping\n\n".getBytes(StandardCharsets.UTF_8));   // SSE comment = keep-alive
-                os.flush();
-                try { Thread.sleep(1000); } catch (InterruptedException e) { break; }
+        try { stream(x, List.of(), 1000, null); }
+        finally { if (clients.decrementAndGet() <= 0) idleSince = System.currentTimeMillis(); }
+    }
+
+    /** A server-sent-events channel: the open streams of one route, and the one way to write to them. */
+    protected static final class Events {
+        private final List<OutputStream> sinks = new CopyOnWriteArrayList<>();
+
+        public Events() {}
+
+        /** {@code json} to every open stream, as one event; a stream that is gone leaves. */
+        public void push(String json) {
+            byte[] data = ("data: " + json + "\n\n").getBytes(StandardCharsets.UTF_8);
+            for (OutputStream os : sinks) {
+                try { synchronized (os) { os.write(data); os.flush(); } }
+                catch (IOException dead) { sinks.remove(os); }
             }
-        } catch (IOException ignored) {            // window gone
+        }
+
+        /** Serve one stream of this channel: {@code backlog} first, then whatever is pushed. */
+        public void serve(HttpExchange x, List<String> backlog) throws IOException { stream(x, backlog, 15000, sinks); }
+    }
+
+    /** THE server-sent-events idiom of every app: the headers, {@code backlog} as events, then a keep-alive
+     *  comment every {@code pingMs} until the client goes. {@code sinks} (or null) holds the stream meanwhile. */
+    private static void stream(HttpExchange x, List<String> backlog, long pingMs, List<OutputStream> sinks) throws IOException {
+        x.getResponseHeaders().set("Content-Type", "text/event-stream");
+        x.getResponseHeaders().set("Cache-Control", "no-store");
+        x.sendResponseHeaders(200, 0);
+        OutputStream os = x.getResponseBody();
+        try {
+            synchronized (os) {
+                for (String line : backlog) os.write(("data: " + line + "\n\n").getBytes(StandardCharsets.UTF_8));
+                os.flush();
+            }
+            if (sinks != null) sinks.add(os);
+            while (true) {
+                synchronized (os) { os.write(": ping\n\n".getBytes(StandardCharsets.UTF_8)); os.flush(); }   // an SSE comment
+                try { Thread.sleep(pingMs); } catch (InterruptedException e) { break; }
+            }
+        } catch (IOException gone) {               // the client went
         } finally {
-            if (clients.decrementAndGet() <= 0) idleSince = System.currentTimeMillis();
+            if (sinks != null) sinks.remove(os);
+            try { os.close(); } catch (IOException ignored) {}
         }
     }
 

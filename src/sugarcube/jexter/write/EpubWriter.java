@@ -13,8 +13,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 import static sugarcube.jexter.write.EpubPackage.OPF;
-import static sugarcube.jexter.write.EpubPackage.num;
-import static sugarcube.jexter.write.EpubPackage.safe;
+import static sugarcube.jexter.core.JxNum.fmt;
+import static sugarcube.jexter.core.JxName.safe;
 
 /**
  * Writes a {@link OCDDocument} as a clean, normalized <b>EPUB3 fixed-layout replica</b> that is
@@ -103,7 +103,7 @@ public final class EpubWriter {
                     %s
                     </body>
                     </html>
-                    """.formatted("OCDPage " + i, num(page.displayWidth()), num(page.displayHeight()), svg);
+                    """.formatted("OCDPage " + i, fmt(page.displayWidth()), fmt(page.displayHeight()), svg);
             zip.deflated(OCDVocab.pagePath(i++), xhtml);
         }
     }

@@ -32,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import static sugarcube.jexter.core.JxNum.fmt;
 
 /**
  * Renders an {@link OCDPage} to a browser-native SVG with REAL selectable text.
@@ -90,7 +91,7 @@ public final class SvgWriter {
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
         sb.append("<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" ")
           .append("viewBox=\"").append(viewBox(page)).append("\" ")
-          .append("width=\"").append(f(w)).append("\" height=\"").append(f(h)).append("\">\n");
+          .append("width=\"").append(fmt(w)).append("\" height=\"").append(fmt(h)).append("\">\n");
         sb.append("<style>\n");
         for (var src : faces.values()) sb.append(src).append('\n');
         for (var e : styles.entrySet()) sb.append('.').append(e.getValue()).append('{').append(e.getKey()).append("}\n");
@@ -120,13 +121,13 @@ public final class SvgWriter {
         sb.append(open);
         switch (n) {
             case OCDText t  -> text(sb, doc, page, t, styles, faces, fontSrc);
-            case OCDPath p  -> path(sb, page, p, styles, clips, grads);
-            case OCDImage im -> image(sb, page, im, clips);
+            case OCDPath p  -> path(sb, page, p, styles, clips, grads, null);
+            case OCDImage im -> image(sb, page, im, clips, null);
             case OCDMedia m -> {
                 if (m instanceof OCDVideo v && v.poster() != null) {
                     OCDImage poster = new OCDImage(v.poster());
                     poster.transform(m.transform());
-                    image(sb, page, poster, clips);
+                    image(sb, page, poster, clips, null);
                 }
             }
             case OCDGroup g -> {
@@ -159,18 +160,18 @@ public final class SvgWriter {
      *  Lengths are divided by {@code k}: a run drawn through {@code <use>} at its font size states them in em. */
     static void strokeCss(StringBuilder css, int argb, JxStroke pen, double k) {
         css.append(";stroke:").append(rgb(argb));
-        if (pen.width() > 0) css.append(";stroke-width:").append(f(pen.width() / k));
+        if (pen.width() > 0) css.append(";stroke-width:").append(fmt(pen.width() / k));
         if (pen.cap() != JxStroke.Cap.BUTT) css.append(";stroke-linecap:").append(pen.cap().keyword());
         if (pen.join() != JxStroke.Join.MITER) css.append(";stroke-linejoin:").append(pen.join().keyword());
-        if (pen.miterLimit() > 0 && pen.miterLimit() != 10) css.append(";stroke-miterlimit:").append(f(pen.miterLimit()));
+        if (pen.miterLimit() > 0 && pen.miterLimit() != 10) css.append(";stroke-miterlimit:").append(fmt(pen.miterLimit()));
         if (pen.hasDash()) {
             css.append(";stroke-dasharray:");
             double[] dash = pen.dash();
-            for (int i = 0; i < dash.length; i++) { if (i > 0) css.append(','); css.append(f(dash[i] / k)); }
-            if (pen.dashPhase() > 0) css.append(";stroke-dashoffset:").append(f(pen.dashPhase() / k));
+            for (int i = 0; i < dash.length; i++) { if (i > 0) css.append(','); css.append(fmt(dash[i] / k)); }
+            if (pen.dashPhase() > 0) css.append(";stroke-dashoffset:").append(fmt(pen.dashPhase() / k));
         }
         float sa = new JxColor(argb).alpha();
-        if (sa < 1f) css.append(";stroke-opacity:").append(f(sa));
+        if (sa < 1f) css.append(";stroke-opacity:").append(fmt(sa));
     }
 
     /** A PDF blend-mode name as CSS spells it: {@code ColorDodge} → {@code color-dodge}. Lower-casing
@@ -201,7 +202,7 @@ public final class SvgWriter {
             // once pushed every later glyph of the run one slot right.
             for (int k = ch.codePointCount(0, ch.length()); k > 0; k--) {
                 if (!xs.isEmpty()) xs.append(' ');
-                xs.append(f(g.x()));
+                xs.append(fmt(g.x()));
             }
             esc(chars, ch);
         }
@@ -225,7 +226,7 @@ public final class SvgWriter {
         } else if (filled) {
             css.append("fill:").append(rgb(t.fill()));
             float a = new JxColor(t.fill()).alpha();
-            if (a < 1f) css.append(";fill-opacity:").append(f(a));
+            if (a < 1f) css.append(";fill-opacity:").append(fmt(a));
         } else {
             css.append("fill:none");
         }
@@ -236,7 +237,7 @@ public final class SvgWriter {
 
         sb.append("<text transform=\"matrix(").append(mat(T)).append(")\" ")
           .append("x=\"").append(xs).append("\" y=\"0\" ")
-          .append("font-family=\"").append(stack(doc, fam, t.fontId())).append("\" font-size=\"").append(f(t.fontSize())).append("\" ")
+          .append("font-family=\"").append(stack(doc, fam, t.fontId())).append("\" font-size=\"").append(fmt(t.fontSize())).append("\" ")
           .append("class=\"").append(cls).append("\">").append(chars).append("</text>\n");
     }
 
@@ -279,13 +280,9 @@ public final class SvgWriter {
 
     // ── Vector path: page-space geometry flipped to SVG, paint via CSS class ──
 
+    /** {@code attrs}: what a dialect writes after the tag name ({@code id="…"} and its data), or null. */
     static void path(StringBuilder sb, OCDPage page, OCDPath p,
-                             Map<String, String> styles, Map<String, String> clips, Map<String, String> grads) {
-        path(sb, page, p, styles, clips, grads, null);
-    }
-
-    static void path(StringBuilder sb, OCDPage page, OCDPath p,
-                             Map<String, String> styles, Map<String, String> clips, Map<String, String> grads, String id) {
+                     Map<String, String> styles, Map<String, String> clips, Map<String, String> grads, String attrs) {
         if (p.geometry() == null) return;
         String d = p.geometry().toSvg();
         if (d == null || d.isBlank()) return;
@@ -298,7 +295,7 @@ public final class SvgWriter {
             css.append("fill:").append(rgb(p.fill()));
             if (p.isEvenOdd()) css.append(";fill-rule:evenodd");
             float fa = new JxColor(p.fill()).alpha();
-            if (fa < 1f) css.append(";fill-opacity:").append(f(fa));
+            if (fa < 1f) css.append(";fill-opacity:").append(fmt(fa));
         } else {
             css.append("fill:none");
         }
@@ -308,7 +305,7 @@ public final class SvgWriter {
 
         String cls = classFor(styles, css.toString());
         sb.append("<path ");
-        if (id != null) sb.append("id=\"").append(id).append("\" ");
+        if (attrs != null) sb.append(attrs).append(' ');
         sb.append("d=\"").append(d).append("\" class=\"").append(cls).append('"');
         sb.append(" transform=\"matrix(").append(pageFlipM(page)).append(")\"/>\n");
     }
@@ -353,11 +350,8 @@ public final class SvgWriter {
 
     static final String CLIP_CLOSE = "</g>\n";
 
-    static void image(StringBuilder sb, OCDPage page, OCDImage im, Map<String, String> clips) {
-        image(sb, page, im, clips, null);
-    }
-
-    static void image(StringBuilder sb, OCDPage page, OCDImage im, Map<String, String> clips, String id) {
+    /** {@code attrs} as for {@link #path}. */
+    static void image(StringBuilder sb, OCDPage page, OCDImage im, Map<String, String> clips, String attrs) {
         JxTransform t = im.transform();
         String href = "../images/" + JxName.safe(im.resourceRef());
 
@@ -366,14 +360,14 @@ public final class SvgWriter {
         if (t == null || t.isIdentity()) {
             JxRect b = im.bounds();
             if (b == null || b.isEmpty()) return;
-            place = "matrix(" + f(b.width()) + " 0 0 " + f(-b.height()) + " " + f(b.x()) + " " + f(b.y() + b.height()) + ")";
+            place = "matrix(" + fmt(b.width()) + " 0 0 " + fmt(-b.height()) + " " + fmt(b.x()) + " " + fmt(b.y() + b.height()) + ")";
         } else {
             place = "matrix(" + mat(t) + ") translate(0 1) scale(1 -1)";
         }
         String tail = imgTail(im);
 
         // An image only ever states its own placement: a clip rides on the wrapper opened by node().
-        String idAttr = id != null ? "id=\"" + id + "\" " : "";
+        String idAttr = attrs != null ? attrs + " " : "";
             sb.append("<image ").append(idAttr).append("xlink:href=\"").append(href).append("\" x=\"0\" y=\"0\" width=\"1\" height=\"1\" ")
               .append("preserveAspectRatio=\"none\" transform=\"matrix(").append(pageFlipM(page)).append(") ")
               .append(place).append('"').append(tail).append("/>\n");
@@ -381,7 +375,7 @@ public final class SvgWriter {
 
     private static String imgTail(OCDImage im) {
         var s = new StringBuilder();
-        if (im.alpha() < 1f) s.append(" opacity=\"").append(f(im.alpha())).append('"');
+        if (im.alpha() < 1f) s.append(" opacity=\"").append(fmt(im.alpha())).append('"');
         if (im.hasBlend() && !im.blend().equalsIgnoreCase("Normal"))
             s.append(" style=\"mix-blend-mode:").append(cssBlend(im.blend())).append('"');
         return s.toString();
@@ -413,19 +407,19 @@ public final class SvgWriter {
         var s = new StringBuilder();
         if (g.isLinear())
             s.append("<linearGradient").append(head)
-             .append(" x1=\"").append(f(c[0])).append("\" y1=\"").append(f(c[1]))
-             .append("\" x2=\"").append(f(c[2])).append("\" y2=\"").append(f(c[3])).append("\">");
+             .append(" x1=\"").append(fmt(c[0])).append("\" y1=\"").append(fmt(c[1]))
+             .append("\" x2=\"").append(fmt(c[2])).append("\" y2=\"").append(fmt(c[3])).append("\">");
         else
             s.append("<radialGradient").append(head)
-             .append(" cx=\"").append(f(c[3])).append("\" cy=\"").append(f(c[4])).append("\" r=\"").append(f(c[5]))
-             .append("\" fx=\"").append(f(c[0])).append("\" fy=\"").append(f(c[1]))
-             .append(c[2] == 0 ? "" : "\" fr=\"" + f(c[2])).append("\">");
+             .append(" cx=\"").append(fmt(c[3])).append("\" cy=\"").append(fmt(c[4])).append("\" r=\"").append(fmt(c[5]))
+             .append("\" fx=\"").append(fmt(c[0])).append("\" fy=\"").append(fmt(c[1]))
+             .append(c[2] == 0 ? "" : "\" fr=\"" + fmt(c[2])).append("\">");
         float[] off = g.offsets();
         int[]   col = g.colors();
         for (int i = 0; i < off.length; i++) {
             float a = new JxColor(col[i]).alpha();
-            s.append("<stop offset=\"").append(f(off[i])).append("\" stop-color=\"").append(rgb(col[i])).append('"');
-            if (a < 1f) s.append(" stop-opacity=\"").append(f(a)).append('"');
+            s.append("<stop offset=\"").append(fmt(off[i])).append("\" stop-color=\"").append(rgb(col[i])).append('"');
+            if (a < 1f) s.append(" stop-opacity=\"").append(fmt(a)).append('"');
             s.append("/>");
         }
         s.append(g.isLinear() ? "</linearGradient>" : "</radialGradient>");
@@ -445,16 +439,16 @@ public final class SvgWriter {
             if (!a.contents().isEmpty() || !a.author().isEmpty())
                 sb.append("<title>").append(escS((a.author().isEmpty() ? "" : a.author() + ": ") + a.contents())).append("</title>");
             switch (a.type()) {
-                case HIGHLIGHT -> { for (JxRect r : rs) sb.append("<rect x=\"").append(f(r.x())).append("\" y=\"").append(f(r.y()))
-                        .append("\" width=\"").append(f(r.width())).append("\" height=\"").append(f(r.height()))
+                case HIGHLIGHT -> { for (JxRect r : rs) sb.append("<rect x=\"").append(fmt(r.x())).append("\" y=\"").append(fmt(r.y()))
+                        .append("\" width=\"").append(fmt(r.width())).append("\" height=\"").append(fmt(r.height()))
                         .append("\" fill=\"").append(col).append("\" fill-opacity=\".4\" transform=\"").append(flip).append("\"/>"); }
                 case UNDERLINE -> { for (JxRect r : rs) line(sb, r.x(), r.y() + 0.6, r.x() + r.width(), r.y() + 0.6, col, 1, flip); }
                 case STRIKEOUT -> { for (JxRect r : rs) { double m = r.y() + r.height() / 2; line(sb, r.x(), m, r.x() + r.width(), m, col, 1, flip); } }
                 case SQUIGGLY  -> { for (JxRect r : rs) sb.append("<polyline points=\"").append(zig(r.x(), r.x() + r.width(), r.y() + 1.0, 1.4))
                         .append("\" fill=\"none\" stroke=\"").append(col).append("\" stroke-width=\".8\" transform=\"").append(flip).append("\"/>"); }
                 case NOTE      -> { if (a.rect() != null) noteIcon(sb, a.rect(), col, flip); }
-                default        -> { if (a.rect() != null) { JxRect r = a.rect(); sb.append("<rect x=\"").append(f(r.x())).append("\" y=\"").append(f(r.y()))
-                        .append("\" width=\"").append(f(r.width())).append("\" height=\"").append(f(r.height()))
+                default        -> { if (a.rect() != null) { JxRect r = a.rect(); sb.append("<rect x=\"").append(fmt(r.x())).append("\" y=\"").append(fmt(r.y()))
+                        .append("\" width=\"").append(fmt(r.width())).append("\" height=\"").append(fmt(r.height()))
                         .append("\" fill=\"none\" stroke=\"").append(col).append("\" stroke-width=\".6\" stroke-dasharray=\"2 2\" transform=\"").append(flip).append("\"/>"); } }
             }
             sb.append("</g>\n");
@@ -468,28 +462,28 @@ public final class SvgWriter {
             sb.append("<g><title>").append(escS(fld.name() + (fld.value().isEmpty() ? "" : " = " + fld.value()))).append("</title>");
             // ONE field appearance (FieldStyle) — flat surface, hairline border, no bevel. The surface is
             // the same checked or not: the state is carried by the ink, exactly as a value is in a text field.
-            sb.append("<rect x=\"").append(f(r.x())).append("\" y=\"").append(f(r.y()))
-              .append("\" width=\"").append(f(r.width())).append("\" height=\"").append(f(r.height()))
-              .append("\" rx=\"").append(f(rad))
+            sb.append("<rect x=\"").append(fmt(r.x())).append("\" y=\"").append(fmt(r.y()))
+              .append("\" width=\"").append(fmt(r.width())).append("\" height=\"").append(fmt(r.height()))
+              .append("\" rx=\"").append(fmt(rad))
               .append("\" fill=\"").append(btn ? FieldStyle.FACE_HEX : FieldStyle.SURFACE_HEX).append('"');
             if (!btn) sb.append(" stroke=\"").append(FieldStyle.BORDER_HEX)
-                        .append("\" stroke-width=\"").append(f(FieldStyle.BORDER_W)).append('"');
+                        .append("\" stroke-width=\"").append(fmt(FieldStyle.BORDER_W)).append('"');
             sb.append(" transform=\"").append(flip).append("\"/>");
             if (fld.type() == OCDFormField.Field.CHECKBOX) {
                 if (on) {
                     double[] t = FieldStyle.tick(r);
-                    sb.append("<path d=\"M").append(f(t[0])).append(' ').append(f(t[1]))
-                      .append('L').append(f(t[2])).append(' ').append(f(t[3]))
-                      .append('L').append(f(t[4])).append(' ').append(f(t[5]))
+                    sb.append("<path d=\"M").append(fmt(t[0])).append(' ').append(fmt(t[1]))
+                      .append('L').append(fmt(t[2])).append(' ').append(fmt(t[3]))
+                      .append('L').append(fmt(t[4])).append(' ').append(fmt(t[5]))
                       .append("\" fill=\"none\" stroke=\"").append(FieldStyle.INK_HEX)
-                      .append("\" stroke-width=\"").append(f(FieldStyle.TICK_W))
+                      .append("\" stroke-width=\"").append(fmt(FieldStyle.TICK_W))
                       .append("\" stroke-linecap=\"round\" stroke-linejoin=\"round\" transform=\"").append(flip).append("\"/>");
                 }
             } else if (fld.type() == OCDFormField.Field.RADIO) {
                 if (on) {                                              // one of a set is CHOSEN — a dot, not a tick
                     double[] c = FieldStyle.dot(r);
-                    sb.append("<circle cx=\"").append(f(c[0])).append("\" cy=\"").append(f(c[1]))
-                      .append("\" r=\"").append(f(c[2])).append("\" fill=\"").append(FieldStyle.INK_HEX)
+                    sb.append("<circle cx=\"").append(fmt(c[0])).append("\" cy=\"").append(fmt(c[1]))
+                      .append("\" r=\"").append(fmt(c[2])).append("\" fill=\"").append(FieldStyle.INK_HEX)
                       .append("\" transform=\"").append(flip).append("\"/>");
                 }
             } else if (fld.type() == OCDFormField.Field.SIGNATURE) {
@@ -498,19 +492,19 @@ public final class SvgWriter {
             } else {
                 if (fld.type() == OCDFormField.Field.CHOICE) {         // the one mark that says "a closed list"
                     double[] v = FieldStyle.chevron(r);
-                    sb.append("<path d=\"M").append(f(v[0])).append(' ').append(f(v[1]))
-                      .append('L').append(f(v[2])).append(' ').append(f(v[3]))
-                      .append('L').append(f(v[4])).append(' ').append(f(v[5]))
+                    sb.append("<path d=\"M").append(fmt(v[0])).append(' ').append(fmt(v[1]))
+                      .append('L').append(fmt(v[2])).append(' ').append(fmt(v[3]))
+                      .append('L').append(fmt(v[4])).append(' ').append(fmt(v[5]))
                       .append("\" fill=\"none\" stroke=\"").append(FieldStyle.INK_HEX)
-                      .append("\" stroke-width=\"").append(f(FieldStyle.BORDER_W * 1.6))
+                      .append("\" stroke-width=\"").append(fmt(FieldStyle.BORDER_W * 1.6))
                       .append("\" stroke-linecap=\"round\" stroke-linejoin=\"round\" transform=\"").append(flip).append("\"/>");
                 }
                 if (!fld.value().isEmpty()) {
                     double sz = btn ? FieldStyle.buttonTextSize(r) : FieldStyle.textSize(r);
                     boolean mid = btn;                                       // a button's label is centred
-                    sb.append("<text x=\"").append(f((mid ? r.x() + r.width() / 2 : r.x() + FieldStyle.PAD_X) - eb.x()))
-                      .append("\" y=\"").append(f(top - (btn ? FieldStyle.buttonBaseline(r) : FieldStyle.baseline(r))))
-                      .append("\" font-family=\"sans-serif\" font-size=\"").append(f(sz));
+                    sb.append("<text x=\"").append(fmt((mid ? r.x() + r.width() / 2 : r.x() + FieldStyle.PAD_X) - eb.x()))
+                      .append("\" y=\"").append(fmt(top - (btn ? FieldStyle.buttonBaseline(r) : FieldStyle.baseline(r))))
+                      .append("\" font-family=\"sans-serif\" font-size=\"").append(fmt(sz));
                     if (mid) sb.append("\" text-anchor=\"middle");
                     sb.append("\" fill=\"").append(FieldStyle.INK_HEX).append("\">").append(escS(fld.value())).append("</text>");
                 }
@@ -520,20 +514,20 @@ public final class SvgWriter {
     }
 
     private static void line(StringBuilder sb, double x1, double y1, double x2, double y2, String col, double sw, String flip) {
-        sb.append("<line x1=\"").append(f(x1)).append("\" y1=\"").append(f(y1)).append("\" x2=\"").append(f(x2)).append("\" y2=\"").append(f(y2))
-          .append("\" stroke=\"").append(col).append("\" stroke-width=\"").append(f(sw)).append("\" transform=\"").append(flip).append("\"/>");
+        sb.append("<line x1=\"").append(fmt(x1)).append("\" y1=\"").append(fmt(y1)).append("\" x2=\"").append(fmt(x2)).append("\" y2=\"").append(fmt(y2))
+          .append("\" stroke=\"").append(col).append("\" stroke-width=\"").append(fmt(sw)).append("\" transform=\"").append(flip).append("\"/>");
     }
     private static String zig(double x0, double x1, double y, double amp) {
         var p = new StringBuilder(); boolean up = true;
-        p.append(f(x0)).append(',').append(f(y));
-        for (double x = x0; x < x1; x += 2.0) { p.append(' ').append(f(Math.min(x + 2.0, x1))).append(',').append(f(y + (up ? amp : -amp))); up = !up; }
+        p.append(fmt(x0)).append(',').append(fmt(y));
+        for (double x = x0; x < x1; x += 2.0) { p.append(' ').append(fmt(Math.min(x + 2.0, x1))).append(',').append(fmt(y + (up ? amp : -amp))); up = !up; }
         return p.toString();
     }
     private static void noteIcon(StringBuilder sb, JxRect r, String col, String flip) {
         double s = Math.min(Math.min(r.width(), r.height()) > 0 ? Math.min(r.width(), r.height()) : 14, 16);
         double x = r.x(), y = r.y() + r.height() - s;
-        sb.append("<rect x=\"").append(f(x)).append("\" y=\"").append(f(y)).append("\" width=\"").append(f(s)).append("\" height=\"").append(f(s))
-          .append("\" rx=\"").append(f(s * 0.28)).append("\" fill=\"").append(col).append("\" stroke=\"#666\" stroke-width=\".5\" transform=\"").append(flip).append("\"/>");
+        sb.append("<rect x=\"").append(fmt(x)).append("\" y=\"").append(fmt(y)).append("\" width=\"").append(fmt(s)).append("\" height=\"").append(fmt(s))
+          .append("\" rx=\"").append(fmt(s * 0.28)).append("\" fill=\"").append(col).append("\" stroke=\"#666\" stroke-width=\".5\" transform=\"").append(flip).append("\"/>");
         line(sb, x + s * 0.22, y + s * 0.62, x + s * 0.78, y + s * 0.62, "#666", 0.5, flip);
         line(sb, x + s * 0.22, y + s * 0.40, x + s * 0.78, y + s * 0.40, "#666", 0.5, flip);
     }
@@ -556,8 +550,8 @@ public final class SvgWriter {
     static String viewBox(OCDPage page) {
         JxRect win = page.svgWindow();
         return page.rotation() != 0
-                ? "0 0 " + f(page.displayWidth()) + ' ' + f(page.displayHeight())
-                : f(win.x()) + ' ' + f(win.y()) + ' ' + f(win.width()) + ' ' + f(win.height());
+                ? "0 0 " + fmt(page.displayWidth()) + ' ' + fmt(page.displayHeight())
+                : fmt(win.x()) + ' ' + fmt(win.y()) + ' ' + fmt(win.width()) + ' ' + fmt(win.height());
     }
 
     /** The rotation carrier's transform, or {@code null} for an upright page. Content is laid out in
@@ -566,11 +560,11 @@ public final class SvgWriter {
     static String rotation(OCDPage page) {
         JxRect win = page.svgWindow();
         double cw = win.width(), ch = win.height();
-        String shift = (win.x() == 0 && win.y() == 0) ? "" : " translate(" + f(-win.x()) + ',' + f(-win.y()) + ')';
+        String shift = (win.x() == 0 && win.y() == 0) ? "" : " translate(" + fmt(-win.x()) + ',' + fmt(-win.y()) + ')';
         return switch (page.rotation()) {
-            case 90  -> "translate(" + f(ch) + ",0) rotate(90)" + shift;
-            case 180 -> "translate(" + f(cw) + ',' + f(ch) + ") rotate(180)" + shift;
-            case 270 -> "translate(0," + f(cw) + ") rotate(270)" + shift;
+            case 90  -> "translate(" + fmt(ch) + ",0) rotate(90)" + shift;
+            case 180 -> "translate(" + fmt(cw) + ',' + fmt(ch) + ") rotate(180)" + shift;
+            case 270 -> "translate(0," + fmt(cw) + ") rotate(270)" + shift;
             default  -> null;
         };
     }
@@ -578,5 +572,4 @@ public final class SvgWriter {
 
     static void esc(StringBuilder sb, String s) { JxText.text(sb, s); }
 
-    static String f(double v) { return JxNum.fmt(v); }
 }

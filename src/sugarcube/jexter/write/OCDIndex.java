@@ -133,15 +133,6 @@ final class OCDIndex {
     /** Canonical text of a structure node across all pages. */
     String text(OCDStructNode s) { return text(s, -1); }
 
-    /** Inline structure types: PDF/UA wraps inline emphasis (a styled term, a mono identifier) as a
-     *  child {@code SPAN}/{@code CODE}/{@code OTHER} under its text block. Their content is part of the
-     *  block's reading flow, so {@link #text} gathers it; recursion stops at any block-level child. */
-    private static final java.util.EnumSet<OCDStructNode.Type> INLINE =
-            java.util.EnumSet.of(OCDStructNode.Type.SPAN, OCDStructNode.Type.CODE, OCDStructNode.Type.OTHER);
-
-    /** Whether {@link #text} of the parent already carries this child's text (an inline SPAN/CODE/OTHER). */
-    static boolean isInline(OCDStructNode s) { return INLINE.contains(s.type()); }
-
     /** A run tagged with the page it was referenced from — node ids are page-scoped, so reading order
      *  is restored by sorting on {@code (page, position in the content)} across own + inline-descendant refs. */
     private record Run(int page, OCDText text) {}
@@ -166,7 +157,7 @@ final class OCDIndex {
     }
 
     /** Gather the text runs of {@code s}: its own refs plus those of its inline descendants
-     *  ({@link #INLINE}). Order is not preserved here — {@link #text} re-sorts into reading order. */
+     *  ({@link OCDStructNode#isInline}). Order is not preserved here — {@link #text} re-sorts into reading order. */
     private void collect(OCDStructNode s, int page, List<Run> out) {
         for (OCDStructNode.Ref r : s.refs())
             if (page < 0 || r.page() == page) {
@@ -175,6 +166,6 @@ final class OCDIndex {
                                 .forEach(t -> out.add(new Run(r.page(), t)));
             }
         for (OCDStructNode c : s.children())
-            if (isInline(c)) collect(c, page, out);              // recurse inline emphasis; stop at block children
+            if (c.isInline()) collect(c, page, out);              // recurse inline emphasis; stop at block children
     }
 }

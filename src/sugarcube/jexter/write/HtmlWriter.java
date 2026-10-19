@@ -15,6 +15,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import static sugarcube.jexter.core.JxText.attr;
+import static sugarcube.jexter.core.JxText.text;
+import sugarcube.jexter.core.JxName;
 
 /**
  * Reflowable HTML projection of an {@link OCDDocument}.
@@ -121,7 +124,7 @@ public final class HtmlWriter {
     private static void render(OCDStructNode s, OCDDocument doc, OCDIndex ix, StringBuilder sb, Assets assets) {
         switch (s.type()) {
             case HEADING -> {
-                int lv = Math.min(6, Math.max(1, s.level() == 0 ? 1 : s.level()));
+                int lv = s.headingLevel();
                 line(sb, "h" + lv, content(s, ix));
                 for (OCDStructNode c : s.children()) render(c, doc, ix, sb, assets);   // HTML5 outline: children are siblings
             }
@@ -158,7 +161,7 @@ public final class HtmlWriter {
         sb.append(">\n");
         if (inline != null && !inline.isEmpty()) sb.append(text(inline)).append('\n');
         for (OCDStructNode c : s.children())
-            if (inline == null || !OCDIndex.isInline(c)) render(c, doc, ix, sb, assets);   // the inline text already holds it
+            if (inline == null || !c.isInline()) render(c, doc, ix, sb, assets);   // the inline text already holds it
         sb.append("</").append(tag).append(">\n");
     }
 
@@ -252,7 +255,7 @@ public final class HtmlWriter {
 
     /** A safe resource filename derived from a reference, ensuring an extension. */
     private static String named(String ref, String ext) {
-        String n = EpubPackage.safe(ref);
+        String n = JxName.safe(ref);
         return n.contains(".") ? n : n + ext;
     }
 
@@ -270,8 +273,6 @@ public final class HtmlWriter {
     // does more than the three replacements this file used to carry — it also keeps XML-invalid
     // characters out, which a CID font with no usable ToUnicode produces by the handful (U+0000,
     // U+FFFF). Two escapers mean two behaviours the day one of them learns something.
-    private static String text(String s) { return JxText.text(s); }
-    private static String attr(String s) { return JxText.attr(s); }
 
     static final String CSS =
         "html{font:1rem/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a}" +

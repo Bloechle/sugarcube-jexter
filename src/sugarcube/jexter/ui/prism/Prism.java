@@ -288,7 +288,7 @@ public final class Prism extends WebApp {
     private void deleteAiConfig() { try { Files.deleteIfExists(aiConfigPath()); } catch (Exception ignore) {} }
 
     // ── Debug log bridge — mirror JxLog (java.util.logging) into the F2 console ──
-    private static final java.util.List<java.io.OutputStream> logSinks = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private static final Events logEvents = new Events();
     private static final java.util.Deque<String> logRing = new java.util.ArrayDeque<>();
     private static final int LOG_RING_MAX = 300;
     private static volatile boolean logBridgeReady = false;
@@ -318,59 +318,28 @@ public final class Prism extends WebApp {
         return new JxStringer().obj().str("level", lvl).str("src", shortName).str("msg", msg).end().toString();
     }
 
-    private static final java.util.List<java.io.OutputStream> progressSinks = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private static final Events progressEvents = new Events();
 
     /** Progress has no ring: a step is only meaningful while its conversion runs, and a client that
      *  connects late wants the next step, not a replay of the last one. */
-    private static void pushProgress(String json) {
-        byte[] data = ("data: " + json + "\n\n").getBytes(StandardCharsets.UTF_8);
-        for (java.io.OutputStream os : progressSinks) {
-            try { synchronized (os) { os.write(data); os.flush(); } }
-            catch (IOException dead) { progressSinks.remove(os); }
-        }
-    }
+    private static void pushProgress(String json) { progressEvents.push(json); }
 
-    private void progress(HttpExchange x) throws IOException { stream(x, progressSinks, java.util.List.of()); }
+    private void progress(HttpExchange x) throws IOException { progressEvents.serve(x, java.util.List.of()); }
 
     private static void pushLog(String json) {
         synchronized (logRing) {
             logRing.addLast(json);
             while (logRing.size() > LOG_RING_MAX) logRing.removeFirst();
         }
-        byte[] data = ("data: " + json + "\n\n").getBytes(StandardCharsets.UTF_8);
-        for (java.io.OutputStream os : logSinks) {
-            try { synchronized (os) { os.write(data); os.flush(); } }
-            catch (IOException dead) { logSinks.remove(os); }
-        }
+        logEvents.push(json);
     }
 
     private void log(HttpExchange x) throws IOException {
         java.util.List<String> backlog;
         synchronized (logRing) { backlog = new java.util.ArrayList<>(logRing); }
-        stream(x, logSinks, backlog);
+        logEvents.serve(x, backlog);
     }
 
-    /** One SSE idiom for both streams: replay the backlog, register, then keep alive until the client goes. */
-    private static void stream(HttpExchange x, java.util.List<java.io.OutputStream> sinks,
-                               java.util.List<String> backlog) throws IOException {
-        x.getResponseHeaders().set("Content-Type", "text/event-stream");
-        x.getResponseHeaders().set("Cache-Control", "no-store");
-        x.sendResponseHeaders(200, 0);
-        java.io.OutputStream os = x.getResponseBody();
-        for (String line : backlog) os.write(("data: " + line + "\n\n").getBytes(StandardCharsets.UTF_8));
-        os.flush();
-        sinks.add(os);
-        try {
-            while (true) {
-                synchronized (os) { os.write(": ping\n\n".getBytes(StandardCharsets.UTF_8)); os.flush(); }
-                try { Thread.sleep(15000); } catch (InterruptedException ie) { break; }
-            }
-        } catch (IOException closed) {
-        } finally {
-            sinks.remove(os);
-            try { os.close(); } catch (IOException ignored) {}
-        }
-    }
     // ── /api/font — a font the container does not carry, in the container's own form ──
     //
     // The body is the TTF/OTF; `chars` are the characters to take (blank = printable ASCII) and `id`

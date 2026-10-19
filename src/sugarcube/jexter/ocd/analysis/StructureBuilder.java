@@ -144,7 +144,7 @@ public final class StructureBuilder {
     private static int level(Block b, FontProfile fp, OCDDocument doc) {
         FontProfile.Style s = styleOf(b, doc);
         int r = fp.isTitle(s) ? 0 : Math.max(0, fp.headingLevel(s) - 1);   // 0-based rank from the document-wide profile
-        return Math.min(6, r + 1);
+        return OCDStructNode.headingLevel(r + 1);
     }
 
     /** True iff the block is running furniture, per the single authority {@link Furniture#isRunning}. */

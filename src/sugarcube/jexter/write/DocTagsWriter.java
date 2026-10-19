@@ -1,5 +1,6 @@
 package sugarcube.jexter.write;
 
+import sugarcube.jexter.core.ListMarker;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.core.JxRect;
 import sugarcube.jexter.ocd.model.OCDDocument;
@@ -66,11 +67,11 @@ public final class DocTagsWriter {
             switch (s.type()) {
                 case DOCUMENT, SECTION -> { for (OCDStructNode c : s.children()) walk(c); }  // containers
                 case SPAN, OTHER -> {                           // inline under a text block is folded into its text(); at block position, emit it
-                    if (hasBlockChild(s)) { for (OCDStructNode c : s.children()) walk(c); }
+                    if (s.hasBlockChild()) { for (OCDStructNode c : s.children()) walk(c); }
                     else block(s, "text");
                 }
                 case TOC      -> block(s, "document_index");
-                case HEADING  -> { block(s, "section_header_level_" + clamp(s.level(), 1, 6));
+                case HEADING  -> { block(s, "section_header_level_" + s.headingLevel());
                                    for (OCDStructNode c : s.children()) walk(c); }   // heading = label + sub-blocks
                 case PARAGRAPH, QUOTE -> block(s, "text");
                 case CAPTION  -> block(s, "caption");
@@ -98,7 +99,7 @@ public final class DocTagsWriter {
             int page = pageOf(s);
             JxRect box = selfBox(s, page);
             String text = clean(text(s, page));
-            if (tag.equals("list_item")) text = stripMarker(text);   // tag conveys list-ness; content carries no bullet
+            if (tag.equals("list_item")) text = ListMarker.strip(text);   // tag conveys list-ness; content carries no bullet
             if (box == null && text.isEmpty()) return;     // nothing to say
             pageBreak(page);
             sb.append('<').append(tag).append('>').append(loc(box, page)).append(text)
@@ -227,17 +228,7 @@ public final class DocTagsWriter {
         };
     }
 
-    private static int clamp(int v, int lo, int hi) { return Math.max(lo, Math.min(hi, v <= 0 ? lo : v)); }
 
-    /** A SPAN/OTHER with any non-inline child is a real container (walk it); one with only inline
-     *  children (or none) carries its own text and is emitted as a block. */
-    private static boolean hasBlockChild(OCDStructNode s) {
-        for (OCDStructNode c : s.children()) {
-            OCDStructNode.Type t = c.type();
-            if (t != OCDStructNode.Type.SPAN && t != OCDStructNode.Type.CODE && t != OCDStructNode.Type.OTHER) return true;
-        }
-        return false;
-    }
 
     /** Keep tag stream intact: drop raw angle brackets from text content. */
     private static String clean(String s) {
@@ -245,8 +236,4 @@ public final class DocTagsWriter {
         return s.replace('<', '\u2039').replace('>', '\u203A').strip();   // ‹ › lookalikes
     }
 
-    /** Drop a leading list marker (bullet, "1", "1.", "a)" …) — list-ness is in the tag, not the text. */
-    static String stripMarker(String s) {
-        return sugarcube.jexter.core.ListMarker.strip(s);
-    }
 }

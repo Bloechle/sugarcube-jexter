@@ -101,8 +101,7 @@ final class Liner {
      *  direction. Without it a rotated caption, whose box is tall and narrow, overlaps every band of the
      *  column beside it and welds heading, body and caption into one paragraph (measured). */
     private static int axis(OCDText t) {
-        var m = t.transform();
-        return Math.floorMod((int) Math.round(Math.atan2(m.b(), m.a()) / (Math.PI / 2)), 4);
+        return t.transform().quarterTurns();
     }
 
     /** Mutable line accumulator: the member runs, the line's writing axis, and the union band. */

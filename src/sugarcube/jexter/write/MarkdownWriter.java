@@ -1,5 +1,6 @@
 package sugarcube.jexter.write;
 
+import sugarcube.jexter.core.ListMarker;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDStructNode;
@@ -48,12 +49,12 @@ public final class MarkdownWriter {
             switch (s.type()) {
                 case DOCUMENT, SECTION, TOC -> { for (OCDStructNode c : s.children()) walk(c); }
                 case SPAN, OTHER -> {                       // inline under a text block is folded into its text(); at block position, emit it
-                    if (hasBlockChild(s)) { for (OCDStructNode c : s.children()) walk(c); }
+                    if (s.hasBlockChild()) { for (OCDStructNode c : s.children()) walk(c); }
                     else { String t = text(s); if (!t.isEmpty()) block(t); }
                 }
                 case HEADING -> {
                     String t = text(s);
-                    if (!t.isEmpty()) block("#".repeat(clamp(s.level(), 1, 6)) + " " + t);
+                    if (!t.isEmpty()) block("#".repeat(s.headingLevel()) + " " + t);
                     for (OCDStructNode c : s.children()) walk(c);
                 }
                 case PARAGRAPH -> { String t = text(s); if (!t.isEmpty()) block(t); }
@@ -62,7 +63,7 @@ public final class MarkdownWriter {
                 case CAPTION -> { String t = text(s); if (!t.isEmpty()) block("*" + t + "*"); }
                 case CODE -> { String t = text(s); if (!t.isEmpty()) block("```\n" + t + "\n```"); }
                 case LIST -> { list(s); }
-                case ITEM -> { String t = stripMarker(text(s)); if (!t.isEmpty()) block("- " + t); }   // stray item
+                case ITEM -> { String t = ListMarker.strip(text(s)); if (!t.isEmpty()) block("- " + t); }   // stray item
                 case FIGURE -> {
                     String alt = s.alt();
                     block("![" + (alt == null || alt.isBlank() ? "figure" : alt.strip()) + "](#)");
@@ -78,13 +79,13 @@ public final class MarkdownWriter {
             int n = 0;
             for (OCDStructNode c : s.children()) {
                 if (c.type() == OCDStructNode.Type.ITEM) {
-                    String t = stripMarker(text(c));
+                    String t = ListMarker.strip(text(c));
                     if (!t.isEmpty()) b.append(s.ordered() ? (++n + ". ") : "- ").append(t.replace("\n", " ")).append('\n');
                 } else if (c.type() == OCDStructNode.Type.LIST) {     // nested list → indent
                     int m = 0;
                     for (OCDStructNode gc : c.children())
                         if (gc.type() == OCDStructNode.Type.ITEM) {
-                            String t = stripMarker(text(gc));
+                            String t = ListMarker.strip(text(gc));
                             if (!t.isEmpty()) b.append("  ").append(c.ordered() ? (++m + ". ") : "- ").append(t.replace("\n", " ")).append('\n');
                         }
                 }
@@ -134,20 +135,6 @@ public final class MarkdownWriter {
         String text(OCDStructNode s) { return ix.text(s); }
     }
 
-    private static int clamp(int v, int lo, int hi) { return Math.max(lo, Math.min(hi, v <= 0 ? lo : v)); }
 
-    /** A SPAN/OTHER with any non-inline child is a real container (walk it); one with only inline
-     *  children (or none) carries its own text and is emitted as a block. */
-    private static boolean hasBlockChild(OCDStructNode s) {
-        for (OCDStructNode c : s.children()) {
-            OCDStructNode.Type t = c.type();
-            if (t != OCDStructNode.Type.SPAN && t != OCDStructNode.Type.CODE && t != OCDStructNode.Type.OTHER) return true;
-        }
-        return false;
-    }
 
-    /** Drop a leading list marker (bullet, "1", "1.", "a)" …); the {@code -} prefix conveys list-ness. */
-    private static String stripMarker(String s) {
-        return sugarcube.jexter.core.ListMarker.strip(s);
-    }
 }

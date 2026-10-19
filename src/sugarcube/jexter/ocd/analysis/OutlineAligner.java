@@ -1,5 +1,6 @@
 package sugarcube.jexter.ocd.analysis;
 
+import sugarcube.jexter.ocd.model.OCDStructNode;
 import sugarcube.jexter.core.JxText;
 import sugarcube.jexter.ocd.model.OCDBreak;
 import sugarcube.jexter.ocd.model.OCDDocument;
@@ -39,7 +40,6 @@ public final class OutlineAligner {
 
     private OutlineAligner() {}
 
-    private static final int MAX_LEVEL = 6;
 
     /** Align segmentation and heading roles on the outline. No-op without one. */
     public static void align(OCDDocument doc) {
@@ -55,7 +55,7 @@ public final class OutlineAligner {
             if (w == null) continue;
             int[] ops = carve(w);
             split += ops[0]; merged += ops[1];
-            w.paras.get(0).p.role("heading-" + Math.min(MAX_LEVEL, e.level));
+            w.paras.get(0).p.role("heading-" + OCDStructNode.headingLevel(e.level));
             tagged++;
         }
         if (tagged > 0)
@@ -94,7 +94,7 @@ public final class OutlineAligner {
             if (n instanceof OCDParagraph p) {
                 Para para = new Para(p, kids, i);
                 lines(p, para);
-                if (!para.lineText.isEmpty() && !isFurniture(p)) out.add(para);
+                if (!para.lineText.isEmpty() && !Furniture.isRunning(p)) out.add(para);
             } else if (n instanceof OCDGroup g) collect(g.children(), out);
         }
     }
@@ -124,13 +124,6 @@ public final class OutlineAligner {
             runs.clear();
             start = i + 1;
         }
-    }
-
-    private static boolean isFurniture(OCDParagraph p) {
-        for (OCDNode n : p.children())
-            if (n instanceof OCDText t && t.hasRole()
-                    && (t.role().equals("page-header") || t.role().equals("page-footer"))) return true;
-        return false;
     }
 
     // ── window search: consecutive lines (crossing only ADJACENT sibling paragraphs) == title ──
@@ -238,5 +231,7 @@ public final class OutlineAligner {
         return np;
     }
 
-    private static String norm(String s) { return JxText.collapse(s).toUpperCase(Locale.ROOT); }
+    /** The key a title and a line are matched on: blanks collapsed, case folded. The one rule of every
+     *  nav-to-text match ({@link BookmarkStructureBuilder} too). */
+    static String norm(String s) { return JxText.collapse(s).toUpperCase(Locale.ROOT); }
 }

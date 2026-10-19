@@ -151,8 +151,7 @@ public final class Segmenter {
      *  not be absorbed into its body, however well their boxes and type sizes agree. */
     private static int axis(Line ln) {
         if (ln == null || ln.runs.isEmpty()) return -1;
-        var m = ln.runs.get(0).transform();
-        return Math.floorMod((int) Math.round(Math.atan2(m.b(), m.a()) / (Math.PI / 2)), 4);
+        return ln.runs.get(0).transform().quarterTurns();
     }
 
     /** Within one XY-Cut leaf (already a tight geometric unit, top→down), recompose blocks in two phases.

@@ -22,6 +22,8 @@ import sugarcube.jexter.ocd.model.OCDVideo;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import static sugarcube.jexter.core.JxText.attr;
+import static sugarcube.jexter.core.JxNum.fmt;
 
 /**
  * Emits an {@link OCDPage} as an <b>SVG-OCD v2</b> page — the canonical, SELF-CONTAINED page
@@ -84,7 +86,7 @@ public final class SvgOcdWriter {
           .append("width=\"").append(f(w)).append("\" height=\"").append(f(h)).append("\" ")
           .append("data-ocd=\"page\" data-version=\"").append(OCDVocab.VERSION).append('"');
         String lang = pageLang(doc, page);
-        if (!lang.isEmpty()) sb.append(" xml:lang=\"").append(esc(lang)).append('"');
+        if (!lang.isEmpty()) sb.append(" xml:lang=\"").append(attr(lang)).append('"');
         if (page.rotation() != 0) sb.append(" data-rotate=\"").append(page.rotation()).append('"');
         if (page.cmykBlending()) sb.append(" data-blending=\"cmyk\"");
         // The crop IS the viewBox and the rotation IS data-rotate: one representation each, both on the
@@ -186,20 +188,15 @@ public final class SvgOcdWriter {
                 if (open) sb.append("</g>\n");
                 sb.append("</g>\n");
             }
-            case OCDPath p   -> {
-                int at = sb.length();
-                SvgWriter.path(sb, page, p, styles, clips, grads, n.id());
-                oInject(sb, at, order);
-                inject(sb, at, cmykAttrs(p));   // the path helper is SvgWriter's, shared: the model's extras go in here
-            }
-            case OCDImage im -> { int at = sb.length(); SvgWriter.image(sb, page, im, clips, n.id()); oInject(sb, at, order); }
+            case OCDPath p   -> SvgWriter.path(sb, page, p, styles, clips, grads, attrs(n, cmykAttrs(p), order));
+            case OCDImage im -> SvgWriter.image(sb, page, im, clips, attrs(n, "", order));
             case OCDMedia m  -> {
                 sb.append("<g id=\"").append(m.id()).append("\" data-ocd=\"media\"");
                 o(sb, order);
                 sb.append(" data-kind=\"")
                   .append(m instanceof OCDVideo ? "video" : "audio")
-                  .append("\" data-src=\"").append(esc(m.resourceRef())).append('"');
-                if (m instanceof OCDVideo v && v.poster() != null) sb.append(" data-poster=\"").append(esc(v.poster())).append('"');
+                  .append("\" data-src=\"").append(attr(m.resourceRef())).append('"');
+                if (m instanceof OCDVideo v && v.poster() != null) sb.append(" data-poster=\"").append(attr(v.poster())).append('"');
                 if (m.transform() != null && !m.transform().isIdentity())
                     sb.append(" data-matrix=\"").append(m.transform().toMatrix6()).append('"');
                 if (!m.controls()) sb.append(" data-controls=\"0\"");
@@ -221,7 +218,7 @@ public final class SvgOcdWriter {
                 if (g.transform() != null && !g.transform().isIdentity())
                     sb.append(" data-matrix=\"").append(g.transform().toMatrix6()).append('"');
                 if (g instanceof sugarcube.jexter.ocd.model.OCDLayerContent lc && lc.layerId() != null)
-                    sb.append(" data-layer=\"").append(esc(lc.layerId())).append('"');
+                    sb.append(" data-layer=\"").append(attr(lc.layerId())).append('"');
                 state(sb, g);
                 sb.append(SvgWriter.groupStyle(g));   // data-blend/-alpha are the model; this is the paint
                 sb.append(">\n");
@@ -245,15 +242,14 @@ public final class SvgOcdWriter {
     /** Non-visual model state as data-* passthrough — never painted (visual parity with the
      *  audited SvgWriter), restored verbatim by the loader. */
     private static void state(StringBuilder sb, OCDNode n) {
-        if (n.name() != null && !n.name().isEmpty()) sb.append(" data-name=\"").append(esc(n.name())).append('"');
-        if (n.hasRole())  sb.append(" data-role=\"").append(esc(n.role())).append('"');
-        if (n.hasBlend()) sb.append(" data-blend=\"").append(esc(n.blend())).append('"');
+        if (n.name() != null && !n.name().isEmpty()) sb.append(" data-name=\"").append(attr(n.name())).append('"');
+        if (n.hasRole())  sb.append(" data-role=\"").append(attr(n.role())).append('"');
+        if (n.hasBlend()) sb.append(" data-blend=\"").append(attr(n.blend())).append('"');
         if (n.alpha() < 1f) sb.append(" data-alpha=\"").append(f(n.alpha())).append('"');
         sb.append(cmykAttrs(n));
     }
 
     /** Every attribute value goes through here: {@link JxText#attr} escapes the quote that would end it. */
-    private static String esc(String v) { return JxText.attr(v); }
 
     private static String kind(OCDGroup g) {
         if (g instanceof OCDParagraph) return "paragraph";
@@ -381,14 +377,14 @@ public final class SvgOcdWriter {
         for (var fe : byName.entrySet()) {
             OCDFont f = fe.getValue();
             sb.append("<g id=\"").append(glyphs.alias.get(fe.getKey()))
-              .append("\" data-font=\"").append(esc(fe.getKey()))
+              .append("\" data-font=\"").append(attr(fe.getKey()))
               .append("\" data-id=\"").append(sugarcube.jexter.core.JxText.attr(f.id())).append('"');
             if (!f.name().isEmpty() && !f.name().equals(f.id()))
                 sb.append(" data-name=\"").append(sugarcube.jexter.core.JxText.attr(f.name())).append('"');
             if (!f.family().isEmpty() && !f.family().equals(f.name()))
                 sb.append(" data-family=\"").append(sugarcube.jexter.core.JxText.attr(f.family())).append('"');
-            if (!"normal".equals(f.weight())) sb.append(" data-weight=\"").append(esc(f.weight())).append('"');
-            if (!"normal".equals(f.style()))  sb.append(" data-style=\"").append(esc(f.style())).append('"');
+            if (!"normal".equals(f.weight())) sb.append(" data-weight=\"").append(attr(f.weight())).append('"');
+            if (!"normal".equals(f.style()))  sb.append(" data-style=\"").append(attr(f.style())).append('"');
             if (f.embedded()) sb.append(" data-embedded=\"1\"");
             sb.append(" data-ascent=\"").append(f(f.ascent())).append("\" data-descent=\"").append(f(f.descent()))
               .append("\" data-capheight=\"").append(f(f.capHeight())).append("\" data-xheight=\"").append(f(f.xHeight()))
@@ -441,19 +437,10 @@ public final class SvgOcdWriter {
         if (order >= 0) sb.append(" data-order=\"").append(order).append('"');
     }
 
-    /** Injects {@code data-order} into an element just emitted by a {@link SvgWriter} helper (path,
-     *  image): right after its id attribute — the helpers open with {@code <tag id="…"}. */
-    private static void oInject(StringBuilder sb, int at, int order) {
-        if (order >= 0) inject(sb, at, " data-order=\"" + order + "\"");
-    }
-
-    /** Insert {@code attrs} right after the id of the element a shared helper just wrote at {@code at}. */
-    private static void inject(StringBuilder sb, int at, String attrs) {
-        if (attrs.isEmpty()) return;
-        int id = sb.indexOf("id=\"", at);
-        if (id < at) return;                                 // helper emitted no id (e.g. a poster)
-        int close = sb.indexOf("\"", id + 4);
-        if (close > 0) sb.insert(close + 1, attrs);
+    /** The model's attributes on an element a shared {@link SvgWriter} helper paints (path, image): the id,
+     *  {@code extra} (a leading-space attribute list), then the reading order. */
+    private static String attrs(OCDNode n, String extra, int order) {
+        return "id=\"" + n.id() + "\"" + extra + (order >= 0 ? " data-order=\"" + order + "\"" : "");
     }
 
     /** The source CMYK behind a node's fill and stroke, when the document stated one (§B3). */
@@ -473,7 +460,7 @@ public final class SvgOcdWriter {
         for (sugarcube.jexter.ocd.model.OCDLink lk : page.links()) {
             sugarcube.jexter.core.JxRect r = flip.apply(lk.rect());
             sb.append("<a href=\"");
-            if (lk.isExternal()) sb.append(esc(lk.uri()));
+            if (lk.isExternal()) sb.append(attr(lk.uri()));
             else sb.append(OCDVocab.pageLink(lk.pageIndex()));
             sb.append('"');
             if (!lk.isExternal() && lk.hasY()) sb.append(" data-y=\"").append(f(lk.y())).append('"');
@@ -523,5 +510,5 @@ public final class SvgOcdWriter {
         return css.toString();
     }
 
-    private static String f(double v) { return SvgWriter.f(v); }
+    private static String f(double v) { return fmt(v); }
 }

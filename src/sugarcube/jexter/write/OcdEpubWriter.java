@@ -11,8 +11,8 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
 import static sugarcube.jexter.write.EpubPackage.OPF;
-import static sugarcube.jexter.write.EpubPackage.num;
-import static sugarcube.jexter.write.EpubPackage.safe;
+import static sugarcube.jexter.core.JxNum.fmt;
+import static sugarcube.jexter.core.JxName.safe;
 
 /**
  * Writes the <b>OCD-EPUB</b> — the working format of the pipeline: one fully valid fixed-layout EPUB carrying two faces of the same
@@ -96,7 +96,7 @@ public final class OcdEpubWriter {
                 %s
                 </body>
                 </html>
-                """.formatted(i, num(page.svgWindow().width()), num(page.svgWindow().height()),
+                """.formatted(i, fmt(page.svgWindow().width()), fmt(page.svgWindow().height()),
                               SvgOcdWriter.render(doc, page, glyphs));
     }
 

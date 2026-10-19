@@ -29,7 +29,6 @@ public final class HeadingRoles {
 
     private HeadingRoles() {}
 
-    private static final int MAX_LEVEL = 6;
 
     public static void project(OCDDocument doc) {
         OCDStructure st = pick(doc);
@@ -72,7 +71,7 @@ public final class HeadingRoles {
 
     private static void walk(OCDStructNode s, Map<Integer, Map<String, OCDParagraph>> owner, int[] tagged) {
         if (s.type() == OCDStructNode.Type.HEADING && !s.refs().isEmpty()) {
-            int level = Math.min(MAX_LEVEL, Math.max(1, s.level()));
+            int level = s.headingLevel();
             for (OCDStructNode.Ref r : s.refs()) {
                 Map<String, OCDParagraph> m = owner.get(r.page());
                 OCDParagraph p = m == null ? null : m.get(r.nodeId());

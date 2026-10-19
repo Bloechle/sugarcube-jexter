@@ -61,6 +61,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import static sugarcube.jexter.core.JxJson.bool;
+import static sugarcube.jexter.core.JxJson.has;
+import static sugarcube.jexter.core.JxJson.optArr;
+import static sugarcube.jexter.core.JxJson.optObj;
+import static sugarcube.jexter.core.JxJson.str;
 
 /**
  * Reads an <b>OCD-EPUB</b> back into the {@link OCDDocument} model — the inverse of
@@ -149,7 +154,7 @@ public final class OCDReader {
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> pagesOf(Map<String, Object> annots) {
-        return annots == null ? null : obj(annots, "pages");
+        return annots == null ? null : optObj(annots, "pages");
     }
 
     // ── skeleton: meta + outline + structures + fonts + binaries ────────────────
@@ -166,32 +171,32 @@ public final class OCDReader {
 
         OCDDocument doc = new OCDDocument();
         readMeta(meta, doc);
-        Map<String, Object> oi = obj(meta, "outputIntent");
+        Map<String, Object> oi = optObj(meta, "outputIntent");
         if (oi != null) {
             byte[] profile = null;
-            ZipEntry pe = has(oi, "profile") ? zf.getEntry(JX + s(oi, "profile")) : null;
+            ZipEntry pe = has(oi, "profile") ? zf.getEntry(JX + str(oi, "profile", "")) : null;
             if (pe != null) try (var in = zf.getInputStream(pe)) { profile = in.readAllBytes(); }
             doc.outputIntent(new sugarcube.jexter.ocd.model.OCDOutputIntent(
-                    has(oi, "subtype") ? s(oi, "subtype") : "GTS_PDFX", s(oi, "conditionId"), s(oi, "condition"),
-                    s(oi, "info"), s(oi, "registry"), profile, profile == null ? 0 : ii(oi, "components", 0)));
+                    has(oi, "subtype") ? str(oi, "subtype", "") : "GTS_PDFX", str(oi, "conditionId", ""), str(oi, "condition", ""),
+                    str(oi, "info", ""), str(oi, "registry", ""), profile, profile == null ? 0 : JxJson.integer(oi, "components", 0)));
         }
 
         Map<String, Object> nav = json(zf, JX + "outline.json");
-        if (nav != null) for (Object o : arr(nav, "bookmarks")) doc.addOutline(outline((Map<String, Object>) o));
+        if (nav != null) for (Object o : optArr(nav, "bookmarks")) doc.addOutline(outline((Map<String, Object>) o));
 
         Map<String, Object> structures = json(zf, JX + "structures.json");
         if (structures != null) {
-            for (Object so : arr(structures, "structures")) {
+            for (Object so : optArr(structures, "structures")) {
                 Map<String, Object> m = (Map<String, Object>) so;
                 OCDStructNode root = new OCDStructNode(OCDStructNode.Type.DOCUMENT);
                 Object rootO = m.get("root");
                 if (rootO instanceof Map<?, ?> rm)
-                    for (Object o : arr((Map<String, Object>) rm, "children")) root.add(struct((Map<String, Object>) o));
+                    for (Object o : optArr((Map<String, Object>) rm, "children")) root.add(struct((Map<String, Object>) o));
                 Object atO = m.get("at"); long at = atO instanceof Number nn ? nn.longValue() : 0;
-                doc.addStructure(new OCDStructure(s(m, "id"), s(m, "label"), OCDStructure.sourceOf(s(m, "source")))
-                        .by(s(m, "by")).at(at).how(s(m, "how")).purpose(s(m, "purpose")).root(root));
+                doc.addStructure(new OCDStructure(str(m, "id", ""), str(m, "label", ""), OCDStructure.sourceOf(str(m, "source", "")))
+                        .by(str(m, "by", "")).at(at).how(str(m, "how", "")).purpose(str(m, "purpose", "")).root(root));
             }
-            if (has(structures, "default")) doc.defaultStructureId(s(structures, "default"));
+            if (has(structures, "default")) doc.defaultStructureId(str(structures, "default", ""));
         }
 
         var entries = zf.entries();
@@ -202,7 +207,7 @@ public final class OCDReader {
             if (name.equals(OPF + "images/cover.jpg") || name.equals(OPF + "images/cover.png")) {
                 // Reused verbatim on re-export — while it is still a picture of page 1 (FORMAT §A2 "cover"):
                 // a page edited outside the engine leaves a stale cover behind, and its key says so.
-                String key = s(meta, "cover");
+                String key = str(meta, "cover", "");
                 List<ZipEntry> pages = pageFiles(zf);
                 if (key != null && !pages.isEmpty()
                         && key.equals(OCDVocab.coverKey(zf.getInputStream(pages.get(0)).readAllBytes())))
@@ -347,7 +352,7 @@ public final class OCDReader {
             if (n instanceof OCDGroup g && !(g instanceof OCDParagraph)) reorder(g.children(), ord);
 
         if (annots != null) {
-            Map<String, Object> pe = obj(annots, OCDVocab.pageId(number - 1));
+            Map<String, Object> pe = optObj(annots, OCDVocab.pageId(number - 1));
             if (pe != null) applyAnnots(pe, page);
         }
         for (var e : clipDefs.entrySet()) page.addClip(new OCDClip(e.getKey(), e.getValue()));
@@ -845,92 +850,92 @@ public final class OCDReader {
     // ── meta / outline / struct (the shared JSON vocabulary) ────────────────────
     @SuppressWarnings("unchecked")
     private static void readMeta(Map<String, Object> m, OCDDocument doc) {
-        if (has(m, "id")) doc.id(s(m, "id"));
-        Map<String, Object> an = obj(m, "analysis");
+        if (has(m, "id")) doc.id(str(m, "id", ""));
+        Map<String, Object> an = optObj(m, "analysis");
         if (an != null) {
             doc.textSegmented(Boolean.TRUE.equals(an.get("textSegmented")));
             doc.headingsDetected(Boolean.TRUE.equals(an.get("headingsDetected")));
         }
-        for (Object o : arr(m, "layers")) {
+        for (Object o : optArr(m, "layers")) {
             Map<String, Object> l = (Map<String, Object>) o;
-            OCDLayer layer = new OCDLayer(s(l, "id"), s(l, "name")).visible(!Boolean.FALSE.equals(l.get("visible"))).order(ii(l, "order", 0));
+            OCDLayer layer = new OCDLayer(str(l, "id", ""), str(l, "name", "")).visible(!Boolean.FALSE.equals(l.get("visible"))).order(JxJson.integer(l, "order", 0));
             if (l.get("ocr") instanceof Map<?, ?> ocr && ocr.get("engine") != null)
                 layer.recognition(new OCDLayer.Recognition(ocr.get("engine").toString(),
                         ocr.get("prep") == null ? null : ocr.get("prep").toString()));
             doc.add(layer);
         }
         OCDMeta md = doc.meta();
-        if (has(m, "title"))    md.title(s(m, "title"));
-        for (Object a : arr(m, "authors"))  md.addAuthor(a.toString());
-        if (has(m, "subject"))  md.subject(s(m, "subject"));
-        for (Object k : arr(m, "keywords")) md.addKeyword(k.toString());
-        if (has(m, "creator"))  md.creator(s(m, "creator"));
-        if (has(m, "producer")) md.producer(s(m, "producer"));
-        if (has(m, "language")) md.language(s(m, "language"));
-        if (has(m, "created"))  md.created(s(m, "created"));
-        if (has(m, "modified")) md.modified(s(m, "modified"));
-        Map<String, Object> custom = obj(m, "custom");
+        if (has(m, "title"))    md.title(str(m, "title", ""));
+        for (Object a : optArr(m, "authors"))  md.addAuthor(a.toString());
+        if (has(m, "subject"))  md.subject(str(m, "subject", ""));
+        for (Object k : optArr(m, "keywords")) md.addKeyword(k.toString());
+        if (has(m, "creator"))  md.creator(str(m, "creator", ""));
+        if (has(m, "producer")) md.producer(str(m, "producer", ""));
+        if (has(m, "language")) md.language(str(m, "language", ""));
+        if (has(m, "created"))  md.created(str(m, "created", ""));
+        if (has(m, "modified")) md.modified(str(m, "modified", ""));
+        Map<String, Object> custom = optObj(m, "custom");
         if (custom != null) for (Map.Entry<String, Object> e : custom.entrySet()) md.custom(e.getKey(), e.getValue().toString());
     }
 
     @SuppressWarnings("unchecked")
     private static OCDOutline outline(Map<String, Object> m) {
-        OCDOutline o = new OCDOutline(s(m, "title"));
-        if (has(m, "page")) o.pageIndex(OCDVocab.pageIndex(s(m, "page")));
-        if (has(m, "y"))    o.y(d(m, "y", Double.NaN));
-        for (Object c : arr(m, "children")) o.add(outline((Map<String, Object>) c));
+        OCDOutline o = new OCDOutline(str(m, "title", ""));
+        if (has(m, "page")) o.pageIndex(OCDVocab.pageIndex(str(m, "page", "")));
+        if (has(m, "y"))    o.y(JxJson.dbl(m, "y", Double.NaN));
+        for (Object c : optArr(m, "children")) o.add(outline((Map<String, Object>) c));
         return o;
     }
 
     @SuppressWarnings("unchecked")
     private static OCDStructNode struct(Map<String, Object> m) {
-        OCDStructNode s = new OCDStructNode(OCDStructNode.Type.valueOf(s(m, "type").toUpperCase(Locale.US)));
-        if (has(m, "level"))   s.level(ii(m, "level", 0));
-        if (has(m, "colspan")) s.colSpan(ii(m, "colspan", 1));
-        if (has(m, "rowspan")) s.rowSpan(ii(m, "rowspan", 1));
-        if (has(m, "ordered")) s.ordered(b(m, "ordered"));
-        if (has(m, "header"))  s.header(switch (s(m, "header")) {
+        OCDStructNode s = new OCDStructNode(OCDStructNode.Type.valueOf(str(m, "type", "").toUpperCase(Locale.US)));
+        if (has(m, "level"))   s.level(JxJson.integer(m, "level", 0));
+        if (has(m, "colspan")) s.colSpan(JxJson.integer(m, "colspan", 1));
+        if (has(m, "rowspan")) s.rowSpan(JxJson.integer(m, "rowspan", 1));
+        if (has(m, "ordered")) s.ordered(bool(m, "ordered"));
+        if (has(m, "header"))  s.header(switch (str(m, "header", "")) {
             case "col", "column" -> OCDStructNode.HeaderKind.COLUMN;
             case "row"           -> OCDStructNode.HeaderKind.ROW;
             case "both"          -> OCDStructNode.HeaderKind.BOTH;
             default              -> OCDStructNode.HeaderKind.NONE;
         });
-        if (has(m, "text")) s.text(s(m, "text"));
-        if (has(m, "lang")) s.lang(s(m, "lang"));
-        if (has(m, "alt"))  s.alt(s(m, "alt"));
-        for (Object r : arr(m, "refs")) { Map<String, Object> rm = (Map<String, Object>) r; s.addRef(OCDVocab.pageIndex(s(rm, "page")), s(rm, "node")); }
-        for (Object c : arr(m, "children")) s.add(struct((Map<String, Object>) c));
+        if (has(m, "text")) s.text(str(m, "text", ""));
+        if (has(m, "lang")) s.lang(str(m, "lang", ""));
+        if (has(m, "alt"))  s.alt(str(m, "alt", ""));
+        for (Object r : optArr(m, "refs")) { Map<String, Object> rm = (Map<String, Object>) r; s.addRef(OCDVocab.pageIndex(str(rm, "page", "")), str(rm, "node", "")); }
+        for (Object c : optArr(m, "children")) s.add(struct((Map<String, Object>) c));
         return s;
     }
 
     // ── annotations (the shared page-member vocabulary) ─────────────────────────
     @SuppressWarnings("unchecked")
     private static void applyAnnots(Map<String, Object> annotations, OCDPage page) {
-        for (Object o : arr(annotations, "annots")) {
+        for (Object o : optArr(annotations, "annots")) {
             Map<String, Object> ae = (Map<String, Object>) o;
-            OCDAnnotation a = new OCDAnnotation(markupOf(s(ae, "type")));
+            OCDAnnotation a = new OCDAnnotation(markupOf(str(ae, "type", "")));
             if (has(ae, "rect"))  a.rect(rect(ae.get("rect")));
-            if (has(ae, "color")) a.color(new JxColor(argb(s(ae, "color"), null)));
-            a.author(s(ae, "author")).modified(s(ae, "modified"));
-            for (Object q : arr(ae, "quads")) a.addQuad(rect(q));
-            if (has(ae, "contents")) a.contents(s(ae, "contents"));
+            if (has(ae, "color")) a.color(new JxColor(argb(str(ae, "color", ""), null)));
+            a.author(str(ae, "author", "")).modified(str(ae, "modified", ""));
+            for (Object q : optArr(ae, "quads")) a.addQuad(rect(q));
+            if (has(ae, "contents")) a.contents(str(ae, "contents", ""));
             page.addAnnotation(a);
         }
-        for (Object o : arr(annotations, "fields")) {
+        for (Object o : optArr(annotations, "fields")) {
             Map<String, Object> fe = (Map<String, Object>) o;
-            OCDFormField ff = new OCDFormField(fieldOf(s(fe, "type")))
-                    .name(s(fe, "name")).onState(s(fe, "on"))
-                    .readOnly(b(fe, "readonly")).required(b(fe, "required")).multiline(b(fe, "multiline"));
+            OCDFormField ff = new OCDFormField(fieldOf(str(fe, "type", "")))
+                    .name(str(fe, "name", "")).onState(str(fe, "on", ""))
+                    .readOnly(bool(fe, "readonly")).required(bool(fe, "required")).multiline(bool(fe, "multiline"));
             if (has(fe, "rect")) ff.rect(rect(fe.get("rect")));
-            for (Object op : arr(fe, "options")) ff.addOption(op.toString());
-            if (has(fe, "value"))   ff.value(s(fe, "value"));
-            if (has(fe, "default")) ff.defaultValue(s(fe, "default"));
-            ff.rotation(ii(fe, "rotate", 0)).align(ii(fe, "align", 0))
-              .fontSize(d(fe, "size", 0)).borderWidth(d(fe, "borderWidth", 1))
-              .maxLen(ii(fe, "maxlen", 0)).hidden(b(fe, "hidden"));
-            if (has(fe, "color"))  ff.textColor(argb(s(fe, "color"), null));
-            if (has(fe, "border")) ff.borderColor(argb(s(fe, "border"), null));
-            if (has(fe, "back"))   ff.backColor(argb(s(fe, "back"), null));
+            for (Object op : optArr(fe, "options")) ff.addOption(op.toString());
+            if (has(fe, "value"))   ff.value(str(fe, "value", ""));
+            if (has(fe, "default")) ff.defaultValue(str(fe, "default", ""));
+            ff.rotation(JxJson.integer(fe, "rotate", 0)).align(JxJson.integer(fe, "align", 0))
+              .fontSize(JxJson.dbl(fe, "size", 0)).borderWidth(JxJson.dbl(fe, "borderWidth", 1))
+              .maxLen(JxJson.integer(fe, "maxlen", 0)).hidden(bool(fe, "hidden"));
+            if (has(fe, "color"))  ff.textColor(argb(str(fe, "color", ""), null));
+            if (has(fe, "border")) ff.borderColor(argb(str(fe, "border", ""), null));
+            if (has(fe, "back"))   ff.backColor(argb(str(fe, "back", ""), null));
             page.addField(ff);
         }
     }
@@ -1045,15 +1050,6 @@ public final class OCDReader {
         if (e == null) return null;
         return JxJson.asObj(JxJson.parse(new String(zf.getInputStream(e).readAllBytes(), StandardCharsets.UTF_8)));
     }
-    private static boolean has(Map<String, Object> m, String k) { return m.get(k) != null; }
-    private static String  s(Map<String, Object> m, String k)   { Object v = m.get(k); return v == null ? "" : v.toString(); }
-    private static boolean b(Map<String, Object> m, String k)   { return Boolean.TRUE.equals(m.get(k)); }
-    private static double  d(Map<String, Object> m, String k, double def) { Object v = m.get(k); return v instanceof Number n ? n.doubleValue() : def; }
-    private static int     ii(Map<String, Object> m, String k, int def)   { Object v = m.get(k); return v instanceof Number n ? (int) Math.round(n.doubleValue()) : def; }
-    @SuppressWarnings("unchecked")
-    private static List<Object> arr(Map<String, Object> m, String k) { Object v = m.get(k); return v instanceof List<?> l ? (List<Object>) l : List.of(); }
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> obj(Map<String, Object> m, String k) { Object v = m.get(k); return v instanceof Map<?, ?> o ? (Map<String, Object>) o : null; }
     private static JxRect rect(Object v) {
         List<?> l = (List<?>) v;
         return new JxRect(((Number) l.get(0)).doubleValue(), ((Number) l.get(1)).doubleValue(),

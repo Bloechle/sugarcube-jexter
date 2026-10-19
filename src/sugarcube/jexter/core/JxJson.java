@@ -212,6 +212,17 @@ public final class JxJson {
     public static List<Object>        arr(Map<String, Object> m, String k) { return asArr(req(m, k)); }
     public static boolean has(Map<String, Object> m, String k) { return m.containsKey(k) && m.get(k) != null; }
 
+    // ── lenient reads: a member that is absent or of another type reads as the default ──
+    public static String  str(Map<String, Object> m, String k, String def) { Object v = m.get(k); return v == null ? def : v.toString(); }
+    public static double  dbl(Map<String, Object> m, String k, double def) { return m.get(k) instanceof Number n ? n.doubleValue() : def; }
+    public static int     integer(Map<String, Object> m, String k, int def) { return m.get(k) instanceof Number n ? (int) Math.round(n.doubleValue()) : def; }
+    /** The array at {@code k}, or an empty list. */
+    @SuppressWarnings("unchecked")
+    public static List<Object> optArr(Map<String, Object> m, String k) { return m.get(k) instanceof List<?> l ? (List<Object>) l : List.of(); }
+    /** The object at {@code k}, or null. */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> optObj(Map<String, Object> m, String k) { return m.get(k) instanceof Map<?, ?> o ? (Map<String, Object>) o : null; }
+
     private static Object req(Map<String, Object> m, String k) {
         Object v = m.get(k);
         if (v == null) throw new Error("missing key '" + k + "'", 0);

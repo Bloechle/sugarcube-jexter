@@ -144,7 +144,7 @@ final class EpubPackage {
                 </nav>
                 %s</body>
                 </html>
-                """.formatted(xml(title), xml(title), tocInner, start, start, pageList);
+                """.formatted(JxText.text(title), JxText.text(title), tocInner, start, start, pageList);
     }
 
     /** Nested {@code <ol>} of HEADING nodes; {@code href} maps a heading to its target. Headings
@@ -154,7 +154,7 @@ final class EpubPackage {
         for (OCDStructNode c : node.children()) {
             if (c.type() == OCDStructNode.Type.HEADING) {
                 sb.append("    <li><a href=\"").append(href.apply(c)).append("\">")
-                  .append(xml(label(c, ix))).append("</a>");
+                  .append(JxText.text(label(c, ix))).append("</a>");
                 String inner = tocOl(c, ix, href);
                 if (!inner.isBlank()) sb.append("\n      <ol>\n").append(inner).append("      </ol>\n    ");
                 sb.append("</li>\n");
@@ -211,14 +211,14 @@ final class EpubPackage {
         for (int p = 0; p < doc.pages().size(); p++) {
             var heads = byPage.get(p);
             if (heads == null || heads.isEmpty()) {
-                sb.append("    <li><a href=\"").append(xml(href.apply(p))).append("\">")
-                  .append(xml(label.apply(p))).append("</a></li>\n");
+                sb.append("    <li><a href=\"").append(JxText.text(href.apply(p))).append("\">")
+                  .append(JxText.text(label.apply(p))).append("</a></li>\n");
             } else {
                 for (OCDStructNode h : heads) {
                     String text = label(h, ix);                 // the same authority tocOl uses
                     if (text == null || text.isBlank()) text = label.apply(p);
-                    sb.append("    <li><a href=\"").append(xml(href.apply(p))).append("\">")
-                      .append(xml(text.strip())).append("</a></li>\n");
+                    sb.append("    <li><a href=\"").append(JxText.text(href.apply(p))).append("\">")
+                      .append(JxText.text(text.strip())).append("</a></li>\n");
                 }
             }
         }
@@ -241,7 +241,7 @@ final class EpubPackage {
                 <navMap>
                 %s</navMap>
                 </ncx>
-                """.formatted(uid, xml(title), navPointsInner);
+                """.formatted(uid, JxText.text(title), navPointsInner);
     }
 
     /** Sequential NCX builder. The NCX spec requires navPoints that reference the SAME
@@ -255,7 +255,7 @@ final class EpubPackage {
         Ncx add(String label, String href) {
             int po = orderOf.computeIfAbsent(href, h -> orderOf.size() + 1);
             sb.append("    <navPoint id=\"np-").append(++n).append("\" playOrder=\"").append(po).append("\">")
-              .append("<navLabel><text>").append(xml(label)).append("</text></navLabel>")
+              .append("<navLabel><text>").append(JxText.text(label)).append("</text></navLabel>")
               .append("<content src=\"").append(href).append("\"/></navPoint>\n");
             return this;
         }
@@ -302,7 +302,7 @@ final class EpubPackage {
         boolean cover = doc.pageCount() > 0;
         if (cover) item(manifest, "cover-image", COVER_HREF, COVER_MEDIA, "cover-image");
         for (String name : doc.images().keySet()) {
-            String n = safe(name);
+            String n = JxName.safe(name);
             item(manifest, "img-" + n, "images/" + n, mediaType(n), null);
         }
         manifest.append(resources);
@@ -359,7 +359,7 @@ final class EpubPackage {
                 <spine toc="ncx">
                 %s</spine>
                 </package>
-                """.formatted(uid, xml(title), xml(lang), modified, rendition, metaExtra, manifest, spine);
+                """.formatted(uid, JxText.text(title), JxText.text(lang), modified, rendition, metaExtra, manifest, spine);
     }
 
     // ── metadata (Dublin Core + accessibility) ──────────────────────────────────
@@ -389,20 +389,20 @@ final class EpubPackage {
         int i = 1;
         for (String a : m.authors()) {
             String id = "creator-" + i++;
-            sb.append("<dc:creator id=\"").append(id).append("\">").append(xml(a)).append("</dc:creator>\n");
+            sb.append("<dc:creator id=\"").append(id).append("\">").append(JxText.text(a)).append("</dc:creator>\n");
             sb.append("<meta refines=\"#").append(id).append("\" property=\"role\" scheme=\"marc:relators\">aut</meta>\n");
         }
-        if (!m.subject().isBlank())  sb.append("<dc:description>").append(xml(m.subject())).append("</dc:description>\n");
-        for (String k : m.keywords()) sb.append("<dc:subject>").append(xml(k)).append("</dc:subject>\n");
-        if (!m.created().isBlank())  sb.append("<dc:date>").append(xml(m.created())).append("</dc:date>\n");
+        if (!m.subject().isBlank())  sb.append("<dc:description>").append(JxText.text(m.subject())).append("</dc:description>\n");
+        for (String k : m.keywords()) sb.append("<dc:subject>").append(JxText.text(k)).append("</dc:subject>\n");
+        if (!m.created().isBlank())  sb.append("<dc:date>").append(JxText.text(m.created())).append("</dc:date>\n");
         String publisher = m.custom().get("publisher");
         if (publisher != null && !publisher.isBlank())
-            sb.append("<dc:publisher>").append(xml(publisher)).append("</dc:publisher>\n");
+            sb.append("<dc:publisher>").append(JxText.text(publisher)).append("</dc:publisher>\n");
         String rights = m.custom().get("rights");
         if (rights != null && !rights.isBlank())
-            sb.append("<dc:rights>").append(xml(rights)).append("</dc:rights>\n");
+            sb.append("<dc:rights>").append(JxText.text(rights)).append("</dc:rights>\n");
         if (!m.producer().isBlank()) {
-            sb.append("<dc:contributor id=\"bkp\">").append(xml(m.producer())).append("</dc:contributor>\n");
+            sb.append("<dc:contributor id=\"bkp\">").append(JxText.text(m.producer())).append("</dc:contributor>\n");
             sb.append("<meta refines=\"#bkp\" property=\"role\" scheme=\"marc:relators\">bkp</meta>\n");
         }
         return sb.toString();
@@ -479,15 +479,12 @@ final class EpubPackage {
             default            -> "application/octet-stream";
         };
     }
-    static String num(double v)  { return JxNum.fmt(v); }
-    static String xml(String s)  { return JxText.text(s); }
-    static String safe(String s) { return JxName.safe(s); }
 
     /** Every image resource, written under {@code OEBPS/images/}. Both flavours carry the same bytes
      *  under the same names — this was one method in each writer, character for character. */
     static void images(JxZip zip, OCDDocument doc) throws IOException {
         for (var e : doc.images().entrySet())
-            zip.deflated(OPF + "images/" + safe(e.getKey()), e.getValue());
+            zip.deflated(OPF + "images/" + JxName.safe(e.getKey()), e.getValue());
     }
 
     /** Where a heading lives: the page member of its first referenced page. Also one method in each. */

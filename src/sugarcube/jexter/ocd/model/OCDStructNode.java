@@ -55,12 +55,28 @@ public final class OCDStructNode {
     private final List<Ref>       refs     = new ArrayList<>();
     private final List<OCDStructNode> children = new ArrayList<>();
 
+    /** The deepest HEADING level — HTML's six, the cap of every pass that assigns one. */
+    public static final int MAX_LEVEL = 6;
+
+    /** {@code v} as a heading level: 1..{@link #MAX_LEVEL} (0 or less reads as 1). */
+    public static int headingLevel(int v) { return Math.max(1, Math.min(MAX_LEVEL, v)); }
+
     public OCDStructNode() {}
     public OCDStructNode(Type type) { this.type = type == null ? Type.OTHER : type; }
 
     public Type       type()              { return type; }
     public OCDStructNode  type(Type t)        { this.type = t == null ? Type.OTHER : t; return this; }
     public int        level()             { return level; }
+    /** {@link #level} as a heading level, 1..{@link #MAX_LEVEL}. */
+    public int        headingLevel()      { return headingLevel(level); }
+
+    /** Inline emphasis — PDF/UA wraps a styled term or a mono identifier as a SPAN/CODE/OTHER child of its
+     *  text block: its text is part of the parent's reading flow. */
+    public boolean    isInline()          { return type == Type.SPAN || type == Type.CODE || type == Type.OTHER; }
+
+    /** Whether any child is a block — a container to walk, where a node with only inline children (or
+     *  none) carries its own text. */
+    public boolean    hasBlockChild()     { return children.stream().anyMatch(c -> !c.isInline()); }
     public OCDStructNode  level(int v)        { this.level = v; return this; }
     public int        colSpan()           { return colSpan; }
     public OCDStructNode  colSpan(int v)      { this.colSpan = Math.max(1, v); return this; }

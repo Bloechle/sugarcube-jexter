@@ -116,7 +116,7 @@ public final class AzureOcrClient implements OcrClient {
                     double x = ((Number) xy.get(i)).doubleValue(), y = ((Number) xy.get(i + 1)).doubleValue();
                     x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
                 }
-                double conf = w.get("confidence") instanceof Number n ? n.doubleValue() : -1;
+                double conf = JxJson.dbl(w, "confidence", -1);
                 int line = -1;
                 if (w.get("span") instanceof Map<?, ?> span && span.get("offset") instanceof Number off)
                     for (long[] s : spans) if (off.longValue() >= s[0] && off.longValue() < s[1]) { line = (int) s[2]; break; }

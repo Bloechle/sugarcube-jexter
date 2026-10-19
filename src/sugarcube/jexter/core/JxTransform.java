@@ -86,6 +86,9 @@ public record JxTransform(double a, double b, double c, double d, double tx, dou
     }
 
     /** The length of the image of the unit x-axis — the horizontal scale, shear included. */
+    /** The direction of the x axis, quantised to a quarter turn: 0 (upright) … 3 — the writing axis of a run. */
+    public int quarterTurns() { return Math.floorMod((int) Math.round(Math.atan2(b, a) / (Math.PI / 2)), 4); }
+
     public double scaleX() { return Math.sqrt(a * a + b * b); }
 
     public boolean isIdentity() {

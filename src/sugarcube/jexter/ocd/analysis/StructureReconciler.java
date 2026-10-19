@@ -30,7 +30,6 @@ public final class StructureReconciler {
 
     private StructureReconciler() {}
 
-    private static final int MAX_LEVELS  = 6;   // 2–3 are typical; cap so deep noise collapses
     private static final int SIZE_BUCKET = 5;   // sizePct rounding — folds near-equal sizes (15.9 vs 16.1) together
 
     /**
@@ -67,7 +66,7 @@ public final class StructureReconciler {
         // Largest distinct size bucket → level 1, next → 2, … capped.
         Map<Integer, Integer> levelOf = new HashMap<>();
         int lv = 1;
-        for (int b : buckets) { levelOf.put(b, Math.min(lv, MAX_LEVELS)); lv++; }
+        for (int b : buckets) { levelOf.put(b, Math.min(lv, OCDStructNode.MAX_LEVEL)); lv++; }
 
         for (Map.Entry<OCDStructNode, Integer> e : bucketOf.entrySet())
             e.getKey().level(levelOf.get(e.getValue()));

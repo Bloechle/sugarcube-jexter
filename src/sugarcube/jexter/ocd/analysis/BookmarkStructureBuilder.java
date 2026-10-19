@@ -45,7 +45,6 @@ public final class BookmarkStructureBuilder {
 
     private BookmarkStructureBuilder() {}
 
-    private static final int    MAX_LEVEL = 6;     // HEADING depth cap, like the rest of the pipeline
 
     /** Resolve the bookmark tree into the {@code outline} structure. No-op when the document has no bookmarks. */
     public static void build(OCDDocument doc) {
@@ -82,7 +81,7 @@ public final class BookmarkStructureBuilder {
      *  its children one level deeper — so the bookmark tree's nesting becomes the heading nesting. */
     private static void walk(OCDOutline o, int level, OCDStructNode parent, Map<Integer, List<Block>> byPage,
                              int[] stats, Map<Block, OCDStructNode> anchored) {
-        OCDStructNode h = new OCDStructNode(OCDStructNode.Type.HEADING).level(Math.min(MAX_LEVEL, level));
+        OCDStructNode h = new OCDStructNode(OCDStructNode.Type.HEADING).level(OCDStructNode.headingLevel(level));
         Block anchor = anchor(o, byPage.get(o.pageIndex()), stats);
         if (anchor != null) {
             for (String nid : anchor.nodeIds) h.addRef(o.pageIndex(), nid);
@@ -98,18 +97,18 @@ public final class BookmarkStructureBuilder {
      *  has no blocks (the heading is still emitted, unanchored, to keep the tree shape). */
     private static Block anchor(OCDOutline o, List<Block> blocks, int[] stats) {
         if (blocks == null || blocks.isEmpty() || !o.hasDestination()) return null;
-        String want = norm(o.title());
+        String want = OutlineAligner.norm(o.title());
         blocks = blocks.stream().filter(b -> !StructureBuilder.isFurniture(b)).toList();   // a running head quoting the title is not it
         if (blocks.isEmpty()) return null;
         Block best = null; double bestDist = Double.MAX_VALUE;
         for (Block b : blocks) {                                  // 1) EXACT — the aligner made these one-block
-            if (want.isEmpty() || !norm(b.text()).equals(want)) continue;
+            if (want.isEmpty() || !OutlineAligner.norm(b.text()).equals(want)) continue;
             double dist = o.hasY() ? Math.abs(b.bounds.maxY() - o.y()) : 0;
             if (best == null || dist < bestDist) { best = b; bestDist = dist; }
         }
         if (best != null) { stats[0]++; return best; }
         for (Block b : blocks) {                                  // 2) fuzzy prefix/contains, nearest-y among matches
-            String bt = norm(b.text());
+            String bt = OutlineAligner.norm(b.text());
             boolean match = !want.isEmpty() && (bt.startsWith(want) || want.startsWith(bt) || bt.contains(want));
             if (!match) continue;
             double dist = o.hasY() ? Math.abs(b.bounds.maxY() - o.y()) : 0;
@@ -125,5 +124,4 @@ public final class BookmarkStructureBuilder {
         return best;
     }
 
-    private static String norm(String s) { return JxText.collapse(s).toUpperCase(Locale.ROOT); }
 }
