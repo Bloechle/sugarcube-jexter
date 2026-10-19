@@ -157,3 +157,14 @@ jobs:
       # Compiles test/ at the same -Werror gate, writes the fixture corpus (PDFBox only) and gates it.
       - name: Functional gates
         run: node nimbus-jexter.cjs --run=test
+
+      # The tree is also clean under JDK 25, the current desktop JDK: its lints (dangling-doc-comments,
+      # JDK 22+) are ones a JDK 21 javac cannot see. Last, so every step above runs on the 21 floor.
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: javac on JDK 25 — 0 errors, 0 warnings
+        run: javac --release 21 -encoding UTF-8 -Xlint:all -Werror -cp "lib/*" -d target/ci-classes-25 @sources.txt

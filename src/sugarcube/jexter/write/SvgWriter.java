@@ -157,9 +157,6 @@ public final class SvgWriter {
         return css.isEmpty() ? "" : " style=\"" + css + "\"";
     }
 
-    /** A PDF blend-mode name as CSS spells it: {@code ColorDodge} → {@code color-dodge}. Lower-casing
-     *  alone gave {@code colordodge}, which no browser knows — it dropped the declaration and painted
-     *  the four two-word modes (ColorDodge, ColorBurn, HardLight, SoftLight) as Normal. */
     /** The stroke declarations — the one place a pen becomes CSS, for paths, runs and the OCD-EPUB alike.
      *  Lengths are divided by {@code k}: a run drawn through {@code <use>} at its font size states them in em. */
     static void strokeCss(StringBuilder css, int argb, JxStroke pen, double k) {
@@ -178,6 +175,9 @@ public final class SvgWriter {
         if (sa < 1f) css.append(";stroke-opacity:").append(f(sa));
     }
 
+    /** A PDF blend-mode name as CSS spells it: {@code ColorDodge} → {@code color-dodge}. Lower-casing
+     *  alone gave {@code colordodge}, which no browser knows — it dropped the declaration and painted
+     *  the four two-word modes (ColorDodge, ColorBurn, HardLight, SoftLight) as Normal. */
     static String cssBlend(String pdfName) {
         return pdfName.replaceAll("(?<=[a-z])(?=[A-Z])", "-").toLowerCase(Locale.US);
     }

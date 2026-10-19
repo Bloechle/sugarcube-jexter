@@ -93,7 +93,7 @@ Skill < this card < the source: a disagreement is a signal — fix the skill in 
   `test/Gates.java` writes the fixture corpus into `target/corpus` (`test/Fixtures.java`, PDFBox only) and gates it — REPRO, DOCTAGS, STABLE, MODEL, TIERS,
   STRADDLE, CLIPS, COPY, EDITED, HOSTILE, one JVM, ~20 s. A red STABLE names the container: `test/ContainerDiff.java` shows
   which member moved. A change is done when this is green; a new defect class gets its check here.
-  JDK 21 is the gate, and the whole tree is ALSO clean under JDK 25 — which is what `nimbus --run=jar` uses on a
+  JDK 21 is the gate, and CI also compiles under JDK 25 (its lints are stricter) — which is what `nimbus --run=jar` uses on a
   machine with a newer JDK. JDK 23+ added `dangling-doc-comments`, which no `@SuppressWarnings` can reach and JDK 21
   does not know as a flag: keep file-header comments `/*`, never `/**`.
 
