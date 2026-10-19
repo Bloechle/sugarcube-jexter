@@ -39,9 +39,16 @@ export function setDevMode(on) {
   renderTabs();
 }
 
+/** THE READER: Prism reading, and nothing else (`?reader` — a host that hands people a book to read, never
+ *  a workbench). Every tool still loads, but none can be reached: the tab bar is empty, `setTool` only
+ *  ever lands on home, the workbench's chrome is hidden (prism.css, `body.px-reader`) and its keys are
+ *  off (prism.js). What stays is the reader: the rail (pages, contents, search), the layouts, the zoom,
+ *  read aloud, the theme. */
+export const readerOnly = (() => { try { return new URLSearchParams(location.search).has('reader'); } catch { return false; } })();
+
 export const toolOf = id => tools.find(t => t.id === id);
-/** What the tab bar shows: everything in dev mode, the finished ones otherwise. */
-const visibleTools = () => devMode() ? tools : tools.filter(t => !t.experimental);
+/** What the tab bar shows: everything in dev mode, the finished ones otherwise — nothing to the reader. */
+const visibleTools = () => readerOnly ? [] : devMode() ? tools : tools.filter(t => !t.experimental);
 
 export function registerTool(t) {
   tools.push(t);
@@ -64,7 +71,7 @@ function renderTabs() {
 }
 
 export function setTool(id) {
-  let next = toolOf(id) || tools[0];                        // unknown → the first tab (home)
+  let next = (!readerOnly && toolOf(id)) || tools[0];      // unknown, or the reader → the first tab (home)
   if (next.experimental && !devMode()) next = tools[0];     // hidden tab asked for outside dev mode
   const prev = toolOf(tool);
   if (prev && prev !== next) prev.onLeave?.();

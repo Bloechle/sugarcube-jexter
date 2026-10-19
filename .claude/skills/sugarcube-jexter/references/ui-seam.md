@@ -177,7 +177,10 @@ OVER the stage, opaque (prism.css, last block); the tabs keep their icons, the f
 pager and the zoom; a book whose first page is wider than the stage opens at the stage's width, not
 100%. Prism is also served by a host that is not an engine (a web reader of results): `?epub=<url>`
 fetches the book, takes its name from the response's Content-Disposition, and with no `ok` at
-`/api/health` the engine-only affordances stay hidden.
+`/api/health` the engine-only affordances stay hidden. `?reader` makes it THE reader (tools.js
+`readerOnly`): no tool tab (setTool lands on home only), no ribbon, no tool pane, no settings, no
+shortcuts sheet, no console, no Ctrl+E / F2 / dev mode; the menu keeps Open, Close, About; the head
+names the book (`#book-title`). The tools still load — the reader is the workbench with its doors shut.
 
 ### Forms — a tool for data that has no ink (2026-09-13)
 
