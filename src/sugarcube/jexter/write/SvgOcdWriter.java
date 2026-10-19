@@ -337,7 +337,7 @@ public final class SvgOcdWriter {
         // The mode is stated, so the colour that goes with it must be too: a stroke-only or invisible
         // run gets fill:none, and its fill would otherwise have no home in the page and read back as 0.
         // Emitted ONLY when the CSS drops a real colour, so every ordinary run stays byte-identical.
-        if (!statesFill(t) && (t.fill() >>> 24) != 0)
+        if (!t.paintsFill() && (t.fill() >>> 24) != 0)
             sb.append(" data-fill=\"").append(new JxColor(t.fill()).hex()).append('"');
         state(sb, t);
         sb.append(" class=\"").append(cls).append("\" transform=\"matrix(").append(T.toMatrix6()).append(")\">");
@@ -503,22 +503,12 @@ public final class SvgOcdWriter {
           .append(' ').append(f(r.width())).append(' ').append(f(r.height())).append('"');
     }
 
-    /** Does the paint CSS state a fill for this run? Mode {@code STROKE} paints only the outline and
-     *  {@code INVISIBLE} paints nothing, so both get {@code fill:none} — see {@link #textCss}. The one
-     *  place this is decided: the emitter asks it to know whether the colour still needs stating. */
-    private static boolean statesFill(OCDText t) {
-        int rm = t.renderMode();
-        boolean paints = rm == OCDText.FILL || rm == OCDText.STROKE || rm == OCDText.FILL_STROKE;
-        return paints && rm != OCDText.STROKE && (t.hasFill() || !t.hasStrokePaint());
-    }
-
     /** Paint CSS for a run — {@link SvgWriter}'s semantics on outline glyphs: stroke widths are
-     *  divided by the font size (the {@code <use>} scale re-multiplies them back to text space). */
+     *  divided by the font size (the {@code <use>} scale re-multiplies them back to text space). What
+     *  paints is the model's to say ({@link OCDText#paintsFill}, {@link OCDText#paintsStroke}). */
     private static String textCss(OCDText t, double fs) {
-        int rm = t.renderMode();
-        boolean stroked = (rm == OCDText.FILL || rm == OCDText.STROKE || rm == OCDText.FILL_STROKE)
-                          && t.hasStrokePaint() && rm != OCDText.FILL;
-        boolean filled  = statesFill(t);
+        boolean stroked = t.paintsStroke();
+        boolean filled  = t.paintsFill();
         var css = new StringBuilder();
         if (filled) {
             css.append("fill:").append(new JxColor(t.fill()).rgbHex());

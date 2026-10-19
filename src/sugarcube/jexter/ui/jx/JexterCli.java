@@ -23,6 +23,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
+import java.util.Locale;
 
 /**
  * JexterCli — the headless side of {@link Jexter}: convert a single file, batch a folder, or run the
@@ -215,11 +216,11 @@ final class JexterCli {
         if (recursive) {
             try (Stream<Path> w = Files.walk(root.toPath())) {
                 w.filter(Files::isRegularFile)
-                 .filter(q -> q.getFileName().toString().toLowerCase().endsWith(".pdf"))
+                 .filter(q -> q.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".pdf"))
                  .forEach(q -> out.add(q.toFile()));
             } catch (IOException e) { /* tree changed mid-walk — next sweep retries */ }
         } else {
-            File[] fs = root.listFiles((d, n) -> n.toLowerCase().endsWith(".pdf"));
+            File[] fs = root.listFiles((d, n) -> n.toLowerCase(Locale.ROOT).endsWith(".pdf"));
             if (fs != null) out.addAll(Arrays.asList(fs));
         }
         out.sort(Comparator.comparing(File::getPath));

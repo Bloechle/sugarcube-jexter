@@ -11,6 +11,7 @@ import sugarcube.jexter.ocd.model.OCDStructure;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 
 /**
  * Resolves the PDF <b>bookmark tree</b> ({@link OCDDocument#outline()}) into a projectable logical structure.
@@ -122,5 +123,5 @@ public final class BookmarkStructureBuilder {
         return best;
     }
 
-    private static String norm(String s) { return JxText.collapse(s).toUpperCase(); }
+    private static String norm(String s) { return JxText.collapse(s).toUpperCase(Locale.ROOT); }
 }

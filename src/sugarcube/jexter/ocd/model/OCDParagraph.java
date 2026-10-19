@@ -2,8 +2,7 @@ package sugarcube.jexter.ocd.model;
 
 /**
  * A paragraph — a first-class container of text runs ({@link OCDText}) with
- * {@link OCDBreak} line-break tokens between visual lines. Replaces the former
- * {@code OCDGroup} of kind {@code PARAGRAPH}.
+ * {@link OCDBreak} line-break tokens between visual lines.
  *
  * <p>There is no longer a LINE node level: a visual line is simply the maximal span
  * of runs between two breaks, recovered by reading the children in order, so the line
@@ -33,6 +32,18 @@ public final class OCDParagraph extends OCDGroup {
      *  same {@code flow}: the split is a fact of the PRESENTATION layer, and this is what lets the logical
      *  layer refuse to inherit it ({@code StructureBuilder} rejoins one flow into one PARAGRAPH). */
     @Override protected OCDGroup shell() { return new OCDParagraph().flow(flow); }
+
+    /** Takes the paint slot of its earliest painting child, so it sorts into place under
+     *  {@link OCDNode#inPaintOrder} and, stored atomically by the OCD-EPUB writer, occupies exactly the span it
+     *  came from. Breaks paint nothing and carry no z (0): counted, they would pin every multi-line paragraph
+     *  to z=0 and sink it under every fill. Every builder that makes, cuts or merges a paragraph calls this —
+     *  a cut that forgot it once wrote a title's tail under the page's background. */
+    public OCDParagraph fitZ() {
+        float zmin = Float.MAX_VALUE;
+        for (OCDNode n : children()) if (!(n instanceof OCDBreak)) zmin = Math.min(zmin, n.z());
+        if (zmin != Float.MAX_VALUE) z(zmin);
+        return this;
+    }
 
     public int flow()           { return flow; }
     public OCDParagraph flow(int v) { this.flow = v; return this; }

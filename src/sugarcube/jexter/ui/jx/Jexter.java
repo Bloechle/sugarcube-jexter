@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Locale;
 
 /**
  * Jexter — distil any PDF into a <em>normalized</em> one through jexter's canonical OCD model.
@@ -95,7 +96,7 @@ public final class Jexter extends WebApp {
      *  EMPTY suffix nothing is an output by its name: output and source then need separate folders. */
     public static boolean isOutput(String name, String suffix) {
         String s = suffix(suffix);
-        return !s.isEmpty() && name.toLowerCase().endsWith((s + ".pdf").toLowerCase());
+        return !s.isEmpty() && name.toLowerCase(Locale.ROOT).endsWith((s + ".pdf").toLowerCase(Locale.ROOT));
     }
     public static boolean isOutput(String name)             { return isOutput(name, SUFFIX); }
 

@@ -245,8 +245,8 @@ public final class CffOtf extends OtfBuilder {
         b.u16((font.isItalic() ? 0x01 : 0) | (font.isBold() ? 0x20 : 0) | (!font.isBold() && !font.isItalic() ? 0x40 : 0));
         b.u16(cmap.isEmpty() ? 0x20 : cmap.firstKey());            // usFirstCharIndex
         b.u16(cmap.isEmpty() ? 0x20 : cmap.lastKey());             // usLastCharIndex
-        b.u16(r(font.ascent())); b.u16(r(font.descent())); b.u16(0); // typo asc/desc/linegap
-        b.u16(r(font.ascent())); b.u16(-r(font.descent()) & 0xFFFF); // win asc/desc
+        b.u16(r(font.ascent())); b.u16(r(font.descent())); b.u16(0); // typo asc/desc (negative)/linegap
+        b.u16(r(font.ascent())); b.u16(-r(font.descent()));                   // win asc/desc (positive)
         b.u32(1); b.u32(0);                                        // code page range (latin1)
         b.u16(r(font.xHeight())); b.u16(r(font.capHeight()));      // sxHeight, sCapHeight
         b.u16(0); b.u16(0x20); b.u16(0);                           // default, break, maxContext

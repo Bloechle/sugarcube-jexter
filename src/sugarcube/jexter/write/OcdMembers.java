@@ -14,6 +14,7 @@ import sugarcube.jexter.ocd.model.OCDStructNode;
 import sugarcube.jexter.ocd.model.OCDStructure;
 
 import java.util.Map;
+import java.util.Locale;
 
 /**
  * The {@code ocd/} JSON members of an OCD-EPUB — only what has NO home in the pages. Since
@@ -45,7 +46,7 @@ public final class OcdMembers {
             js.obj(OCDVocab.pageId(at));
             js.arr("annots");
             for (OCDAnnotation a : p.annotations()) {
-                js.obj().str("type", a.type().name().toLowerCase());
+                js.obj().str("type", a.type().name().toLowerCase(Locale.ROOT));
                 if (a.rect() != null)        rect(js, "rect", a.rect());
                 if (a.color() != null)       js.str("color", new JxColor(a.color().argb()).hex());
                 if (!a.author().isEmpty())   js.str("author", a.author());
@@ -61,7 +62,7 @@ public final class OcdMembers {
             js.end();
             js.arr("fields");
             for (OCDFormField f : p.fields()) {
-                js.obj().str("type", f.type().name().toLowerCase());
+                js.obj().str("type", f.type().name().toLowerCase(Locale.ROOT));
                 if (f.rect() != null)            rect(js, "rect", f.rect());
                 if (!f.name().isEmpty())         js.str("name", f.name());
                 if (!f.value().isEmpty())        js.str("value", f.value());
@@ -180,7 +181,7 @@ public final class OcdMembers {
             js.obj()
               .str("id", s.id() == null ? "" : s.id())
               .str("label", s.label())
-              .str("source", s.source().name().toLowerCase())
+              .str("source", s.source().name().toLowerCase(Locale.ROOT))
               .str("by", s.by());
             if (s.at() > 0)             js.num("at", s.at());
             if (!s.how().isEmpty())     js.str("how", s.how());
@@ -196,12 +197,12 @@ public final class OcdMembers {
     private static void struct(JxStringer js, OCDStructNode s) { struct(js, null, s); }
 
     private static void struct(JxStringer js, String key, OCDStructNode s) {
-        (key == null ? js.obj() : js.obj(key)).str("type", s.type().name().toLowerCase());
+        (key == null ? js.obj() : js.obj(key)).str("type", s.type().name().toLowerCase(Locale.ROOT));
         if (s.level() > 0)                            js.num("level", (long) s.level());
         if (s.colSpan() > 1)                          js.num("colspan", (long) s.colSpan());
         if (s.rowSpan() > 1)                          js.num("rowspan", (long) s.rowSpan());
         if (s.ordered())                              js.bool("ordered", true);
-        if (s.header() != OCDStructNode.HeaderKind.NONE)  js.str("header", s.header().name().toLowerCase());
+        if (s.header() != OCDStructNode.HeaderKind.NONE)  js.str("header", s.header().name().toLowerCase(Locale.ROOT));
         if (!s.text().isEmpty())                      js.str("text", s.text());
         if (!s.lang().isEmpty())                      js.str("lang", s.lang());
         if (!s.alt().isEmpty())                       js.str("alt", s.alt());

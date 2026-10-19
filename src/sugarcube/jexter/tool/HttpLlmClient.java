@@ -11,6 +11,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 
 /**
  * Zero-dependency {@link LlmClient} over the JDK HTTP client. One class, many providers: the
@@ -73,7 +74,7 @@ public final class HttpLlmClient implements LlmClient {
      *  applies to the anthropic wire, and when set the call drops {@code temperature 0} (the API
      *  rejects temperature ≠ 1 once thinking is enabled), trading determinism for deeper reasoning. */
     public HttpLlmClient(String provider, String endpoint, String key, String model, String effort) {
-        this.provider  = (provider == null || provider.isBlank()) ? "anthropic" : provider.trim().toLowerCase();
+        this.provider  = (provider == null || provider.isBlank()) ? "anthropic" : provider.trim().toLowerCase(Locale.ROOT);
         this.wire      = "anthropic".equals(this.provider) ? "anthropic" : "openai";
         this.endpoint  = blank(endpoint) ? defaultEndpoint(this.provider) : endpoint.trim();
         this.key       = key == null ? "" : key.trim();
@@ -93,7 +94,7 @@ public final class HttpLlmClient implements LlmClient {
      *  treated as unset (deterministic). */
     private static String normEffort(String e) {
         if (e == null) return "";
-        String s = e.trim().toLowerCase();
+        String s = e.trim().toLowerCase(Locale.ROOT);
         return switch (s) { case "none", "low", "medium", "high", "max" -> s; default -> ""; };
     }
 

@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Locale;
 
 /**
  * WebApp — shared base for the local browser-driven apps (Prism, PDFInspector, Jexter).
@@ -371,7 +372,7 @@ public abstract class WebApp {
      *  so escaping lives in exactly one place. */
     protected static String jstr(String s) { return JxStringer.quoted(s); }
 
-    protected static String ext(String name) { int d = name.lastIndexOf('.'); return d < 0 ? "" : name.substring(d + 1).toLowerCase(); }
+    protected static String ext(String name) { int d = name.lastIndexOf('.'); return d < 0 ? "" : name.substring(d + 1).toLowerCase(Locale.ROOT); }
     protected static long   round(double v) { return Math.round(v); }
     protected static String abbrev(String s, int n) {
         if (s == null) return "";
@@ -390,7 +391,7 @@ public abstract class WebApp {
     // ── window launching (chromeless Chromium app window) ─────────────────────
     /** Open in a chromeless Chromium app window; fall back to the default browser. */
     private void openWindow(String url) {
-        String profileName = title().toLowerCase().replace(' ', '-') + "-profile";
+        String profileName = title().toLowerCase(Locale.ROOT).replace(' ', '-') + "-profile";
         String chromium = findChromium();
         if (chromium != null) {
             try {
@@ -408,7 +409,7 @@ public abstract class WebApp {
                 Desktop.getDesktop().browse(URI.create(url)); return;
             }
         } catch (Exception ignored) { }
-        String os = System.getProperty("os.name", "").toLowerCase();
+        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         String[] cmd = os.contains("win") ? new String[]{"cmd", "/c", "start", "", url}
                 : os.contains("mac") ? new String[]{"open", url}
                   : new String[]{"xdg-open", url};
@@ -417,7 +418,7 @@ public abstract class WebApp {
 
     /** First Chromium-family browser found, per OS (Chrome first, then Edge). */
     private static String findChromium() {
-        String os = System.getProperty("os.name", "").toLowerCase();
+        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         List<String> candidates = new java.util.ArrayList<>();
         if (os.contains("win")) {
             String pf = System.getenv("ProgramFiles"), pfx = System.getenv("ProgramFiles(x86)"),

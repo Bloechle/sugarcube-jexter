@@ -27,6 +27,7 @@ import sugarcube.jexter.core.JxName;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.Locale;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -96,7 +97,7 @@ public final class Prism extends WebApp {
                 body = Files.readAllBytes(Path.of(path));
             } else if (url != null && !url.isBlank()) {
                 URI uri = URI.create(url.trim());
-                String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
+                String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
                 if (!scheme.equals("http") && !scheme.equals("https")) { error(x, new IllegalArgumentException("only http/https URLs are supported")); return; }
                 body = download(uri);
             } else {

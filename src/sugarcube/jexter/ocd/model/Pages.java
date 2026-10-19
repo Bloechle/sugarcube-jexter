@@ -47,7 +47,7 @@ public final class Pages {
      * order reorders, repetition duplicates, a blank slot inserts. Every page reference is remapped
      * afterwards; references to a dropped page are removed and counted.
      *
-     * <p>A repeated page is a real {@link OCDPage#copy(String) copy} from its second occurrence on —
+     * <p>A repeated page is a real {@link OCDPage#copy() copy} from its second occurrence on —
      * an alias would be one object in two places, so editing page 4 afterwards would silently change
      * page 9 too. The copy shares the document's resources (fonts, image bytes, media, layers), which
      * is what the resource tables are for, and keeps its node ids: they are page-local by contract, so
@@ -57,6 +57,7 @@ public final class Pages {
      */
     public static void apply(OCDDocument doc, List<Slot> slots) {
         if (doc == null || slots == null || slots.isEmpty()) return;
+        doc.dropCover();                                   // page 1 may not be page 1 any more
         List<OCDPage> src = new ArrayList<>(doc.pages());
         List<OCDPage> out = new ArrayList<>(slots.size());
         int[] first = new int[src.size()];                 // old index → new index (first occurrence)
@@ -66,14 +67,14 @@ public final class Pages {
             if (s.isBlank()) {
                 JxRect b = s.blank() != null ? s.blank()
                          : (src.isEmpty() ? new JxRect(0, 0, 595.276, 841.89) : src.get(0).mediaBox());
-                out.add(new OCDPage("p" + (out.size() + 1), b));
+                out.add(new OCDPage(b));
                 continue;
             }
             if (s.from() < 0 || s.from() >= src.size())
                 throw new IllegalArgumentException("no page " + (s.from() + 1) + " (document has " + src.size() + ")");
             OCDPage page = src.get(s.from());
             if (first[s.from()] < 0) { first[s.from()] = out.size(); out.add(page); }
-            else out.add(page.copy("p" + (out.size() + 1)));      // a repeat is a COPY, never an alias
+            else out.add(page.copy());      // a repeat is a COPY, never an alias
         }
 
         doc.pages().clear();

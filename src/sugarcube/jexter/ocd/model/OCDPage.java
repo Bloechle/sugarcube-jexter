@@ -12,14 +12,15 @@ import java.util.Map;
  * A single page: geometry (media/crop box, rotation, dpi), the z-ordered content
  * nodes, and the page-scoped clip table.
  *
- * <p>Content is the flat list of top-level {@link OCDNode}s in paint order
- * (groups nest within it). A text run lives here directly until analysis wraps
+ * <p>Content is the list of top-level {@link OCDNode}s (groups nest within it): in paint order as
+ * imported, in reading order once analysed — and in both cases every node's {@code z} is its paint
+ * order ({@link OCDNode#inPaintOrder}). A page has no id: its position in the document is its identity,
+ * which page surgery ({@link Pages}) changes and nothing has to keep in step. A text run lives here directly until analysis wraps
  * it in a structural group. Clips are page resources keyed by id; nodes carry a
  * {@link OCDNode#clipId()} into {@link #clips()}.
  */
 public final class OCDPage {
 
-    private final String id;
     private final JxRect mediaBox;
     private JxRect cropBox;          // null = same as mediaBox
     private JxRect bleedBox;         // print boxes; null = not distinct from the content box
@@ -35,16 +36,14 @@ public final class OCDPage {
     private final List<OCDAnnotation>  annotations = new ArrayList<>();
     private final List<OCDFormField>   fields      = new ArrayList<>();
 
-    public OCDPage(String id, JxRect mediaBox) {
-        this.id = id;
+    public OCDPage(JxRect mediaBox) {
         this.mediaBox = mediaBox;
     }
-    public OCDPage(String id, double width, double height) {
-        this(id, new JxRect(0, 0, width, height));
+    public OCDPage(double width, double height) {
+        this(new JxRect(0, 0, width, height));
     }
 
     // ── geometry ─────────────────────────────────────────────────────────────
-    public String id()        { return id; }
     public JxRect mediaBox()  { return mediaBox; }
     public JxRect cropBox()   { return cropBox; }
     public JxRect bleedBox()  { return bleedBox; }
@@ -165,8 +164,8 @@ public final class OCDPage {
      * {@code SvgOcdWriter.render(page.copy())} must be identical, which catches any field that reaches
      * the output and was not copied.
      */
-    public OCDPage copy(String newId) {
-        OCDPage p = new OCDPage(newId == null ? id : newId, mediaBox);
+    public OCDPage copy() {
+        OCDPage p = new OCDPage(mediaBox);
         p.cropBox = cropBox; p.bleedBox = bleedBox; p.trimBox = trimBox; p.artBox = artBox;
         p.rotation = rotation; p.dpi = dpi; p.cmykBlending = cmykBlending;
         for (OCDNode n : content) p.content.add(n.copy());
@@ -197,7 +196,7 @@ public final class OCDPage {
     }
 
     @Override public String toString() {
-        return "OCDPage[" + id + " " + (int) displayWidth() + "×" + (int) displayHeight()
+        return "OCDPage[" + (int) displayWidth() + "×" + (int) displayHeight()
                 + ", nodes=" + content.size() + ", clips=" + clips.size() + "]";
     }
 }

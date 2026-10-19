@@ -18,14 +18,14 @@ import java.util.List;
  *
  * <p>The {@code role} is orthogonal to a node's container type: a node can be a
  * graphical group (or an {@link OCDLayerContent layer}) <i>and</i> carry a structure
- * tag (Figure, Section…) at the same time — the "graphique et/ou sémantique" of the
- * OCD model.
+ * tag (Figure, Section…) at the same time — graphical and/or semantic, as the OCD model allows.
  *
  * <p>{@code z} is the authoritative <b>paint order</b> (content-stream order at
  * import), a float so analysis can re-insert a node between two siblings without
  * renumbering. The OCD flow — child order — carries <b>reading order</b> instead;
  * every rasteriser and exporter walks {@link #inPaintOrder} so the two stay
- * independent: the document is stored as it reads, painted as {@code z} dictates.
+ * independent. The model holds reading order; the OCD-EPUB page stores paint order and states reading
+ * order in {@code data-order} (FORMAT §B), so a consumer draws in document order and reads by that.
  */
 public sealed abstract class OCDNode permits OCDText, OCDPath, OCDImage, OCDGroup, OCDMedia, OCDBreak {
 

@@ -1,6 +1,7 @@
 package sugarcube.jexter.ocd.model;
 
 import sugarcube.jexter.core.JxRect;
+import java.util.Locale;
 
 /**
  * Embedded time-based media placed on a page. The node is the placement (a region
@@ -41,7 +42,7 @@ public sealed abstract class OCDMedia extends OCDNode permits OCDAudio, OCDVideo
     public String format() {
         if (resourceRef == null) return null;
         int dot = resourceRef.lastIndexOf('.');
-        return dot < 0 ? null : resourceRef.substring(dot + 1).toLowerCase();
+        return dot < 0 ? null : resourceRef.substring(dot + 1).toLowerCase(Locale.ROOT);
     }
 
     @Override public JxRect bounds() { return transform.apply(UNIT); }

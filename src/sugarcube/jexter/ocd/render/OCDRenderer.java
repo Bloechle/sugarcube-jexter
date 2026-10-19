@@ -492,8 +492,8 @@ public final class OCDRenderer {
         OCDFont font = doc.findFont(t.fontId());
         if (font == null) return;
         double fs = t.fontSize();
-        boolean doStroke = t.hasStrokePaint();
-        boolean doFill   = t.hasFill() || !doStroke;     // default to fill if the mode paints nothing else
+        boolean doStroke = t.paintsStroke();
+        boolean doFill   = t.paintsFill();
         Color  fillColor   = new Color(t.fill(), true);
         Color  strokeColor = doStroke ? new Color(t.stroke(), true) : null;
         BasicStroke pen    = doStroke ? textPen(t, fs) : null;

@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.BooleanSupplier;
+import java.util.Locale;
 
 /**
  * <h2>LLM-based logical-structure refinement — a render-orthogonal analysis pass.</h2>
@@ -438,7 +439,7 @@ public final class Refiner {
         for (Block b : blocks) {
             if (!"text".equals(b.kind) || b.family == null || b.family.isEmpty()) continue;
             if (b.size < 0.85 * median || b.size > 1.2 * median) continue;
-            freq.merge(b.family.toLowerCase(), 1, Integer::sum);
+            freq.merge(b.family.toLowerCase(Locale.ROOT), 1, Integer::sum);
         }
         String best = ""; int n = -1;
         for (Map.Entry<String, Integer> e : freq.entrySet())
@@ -452,7 +453,7 @@ public final class Refiner {
         double med = median <= 0 ? 1 : median;
         JxStringer js = new JxStringer(blocks.size() * 144).arr();
         for (Block b : blocks) {
-            boolean face = !b.family.isEmpty() && !b.family.toLowerCase().equals(bodyFam) && !bodyFam.isEmpty();
+            boolean face = !b.family.isEmpty() && !b.family.toLowerCase(Locale.ROOT).equals(bodyFam) && !bodyFam.isEmpty();
             js.obj()
               .str("id", b.id)
               .num("page", b.page)
@@ -509,7 +510,7 @@ public final class Refiner {
 
     private static OCDStructNode.Type typeOf(String s) {
         if (s == null) return OCDStructNode.Type.OTHER;
-        try { return OCDStructNode.Type.valueOf(s.trim().toUpperCase()); }
+        try { return OCDStructNode.Type.valueOf(s.trim().toUpperCase(Locale.ROOT)); }
         catch (Exception e) { return OCDStructNode.Type.OTHER; }
     }
 

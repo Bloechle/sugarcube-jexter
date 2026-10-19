@@ -1,5 +1,7 @@
 package sugarcube.jexter.ocd.model;
 
+import java.util.Locale;
+
 /**
  * A named logical structure over the page content. Because an {@link OCDStructNode} tree only
  * <em>references</em> content nodes (via {@link OCDStructNode.Ref}) and never owns them, a document
@@ -52,6 +54,6 @@ public final class OCDStructure {
     /** Parse a serialized source name leniently. */
     public static Source sourceOf(String s) {
         if (s == null) return Source.OTHER;
-        try { return Source.valueOf(s.trim().toUpperCase()); } catch (Exception e) { return Source.OTHER; }
+        try { return Source.valueOf(s.trim().toUpperCase(Locale.ROOT)); } catch (Exception e) { return Source.OTHER; }
     }
 }

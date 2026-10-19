@@ -168,8 +168,8 @@ public final class GlyfOtf extends OtfBuilder {
         b.u16((font.isItalic() ? 0x01 : 0) | (font.isBold() ? 0x20 : 0) | (!font.isBold() && !font.isItalic() ? 0x40 : 0));
         b.u16(cmap.isEmpty() ? 0x20 : cmap.firstKey());
         b.u16(cmap.isEmpty() ? 0x20 : cmap.lastKey());
-        b.u16(r(font.ascent())); b.u16(r(font.descent())); b.u16(0);
-        b.u16(r(font.ascent())); b.u16(-r(font.descent()) & 0xFFFF);
+        b.u16(r(font.ascent())); b.u16(r(font.descent())); b.u16(0);   // typo: descender negative
+        b.u16(r(font.ascent())); b.u16(-r(font.descent()));                    // win: descent positive
         b.u32(1); b.u32(0);
         b.u16(r(font.xHeight())); b.u16(r(font.capHeight()));
         b.u16(0); b.u16(0x20); b.u16(0);

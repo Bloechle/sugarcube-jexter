@@ -352,8 +352,8 @@ public final class PdfWriter {
         if (t.isInvisible() || t.glyphs().isEmpty()) return;
         OCDFont font = doc.findFont(t.fontId());
         if (font == null) return;
-        boolean doStroke = t.hasStrokePaint();
-        boolean doFill   = t.hasFill() || !doStroke;
+        boolean doStroke = t.paintsStroke();
+        boolean doFill   = t.paintsFill();
         fillColor(cs, t, t.fill());
         double fs = t.fontSize();
         if (doStroke) setGlyphStroke(cs, t, fs);   // line params in em space (glyph outline drawn scaled by fs)
@@ -424,8 +424,8 @@ public final class PdfWriter {
 
         int fill = t.fill();
         double fs = t.fontSize();
-        boolean doStroke = !invisible && t.hasStrokePaint();
-        boolean doFill   = t.hasFill() || !doStroke;
+        boolean doStroke = t.paintsStroke();
+        boolean doFill   = t.paintsFill();
         RenderingMode rm = invisible ? RenderingMode.NEITHER
                 : !doStroke ? RenderingMode.FILL
                 : (doFill ? RenderingMode.FILL_STROKE : RenderingMode.STROKE);

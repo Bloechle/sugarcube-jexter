@@ -27,6 +27,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Converts an image — a scan or a photograph, PNG, JPEG or a (multi-page) TIFF — into an
@@ -105,7 +106,7 @@ public final class ImageImporter {
             ImageReader reader = it.next();
             try {
                 reader.setInput(in);
-                String fmt = reader.getFormatName().toLowerCase();
+                String fmt = reader.getFormatName().toLowerCase(Locale.ROOT);
                 int frames = reader.getNumImages(true);
                 boolean asIs = frames == 1 && (fmt.equals("png") || fmt.startsWith("jp"));
                 for (int f = 0; f < frames; f++) {
@@ -130,7 +131,7 @@ public final class ImageImporter {
     private static OCDPage page(OCDDocument doc, OCDFont font, byte[] bytes, String ext, int w, int h,
                                 int index, double s, OcrClient ocr, String lang, String prep) {
         double pw = w * s, ph = h * s;
-        OCDPage page = new OCDPage(OCDVocab.pageId(index), pw, ph);
+        OCDPage page = new OCDPage(pw, ph);
         String ref = doc.newImageRef(ext);
         doc.addImage(ref, bytes);
         OCDImage im = new OCDImage(ref).pixelSize(w, h);

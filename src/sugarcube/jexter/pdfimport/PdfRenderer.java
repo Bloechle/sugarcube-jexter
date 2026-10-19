@@ -88,7 +88,7 @@ public final class PdfRenderer extends PdfStreamEngine {
         PDRectangle mb = pd.getMediaBox();
         OCDDocument doc = new OCDDocument();
         FontExtractor fonts = new FontExtractor(doc);
-        OCDPage page = new OCDPage("p" + (i + 1),
+        OCDPage page = new OCDPage(
                 new JxRect(mb.getLowerLeftX(), mb.getLowerLeftY(), mb.getWidth(), mb.getHeight()));
         PDRectangle cb = pd.getCropBox();
         if (cb != null)

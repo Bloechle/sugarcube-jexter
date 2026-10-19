@@ -686,7 +686,7 @@ One shared sibling file carries every font of the document — paint **and** mod
 <defs>
 <g id="f0" data-font="ArialMT" data-id="ArialMT" [data-name] [data-family]
    [data-weight="bold"] [data-style="italic"] [data-embedded="1"]
-   data-ascent=".75" data-descent=".25" data-capheight=".716" data-xheight=".519" data-space=".25"
+   data-ascent=".75" data-descent="-.25" data-capheight=".716" data-xheight=".519" data-space=".25"
    data-cmap="40:36 41:37 …">                    <!-- codepoint:gid, SORTED -->
   <path id="f0-36" d="M…Z" data-advance=".556" data-text="("/>
   <path id="f0-3"  d=""    data-advance=".278" data-text=" "/>   <!-- inkless: advance survives -->
@@ -701,7 +701,7 @@ One shared sibling file carries every font of the document — paint **and** mod
   round-trip.
 - Per font: identity (`data-font` = safe name, `data-id` = verbatim id, optional
   name/family), `weight`/`style` (defaults omitted), `embedded`, metrics
-  (ascent/descent/cap-height/x-height/space-width, em-normalized), and the
+  (ascent/descent/cap-height/x-height/space-width, em-normalized; descent negative, Y-up), and the
   explicit **cmap** sorted by codepoint.
 - Per glyph: the outline `d` (compact canonical form — no decorative whitespace),
   `data-advance` (advance), `data-text` (unicode), optional `data-glyphname`. **Every**

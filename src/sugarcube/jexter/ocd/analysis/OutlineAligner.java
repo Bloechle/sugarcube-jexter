@@ -12,6 +12,7 @@ import sugarcube.jexter.ocd.model.OCDText;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Aligns the text segmentation on the document's own <b>navigation</b> (PDF outline / bookmarks /
@@ -213,6 +214,7 @@ public final class OutlineAligner {
             pk.remove(b);
             merges++;
         }
+        home.fitZ();
         return new int[]{ splits, merges };
     }
 
@@ -226,7 +228,8 @@ public final class OutlineAligner {
         kids.subList(cut, kids.size()).clear();
         while (!kids.isEmpty() && kids.get(kids.size() - 1) instanceof OCDBreak) kids.remove(kids.size() - 1);
         para.siblings.add(para.index + 1, tail);
-        return tail;
+        para.p.fitZ();
+        return tail.fitZ();
     }
 
     private static Para reindex(Para old, OCDParagraph title) {
@@ -235,5 +238,5 @@ public final class OutlineAligner {
         return np;
     }
 
-    private static String norm(String s) { return JxText.collapse(s).toUpperCase(); }
+    private static String norm(String s) { return JxText.collapse(s).toUpperCase(Locale.ROOT); }
 }

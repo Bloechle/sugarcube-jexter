@@ -687,6 +687,8 @@ and two of the old ones were (ModelRt's verdict was grepped out of French prose;
 | **TIERS** | `readMembers` / `readPage` / `pageCount` agree with `read`, page for page |
 | **STRADDLE** | no paragraph wraps a paint span another node sits inside |
 | **CLIPS** | every clip reference resolves, on the imported model AND the model read back |
+| **COPY** | every page projects identically to its `copy()`, and editing the copy leaves the page alone |
+| **EDITED** | a path a viewer moved (the move composed before the page flip) reads back moved |
 | **HOSTILE** | xxe, billion, badmat refused; badfont, badclip, nofonts refused or warned; trunc refused; a silent read or a hang fails |
 
 A red STABLE says a byte moved; `test/ContainerDiff.java` then says WHICH member and shows the
@@ -1023,10 +1025,9 @@ Start narrow (one synthetic feature exercising the suspected bug — `color_spot
 for Separation loss, `text_cjk_cid` for CID embedding, `image_cmyk_jpeg` for CMYK,
 `page_rotate` for orientation), then widen to the corpus.
 
-### The copy gate — `scripts/CopyGate.java`
+### The copy gate — COPY in `test/Gates.java`
 
-`java -cp "$JEXTER_CP:$PDFBOX_JAR" CopyGate.java a.ocd.epub b.ocd.epub` — every page must project
-identically to its copy (`SvgOcdWriter.render`), and the copy must be independent (emptying it leaves
+Every page must project identically to its copy (`SvgOcdWriter.render`), and the copy must be independent (emptying it leaves
 the original's projection unchanged). This is what makes `OCDNode.copy()` safe to extend: a field that
 reaches the output and was not copied shows up here immediately.
 
@@ -1133,7 +1134,7 @@ extract, `?to=ocd&pages=…` is what a page organiser commits.
 `OCDPage.copy(id)` copies geometry, the content subtree, clips, links, annotations and fields while
 SHARING the document resources (fonts, image bytes, media, layers). `JxPath` is a `Path2D`, so path
 and clip geometry are duplicated, never shared. **The gate is byte equality of the projection**: a
-page and its copy must render to the same SVG-OCD (`scripts/CopyGate.java`, measured 10/10 pages over
+page and its copy must render to the same SVG-OCD (the COPY gate in `test/Gates.java`, run on every push; measured 10/10 pages over
 four documents, plus an independence check). `Pages` copies from a repeat's second occurrence on;
 before, a repeat was one object twice, so editing page 4 silently changed page 9.
 
@@ -2408,7 +2409,7 @@ scripts/  — ground truth
                             reports as pageless. RUN THIS: it found a text-truncation defect that all
                             27 synthetic features missed
 test/ (in the REPO, not this skill) — the functional gate CI runs
-  Gates.java              — builds the corpus into target/corpus (no PDF named), then REPRO · DOCTAGS · STABLE · MODEL · TIERS · STRADDLE · CLIPS · HOSTILE
+  Gates.java              — builds the corpus into target/corpus (no PDF named), then REPRO · DOCTAGS · STABLE · MODEL · TIERS · STRADDLE · CLIPS · COPY · EDITED · HOSTILE
   ContainerDiff.java      — WHICH member diverged, shown in context (run after a red STABLE)
   Fixtures.java           — the corpus, PDFBox only: 28 single-trait features, `rich` (links, fields
                             with values, annotations, two OCG layers, a two-level outline) and `tagged`

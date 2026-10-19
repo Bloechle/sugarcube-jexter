@@ -176,11 +176,16 @@ public final class SvgWriter {
         var chars = new StringBuilder();
         for (OCDText.Glyph g : t.glyphs()) {
             Integer cp = rev.get(g.gid());
-            String ch = cp != null ? String.valueOf((char) (int) cp)
+            String ch = cp != null ? Character.toString(cp)
                                     : (g.unicode() != null && !g.unicode().isEmpty() ? g.unicode() : null);
             if (ch == null) continue;
-            if (!xs.isEmpty()) xs.append(' ');
-            xs.append(f(g.x()));
+            // SVG positions each CHARACTER by the next x: a glyph that maps to several ("fi" kept as a ligature,
+            // a character beyond the BMP) gets one x per code point, all at the glyph's origin — one x for two
+            // once pushed every later glyph of the run one slot right.
+            for (int k = ch.codePointCount(0, ch.length()); k > 0; k--) {
+                if (!xs.isEmpty()) xs.append(' ');
+                xs.append(f(g.x()));
+            }
             esc(chars, ch);
         }
         if (chars.isEmpty()) return;
@@ -195,8 +200,8 @@ public final class SvgWriter {
         // An INVISIBLE run (a scan's OCR layer) is real text with no ink: selectable and searchable, painted
         // at zero opacity — fill:none would also hide it, but leaves some viewers nothing to hit-test.
         boolean invisible = t.isInvisible();
-        boolean stroked = !invisible && t.hasStrokePaint();
-        boolean filled  = t.hasFill() || !stroked;     // mode 1 (stroke-only) → fill:none, like the renderer
+        boolean stroked = t.paintsStroke();
+        boolean filled  = t.paintsFill();
         var css = new StringBuilder();
         if (invisible) {
             css.append("fill:#000000;fill-opacity:0");

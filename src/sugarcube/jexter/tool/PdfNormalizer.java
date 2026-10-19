@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Locale;
 
 /**
  * PDF → OCD → PDF: regenerates a <em>normalized</em> PDF through jexter's canonical OCD model.
@@ -78,7 +79,7 @@ public final class PdfNormalizer {
         e.println("  --outline             outline glyphs instead of a selectable text layer");
         for (ConvertOptions.Opt<?> o : ConvertOptions.ALL)
             e.printf("  --%s=<%s>   (def %s)  %s%n",
-                    o.key(), o.type().name().toLowerCase(), o.def(), o.label());
+                    o.key(), o.type().name().toLowerCase(Locale.ROOT), o.def(), o.label());
     }
 
     /** {@code foo.pdf} → {@code foo-normalized.pdf} next to the source. */

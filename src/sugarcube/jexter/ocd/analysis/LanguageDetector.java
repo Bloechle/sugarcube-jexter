@@ -8,6 +8,7 @@ import java.lang.Character.UnicodeScript;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.Locale;
 
 /**
  * Best-effort BCP-47 primary-language guess from the page text, used <b>only</b> as a fallback
@@ -80,7 +81,7 @@ public final class LanguageDetector {
         }
 
         // ── stage 2: Latin-script stopword scoring ──
-        String[] tokens = text.toLowerCase().split("[^\\p{L}]+");
+        String[] tokens = text.toLowerCase(Locale.ROOT).split("[^\\p{L}]+");
         int total = 0;
         Map<String, Integer> hits = new HashMap<>();
         for (String t : tokens) {

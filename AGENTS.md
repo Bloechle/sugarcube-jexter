@@ -91,7 +91,7 @@ Skill < this card < the source: a disagreement is a signal — fix the skill in 
   `mvn -q package` is an IDE convenience, not the build.
 - **Test** — `node nimbus-jexter.cjs --run=test` (what CI runs, any OS): compiles into `target/classes`, then
   `test/Gates.java` writes the fixture corpus into `target/corpus` (`test/Fixtures.java`, PDFBox only) and gates it — REPRO, DOCTAGS, STABLE, MODEL, TIERS,
-  STRADDLE, CLIPS, HOSTILE, one JVM, ~20 s. A red STABLE names the container: `test/ContainerDiff.java` shows
+  STRADDLE, CLIPS, COPY, EDITED, HOSTILE, one JVM, ~20 s. A red STABLE names the container: `test/ContainerDiff.java` shows
   which member moved. A change is done when this is green; a new defect class gets its check here.
   JDK 21 is the gate, and the whole tree is ALSO clean under JDK 25 — which is what `nimbus --run=jar` uses on a
   machine with a newer JDK. JDK 23+ added `dangling-doc-comments`, which no `@SuppressWarnings` can reach and JDK 21
@@ -102,7 +102,7 @@ Skill < this card < the source: a disagreement is a signal — fix the skill in 
 - Word spaces are **not** trusted from the source — they are re-derived by `Spacer` from glyph geometry; `Cleaner` strips every blank glyph first.
 - Ligatures fold to letters only at **read-out** (`OCDIndex` NFKC); the model and the OCD-EPUB keep the source codepoint; SVG/PDF paint by glyph id, unaffected.
 - The OCD-EPUB is **TrueType-free** — every font lives once in `pages/fonts.svg` (outlines + metrics + cmap, inkless glyphs keep their advance); an embeddable OTF is recompiled on demand.
-- Model descents may be **negative** (PDF convention) — take the magnitude when sizing.
+- A font's **descent is negative** (Y-up, the PDF convention): `OCDFont.descent(v)` stores `-|v|`, whatever a producer hands it.
 - A heading is *elevated AND recurs* (≥ 2 pages or ≥ 3 times); only the single largest elevated style (the title) is exempt from recurrence. Nav-tagged headings (`OutlineAligner`) win over projections.
 - The `pdfimport` path is PDFBox-coupled; `write.PdfWriter` also uses PDFBox for PDF **export**.
 - `.ocd.epub` naming: the last suffix says the TYPE (a valid EPUB), the `.ocd.` prefix says the FLAVOR (the model container) — the `.kepub.epub` pattern.

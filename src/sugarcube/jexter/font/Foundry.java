@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 
 /**
  * Foundry — turn hand-traced glyph bitmaps into a real OpenType font.
@@ -69,7 +70,7 @@ public final class Foundry {
         Map<String, Object> req = JxJson.asObj(JxJson.parse(requestJson));
         String name   = orDefault(JxJson.str(req, "name"), "MyHand");
         String family = orDefault(JxJson.str(req, "family"), name);
-        String format = orDefault(JxJson.str(req, "format"), "ttf").toLowerCase();
+        String format = orDefault(JxJson.str(req, "format"), "ttf").toLowerCase(Locale.ROOT);
         Guides g = guides(JxJson.has(req, "guides") ? JxJson.obj(req, "guides") : java.util.Map.of());
 
         OCDFont font = new OCDFont(name).family(family).id(slug(name))

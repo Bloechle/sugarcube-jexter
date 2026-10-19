@@ -10,6 +10,7 @@ import sugarcube.jexter.ocd.model.OCDText;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Running header / footer detection by <b>recto/verso stack stability at the page edge</b> — one idea, no
@@ -195,7 +196,7 @@ public final class Furniture {
     /** The comparison string: upper-cased, whitespace collapsed, digits kept (so a folio's page number is a
      *  one-character difference between neighbours, not a fold to identity). */
     static String raw(String text) {
-        return text == null ? "" : JxText.collapse(text.toUpperCase());
+        return text == null ? "" : JxText.collapse(text.toUpperCase(Locale.ROOT));
     }
 
     private static int tag(Liner.Line l, String role) {

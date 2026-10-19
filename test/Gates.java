@@ -8,6 +8,7 @@
 //   TIERS     readMembers / readPage / pageCount give what read gives, page for page.
 //   STRADDLE  no paragraph wraps a paint span another node sits inside (it could not be stored atomically).
 //   CLIPS     every clip reference resolves, on the imported model and on the model read back.
+//   COPY      a page and its copy project identically, and editing the copy leaves the page alone.
 //   EDITED    a path a viewer moved (Prism's editor composes the move in front of the page flip)
 //             reads back moved — once, it was read back where it started.
 //   HOSTILE   broken and malicious variants of the container: refused with context, or read with a
@@ -24,6 +25,7 @@ import sugarcube.jexter.ocd.io.OCDReader;
 import sugarcube.jexter.ocd.model.*;
 import sugarcube.jexter.pdfimport.PdfImporter;
 import sugarcube.jexter.write.Conversion;
+import sugarcube.jexter.write.SvgOcdWriter;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -73,6 +75,7 @@ public final class Gates {
             gate("TIERS",    () -> tiers(container.toFile()));
             gate("STRADDLE", () -> straddle(model));
             gate("CLIPS",    () -> clips(model, OCDReader.read(container.toFile())));
+            gate("COPY",     () -> copies(OCDReader.read(container.toFile())));
             gate("EDITED",   () -> edited(ocd, tmp));
             gate("HOSTILE",  () -> hostile(ocd, tmp));
         }
@@ -135,6 +138,10 @@ public final class Gates {
         List<String> bad = new ArrayList<>();
         if (src.pageCount() != back.pageCount()) bad.add("pages " + src.pageCount() + " -> " + back.pageCount());
         if (src.fonts().size() != back.fonts().size()) bad.add("fonts " + src.fonts().size() + " -> " + back.fonts().size());
+        for (String ext : List.of("png", "jpg")) {                    // a document read back already holds names
+            String fresh = back.newImageRef(ext);
+            if (back.images().containsKey(fresh)) bad.add("a new image ref collides with a stored one: " + fresh);
+        }
         if (src.structures().size() != back.structures().size())
             bad.add("structures " + src.structures().size() + " -> " + back.structures().size());
         for (int p = 0; p < Math.min(src.pageCount(), back.pageCount()); p++) {
@@ -177,6 +184,10 @@ public final class Gates {
             if (Math.abs(a.fontSize() - b.fontSize()) > TOLERANCE) d.add("fontSize " + a.fontSize() + " -> " + b.fontSize());
             if (a.renderMode() != b.renderMode()) d.add("renderMode " + a.renderMode() + " -> " + b.renderMode());
             if (a.fill() != b.fill()) d.add(String.format("fill %08X -> %08X", a.fill(), b.fill()));
+            if (a.paintsStroke() != b.paintsStroke() || a.paintsStroke() && a.stroke() != b.stroke())
+                d.add(String.format("stroke %08X -> %08X", a.stroke(), b.stroke()));
+            if (a.paintsStroke() && Math.abs(a.strokeWidth() - b.strokeWidth()) > TOLERANCE)
+                d.add("strokeWidth " + a.strokeWidth() + " -> " + b.strokeWidth());
         }
         if (x instanceof OCDPath a && y instanceof OCDPath b) {
             if (a.fill() != b.fill()) d.add(String.format("fill %08X -> %08X", a.fill(), b.fill()));
@@ -241,9 +252,28 @@ public final class Gates {
         for (OCDDocument doc : docs)
             for (int p = 0; p < doc.pageCount(); p++) {
                 OCDPage page = doc.page(p);
+                String where = "p" + (p + 1);
                 page.nodes().filter(n -> n.clipId() != null && !page.clips().containsKey(n.clipId()))
-                        .forEach(n -> bad.add(page.id() + " " + n.id() + " names missing clip " + n.clipId()));
+                        .forEach(n -> bad.add(where + " " + n.id() + " names missing clip " + n.clipId()));
             }
+        return bad;
+    }
+
+    // ── COPY ─────────────────────────────────────────────────────────────────────
+
+    /** Page surgery duplicates pages with {@link OCDPage#copy}: a field it forgets reaches the output as a
+     *  difference here, and a shared list (an alias) shows when the copy is edited. */
+    private static List<String> copies(OCDDocument doc) {
+        List<String> bad = new ArrayList<>();
+        var glyphs = new SvgOcdWriter.Fonts(doc);
+        for (int i = 0; i < doc.pageCount(); i++) {
+            OCDPage page = doc.page(i), copy = page.copy();
+            String before = SvgOcdWriter.render(doc, page, glyphs);
+            if (!before.equals(SvgOcdWriter.render(doc, copy, glyphs))) bad.add("p" + (i + 1) + " copy projects differently");
+            copy.content().clear();
+            copy.links().clear();
+            if (!before.equals(SvgOcdWriter.render(doc, page, glyphs))) bad.add("p" + (i + 1) + " copy is aliased to the page");
+        }
         return bad;
     }
 

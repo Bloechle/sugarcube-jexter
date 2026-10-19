@@ -23,6 +23,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.Locale;
 
 /**
  * Shared EPUB3 packaging — the parts that a fixed-layout replica ({@link EpubWriter}) and a
@@ -393,7 +394,7 @@ final class EpubPackage {
      *  carries through a round trip. Unknown extensions get the octet-stream fallback, which is legal
      *  and honest: better a declared blob than an undeclared resource epubcheck refuses. */
     static String mediaForPath(String path) {
-        String n = path.toLowerCase();
+        String n = path.toLowerCase(Locale.ROOT);
         if (n.endsWith(".json")) return "application/json";
         if (n.endsWith(".xml"))  return "application/xml";
         if (n.endsWith(".txt"))  return "text/plain";
@@ -405,7 +406,7 @@ final class EpubPackage {
     }
 
     static String mediaForImage(String name) {
-        String n = name.toLowerCase();
+        String n = name.toLowerCase(Locale.ROOT);
         if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
         if (n.endsWith(".gif")) return "image/gif";
         if (n.endsWith(".svg")) return "image/svg+xml";

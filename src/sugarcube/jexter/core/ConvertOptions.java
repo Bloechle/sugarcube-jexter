@@ -4,6 +4,7 @@ package sugarcube.jexter.core;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 
 /**
  * The configuration of a conversion, from the source document to any artifact.
@@ -330,8 +331,8 @@ public final class ConvertOptions {
             Opt<?> o = ALL.get(i);
             JxStringer js = new JxStringer().obj()
                     .str("key", o.key()).str("label", o.label()).str("help", o.help())
-                    .str("type", o.type().name().toLowerCase())
-                    .str("group", o.group().name().toLowerCase());
+                    .str("type", o.type().name().toLowerCase(Locale.ROOT))
+                    .str("group", o.group().name().toLowerCase(Locale.ROOT));
             switch (o.type()) {
                 case BOOL   -> js.bool("def", Boolean.TRUE.equals(o.def()));
                 case INT    -> js.num("def", o.def() instanceof Number n ? n.longValue() : 0L);

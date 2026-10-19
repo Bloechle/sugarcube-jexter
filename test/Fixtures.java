@@ -225,6 +225,25 @@ final class Fixtures {
             cs.endText();
             y -= 16 * MM;
         }
+        // the clip modes paint as their low two bits say, THEN clip: each in its own q/Q, a stripe through it
+        Object[][] clips = { { RenderingMode.FILL_CLIP, "Mode 4" }, { RenderingMode.STROKE_CLIP, "Mode 5" },
+                             { RenderingMode.FILL_STROKE_CLIP, "Mode 6" } };
+        float x = 20 * MM;
+        for (Object[] m : clips) {
+            cs.saveGraphicsState();
+            cs.setNonStrokingColor(new Color(25, 50, 180));
+            cs.beginText();
+            cs.setFont(d.sans(), 26);
+            cs.setRenderingMode((RenderingMode) m[0]);
+            cs.newLineAtOffset(x, y);
+            cs.showText((String) m[1]);
+            cs.endText();
+            cs.setNonStrokingColor(new Color(230, 128, 25));
+            cs.addRect(x, y + 4, 60 * MM, 4);
+            cs.fill();
+            cs.restoreGraphicsState();
+            x += 55 * MM;
+        }
     }
 
     /** Big text as a CLIP (Tr 7 paints nothing), then a picture painted THROUGH the glyph outlines. */
@@ -497,7 +516,17 @@ final class Fixtures {
             text(cs, d.sans(), 12, 20 * MM, H - 60 * MM, "External link: https://example.org");
             text(cs, d.sans(), 12, 20 * MM, H - 75 * MM, "Internal link -> jump to Chapter 2");
         }
-        try (var cs = d.page(A4)) { text(cs, d.sans(), 20, 20 * MM, H - 40 * MM, "Chapter 2"); }
+        try (var cs = d.page(A4)) {
+            // The bookmark title is the first line of a body-size paragraph, painted over a fill: the outline
+            // aligner must cut the title off into its own paragraph, and the cut must keep its paint slot.
+            cs.setNonStrokingColor(new Color(235, 240, 250));
+            cs.addRect(15 * MM, H - 70 * MM, 170 * MM, 40 * MM);
+            cs.fill();
+            cs.setNonStrokingColor(Color.BLACK);
+            text(cs, d.sans(), 12, 20 * MM, H - 40 * MM, "Chapter 2");
+            text(cs, d.sans(), 12, 20 * MM, H - 40 * MM - 14, "The chapter opens on a line that follows its title without a gap,");
+            text(cs, d.sans(), 12, 20 * MM, H - 40 * MM - 28, "so the paragraph builder sees one block and the outline must cut it.");
+        }
         PDPage p1 = d.pdf.getPage(0), p2 = d.pdf.getPage(1);
         p1.getAnnotations().add(uriLink(new PDRectangle(20 * MM, H - 63 * MM, 100 * MM, 6 * MM), "https://example.org"));
         p1.getAnnotations().add(goTo(new PDRectangle(20 * MM, H - 78 * MM, 100 * MM, 6 * MM), p2, H));

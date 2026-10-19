@@ -94,6 +94,13 @@ public final class OCDText extends OCDNode {
     public boolean hasFill()     { int m = renderMode & 3; return m == 0 || m == 2; }
     public boolean hasStroke()   { int m = renderMode & 3; return m == 1 || m == 2; }
 
+    /** Paints its outline: a stroking mode with a visible stroke colour. With {@link #paintsFill}, the one
+     *  answer every painter asks (renderer, PDF, SVG, OCD-EPUB) — a clip mode (4–6) paints as its low two
+     *  bits say, then clips. */
+    public boolean paintsStroke() { return !isInvisible() && hasStrokePaint(); }
+    /** Paints its interior: a filling mode, or a stroking mode with nothing to stroke (never invisible). */
+    public boolean paintsFill()   { return !isInvisible() && (hasFill() || !paintsStroke()); }
+
     // ── glyphs ─────────────────────────────────────────────────────────────────
     public List<Glyph> glyphs()                          { return glyphs; }
     public OCDText add(int gid, double x, String unicode) { glyphs.add(new Glyph(gid, x, unicode)); return this; }
@@ -122,19 +129,14 @@ public final class OCDText extends OCDNode {
         return len < 1e-9 ? p.x() : (p.x() * ux + p.y() * uy) / len;
     }
 
-    /** A new run carrying this run's full paint state (font, size, fill, render mode, stroke, transform,
-     *  clip, alpha, blend, role) but <b>no glyphs</b> — the basis for a split run, so the
-     *  rendered output is byte-identical once the chosen glyphs are added back. */
+    /** A new run carrying this run's full paint state but <b>no glyphs and no id</b> — the basis for a split
+     *  run (the pieces get fresh ids), so the output is byte-identical once the chosen glyphs are added back.
+     *  It IS {@link #copy()} minus those two: a second field-by-field list once forgot the CMYK source colour,
+     *  and a redacted run came back sRGB in the PDF. */
     public OCDText copyState() {
-        OCDText a = new OCDText(fontId, fontSize).fill(fill).renderMode(renderMode).confidence(confidence);
-        if (hasStroke()) a.strokePaint(stroke, strokeWidth);
-        a.lineStyle(cap, join, miterLimit, dash, dashPhase);   // stroke style rides along on a split run
-        a.transform(transform());
-        a.clipId(clipId());
-        a.alpha(alpha());
-        a.blend(blend());
-        a.role(role());
-        a.z(z());                 // keep paint order: a split run paints where the original did (reid overrides on clean)
+        OCDText a = copy();
+        a.glyphs.clear();
+        a.id(null);
         return a;
     }
 

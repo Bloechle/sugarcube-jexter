@@ -3,6 +3,7 @@ package sugarcube.jexter.ocd.model;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Locale;
 
 /**
  * A normalized document font: vector glyph outlines plus metrics, fully
@@ -30,7 +31,7 @@ public final class OCDFont {
     private String  weight = "normal";    // "normal" | "bold"
     private String  style  = "normal";    // "normal" | "italic" | "oblique"
     private double  ascent     = 0.75;
-    private double  descent    = 0.25;
+    private double  descent    = -0.25;   // below the baseline, so NEGATIVE: Y-up, the PDF convention
     private double  capHeight  = 0.66;
     private double  xHeight    = 0.45;
     private double  spaceWidth = 0.25;
@@ -64,7 +65,10 @@ public final class OCDFont {
     public double xHeight()    { return xHeight; }
     public double spaceWidth() { return spaceWidth; }
     public OCDFont ascent(double v)     { this.ascent = v; return this; }
-    public OCDFont descent(double v)    { this.descent = v; return this; }
+    /** In em, below the baseline, so negative (Y-up, the PDF convention). A positive value is taken as
+     *  its magnitude: producers disagreed, and every compiled font with a positive one had its descender
+     *  inverted (hhea positive, winDescent wrapped to ~65000). */
+    public OCDFont descent(double v)    { this.descent = -Math.abs(v); return this; }
     public OCDFont capHeight(double v)  { this.capHeight = v; return this; }
     public OCDFont xHeight(double v)    { this.xHeight = v; return this; }
     public OCDFont spaceWidth(double v) { this.spaceWidth = v; return this; }
@@ -80,9 +84,12 @@ public final class OCDFont {
     public int      glyphCount()               { return glyphs.size(); }
 
     // ── cmap (codepoint → gid) ──────────────────────────────────────────────────
-    public OCDFont map(int codepoint, int gid) { cmap.put(codepoint, gid); return this; }
+    /** Map a codepoint; the reverse table is rebuilt on its next use (a font gains entries after its first
+     *  encode when text is written into it). */
+    public OCDFont map(int codepoint, int gid) { cmap.put(codepoint, gid); reverseCmap = null; return this; }
     public Integer gidOf(int codepoint)        { return cmap.get(codepoint); }
-    public Map<Integer, Integer> cmap()        { return cmap; }
+    /** Read-only: every change goes through {@link #map}, which keeps {@link #reverseCmap} true. */
+    public Map<Integer, Integer> cmap()        { return java.util.Collections.unmodifiableMap(cmap); }
 
     /**
      * Reverse of the cmap: gid → a codepoint the embedded OTF maps to that gid.
@@ -131,13 +138,13 @@ public final class OCDFont {
     // ── style helpers ───────────────────────────────────────────────────────────
     public boolean isBold() {
         return "bold".equalsIgnoreCase(weight)
-                || (name != null && name.toLowerCase().contains("bold"));
+                || (name != null && name.toLowerCase(Locale.ROOT).contains("bold"));
     }
     private Boolean serif;   // null = the document did not say
 
     public boolean isItalic() {
         return "italic".equalsIgnoreCase(style) || "oblique".equalsIgnoreCase(style)
-                || (name != null && name.toLowerCase().matches(".*(italic|oblique).*"));
+                || (name != null && name.toLowerCase(Locale.ROOT).matches(".*(italic|oblique).*"));
     }
     /** Serif, as the PRODUCER declared it: the {@code /Flags} serif bit of the PDF font descriptor,
      *  captured at import. Falls back to the name only when the document said nothing — a substituted
@@ -149,7 +156,7 @@ public final class OCDFont {
      *  itself turns a silent disfigurement into a near miss. */
     public boolean isSerif() {
         if (serif != null) return serif;
-        String s = (name == null ? "" : name.toLowerCase()) + ' ' + (family == null ? "" : family.toLowerCase());
+        String s = (name == null ? "" : name.toLowerCase(Locale.ROOT)) + ' ' + (family == null ? "" : family.toLowerCase(Locale.ROOT));
         if (s.matches(".*(serif|times|georgia|garamond|minion|utopia|palatino|baskerville|caslon|cambria|book).*")
                 && !s.contains("sans")) return true;
         return false;
@@ -159,7 +166,7 @@ public final class OCDFont {
     /** Fixed-pitch (monospace): every rendered glyph shares one advance, or the name says so. */
     public boolean isMono() {
         if (name != null) {
-            String s = name.toLowerCase();
+            String s = name.toLowerCase(Locale.ROOT);
             if (s.contains("mono") || s.contains("courier") || s.contains("consol")
                     || s.contains("typewriter") || s.contains("menlo") || s.contains("inconsol")
                     || s.contains("cmtt")) return true;

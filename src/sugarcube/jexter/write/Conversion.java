@@ -25,6 +25,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Locale;
 
 /**
  * The one entry point from a source document to any converted artifact, and the single source of
@@ -191,7 +192,7 @@ public final class Conversion {
 
         /** Resolve a target by id, accepting a few friendly aliases. */
         public static Target of(String name) {
-            String n = (name == null ? "" : name.trim().toLowerCase());
+            String n = (name == null ? "" : name.trim().toLowerCase(Locale.ROOT));
             n = switch (n) {
                 case "markdown"                              -> "md";
                 case "reflow", "reflow-epub", "epub_reflow"  -> "epub-reflow";
@@ -204,7 +205,7 @@ public final class Conversion {
 
         /** The target whose natural output extension matches {@code file}, or {@code null}. */
         public static Target ofFilename(String file) {
-            String f = file.toLowerCase();
+            String f = file.toLowerCase(Locale.ROOT);
             if (f.endsWith(".doctags.txt") || f.endsWith(".doctags")) return DOCTAGS;
             if (f.endsWith(".ocd.epub")) return OCD;
             int dot = f.lastIndexOf('.');

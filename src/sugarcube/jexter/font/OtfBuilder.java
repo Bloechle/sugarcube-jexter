@@ -75,7 +75,7 @@ abstract sealed class OtfBuilder permits CffOtf, GlyfOtf {
     final byte[] hhea(int numGlyphs, int advMax) {
         Buf b = new Buf();
         b.u32(0x00010000L);
-        b.u16(r(font.ascent())); b.u16(r(font.descent())); b.u16(0);
+        b.u16(r(font.ascent())); b.u16(r(font.descent())); b.u16(0);   // descender: negative (OCDFont)
         b.u16(advMax);
         b.u16(0); b.u16(0); b.u16(xMax & 0xFFFF);
         b.u16(1); b.u16(0); b.u16(0);

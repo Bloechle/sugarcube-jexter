@@ -1,6 +1,7 @@
 package sugarcube.jexter.core;
 
 import java.util.Set;
+import java.util.Locale;
 
 /**
  * Dependency-free metadata probe for the two media containers OCD embeds: MP4
@@ -28,7 +29,7 @@ public final class JxMedia {
 
     public static Probe probe(String ext, byte[] data) {
         if (data == null || ext == null) return Probe.NONE;
-        return switch (ext.toLowerCase()) {
+        return switch (ext.toLowerCase(Locale.ROOT)) {
             case "mp4", "m4v", "mov" -> mp4(data);
             case "mp3" -> mp3(data);
             default -> Probe.NONE;

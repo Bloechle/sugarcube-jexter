@@ -70,17 +70,22 @@ public final class OCDDocument {
     public OCDDocument     outputIntent(OCDOutputIntent v) { this.outputIntent = v; return this; }
 
     // ── cover (container resource) ──────────────────────────────────────────────
-    // The EPUB cover is a RESOURCE, not a projection: a re-export of the same document
-    // must carry the same bytes, or write(read(x)) = x breaks on one member. The reader
-    // stashes what it read; writers reuse it and only rasterize page 1 when absent.
+    // The EPUB cover is page 1 rasterized. Rendering the model read back is not pixel-identical to
+    // rendering the import (the export rounds to 4 decimals), so a re-export reuses the cover it read, or
+    // write(read(x)) = x breaks on one member. A copy is only true while page 1 is: every model operation
+    // that changes pages calls dropCover() — a redacted document once shipped its unredacted first page.
     private byte[] cover;
     public OCDDocument cover(byte[] png) { this.cover = png; return this; }
     public byte[]      cover()           { return cover; }
+    /** Page 1 may have changed: the next write rasterizes a fresh cover. */
+    public OCDDocument dropCover()       { this.cover = null; return this; }
 
     // ── images (document-scoped) ────────────────────────────────────────────────
     private int imageSeq = 0;
-    /** Allocate a stable, document-scoped image resource name: {@code img_0001.png}. */
-    public String newImageRef(String ext) { return String.format("img_%04d.%s", ++imageSeq, ext); }
+    /** Allocate a document-scoped image resource name, {@code img_0001.png}, that no image holds yet. A
+     *  document read back already holds names its counter never saw: allocating blindly once handed the
+     *  redactor {@code img_0001.png} again, and it overwrote an image other pages still painted. */
+    public String newImageRef(String ext) { return fresh("img", ext, images, () -> ++imageSeq); }
 
     public OCDDocument addImage(String ref, byte[] data) { images.put(ref, data); return this; }
     public byte[]      image(String ref)                 { return images.get(ref); }
@@ -88,10 +93,16 @@ public final class OCDDocument {
 
     // ── media: embedded audio / video resources (document-scoped) ────────────────
     private int audioSeq = 0, videoSeq = 0;
-    /** Allocate a stable media resource name: {@code audio_0001.mp3}. */
-    public String newAudioRef(String ext) { return String.format("audio_%04d.%s", ++audioSeq, ext); }
-    /** Allocate a stable media resource name: {@code video_0001.mp4}. */
-    public String newVideoRef(String ext) { return String.format("video_%04d.%s", ++videoSeq, ext); }
+    /** Allocate a media resource name no member holds yet: {@code audio_0001.mp3}. */
+    public String newAudioRef(String ext) { return fresh("audio", ext, media, () -> ++audioSeq); }
+    /** Allocate a media resource name no member holds yet: {@code video_0001.mp4}. */
+    public String newVideoRef(String ext) { return fresh("video", ext, media, () -> ++videoSeq); }
+
+    private static String fresh(String prefix, String ext, Map<String, byte[]> taken, java.util.function.IntSupplier next) {
+        String ref;
+        do ref = String.format("%s_%04d.%s", prefix, next.getAsInt(), ext); while (taken.containsKey(ref));
+        return ref;
+    }
 
     public OCDDocument addMedia(String ref, byte[] data) { media.put(ref, data); return this; }
     public byte[]      media(String ref)                 { return media.get(ref); }

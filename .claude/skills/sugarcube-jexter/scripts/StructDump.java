@@ -1,6 +1,6 @@
 package sugarcube.jexter.write;
 import sugarcube.jexter.pdfimport.PdfImporter;
-import sugarcube.jexter.pdfimport.ConvertOptions;
+import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.ocd.model.*;
 import java.io.*;
 import java.util.*;

@@ -108,7 +108,7 @@ public final class PdfImporter extends PdfStreamEngine {
                 if (i % 25 == 0) opts.at(JxProgress.Stage.IMPORT, i, total);
                 PDPage pd = pdf.getPage(i);
                 PDRectangle mb = pd.getMediaBox();
-                OCDPage page = new OCDPage("p" + (i + 1),
+                OCDPage page = new OCDPage(
                         new JxRect(mb.getLowerLeftX(), mb.getLowerLeftY(), mb.getWidth(), mb.getHeight()));
                 PDRectangle cb = pd.getCropBox();
                 if (cb != null)

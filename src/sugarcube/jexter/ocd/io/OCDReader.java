@@ -132,7 +132,7 @@ public final class OCDReader {
             Map<String, Object> annots = pagesOf(json(zf, JX + "annots.json"));
             int i = 0;
             for (ZipEntry pe : pageFiles(zf)) {
-                doc.add(indices.contains(i) ? parsePage(zf, doc, pe, i + 1, annots) : new OCDPage("p" + (i + 1), 1, 1));
+                doc.add(indices.contains(i) ? parsePage(zf, doc, pe, i + 1, annots) : new OCDPage(1, 1));
                 i++;
             }
             restoreImageDims(doc);
@@ -313,7 +313,7 @@ public final class OCDReader {
 
         JxRect media = battr(svg, "data-mediabox");
         if (media == null) media = new JxRect(0, 0, dbl(svg.getAttribute("width"), 0), dbl(svg.getAttribute("height"), 0));
-        OCDPage page = new OCDPage("p" + number, media);
+        OCDPage page = new OCDPage(media);
         if (svg.hasAttribute("data-rotate")) page.rotation((int) dbl(svg.getAttribute("data-rotate"), 0));
         page.cmykBlending("cmyk".equals(svg.getAttribute("data-blending")));
         if (svg.hasAttribute("data-dpi")) page.dpi(dbl(svg.getAttribute("data-dpi"), 72));
@@ -351,7 +351,7 @@ public final class OCDReader {
             if (n instanceof OCDGroup g && !(g instanceof OCDParagraph)) reorder(g.children(), ord);
 
         if (annots != null) {
-            Map<String, Object> pe = obj(annots, page.id());
+            Map<String, Object> pe = obj(annots, OCDVocab.pageId(number - 1));
             if (pe != null) applyAnnots(pe, page);
         }
         for (var e : clipDefs.entrySet()) page.addClip(new OCDClip(e.getKey(), e.getValue()));
@@ -702,7 +702,7 @@ public final class OCDReader {
             if (g.hasAttribute("data-weight")) f.weight(g.getAttribute("data-weight"));
             if (g.hasAttribute("data-style"))  f.style(g.getAttribute("data-style"));
             f.embedded(g.hasAttribute("data-embedded"));
-            f.ascent(dbl(g.getAttribute("data-ascent"), .75)).descent(dbl(g.getAttribute("data-descent"), .25));
+            f.ascent(dbl(g.getAttribute("data-ascent"), .75)).descent(dbl(g.getAttribute("data-descent"), -.25));
             f.capHeight(dbl(g.getAttribute("data-capheight"), 0)).xHeight(dbl(g.getAttribute("data-xheight"), 0));
             f.spaceWidth(dbl(g.getAttribute("data-space"), 0));
             String cm = g.getAttribute("data-cmap");

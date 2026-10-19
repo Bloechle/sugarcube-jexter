@@ -1,6 +1,7 @@
 package sugarcube.jexter.ocd.model;
 
 import sugarcube.jexter.core.JxRect;
+import java.util.Locale;
 
 /**
  * A raster image placed on the page.
@@ -36,7 +37,7 @@ public final class OCDImage extends OCDNode {
     public String format() {
         if (resourceRef == null) return null;
         int dot = resourceRef.lastIndexOf('.');
-        return dot < 0 ? null : resourceRef.substring(dot + 1).toLowerCase();
+        return dot < 0 ? null : resourceRef.substring(dot + 1).toLowerCase(Locale.ROOT);
     }
 
     /** A full copy. The pixels are a DOCUMENT resource addressed by {@link #resourceRef()}, so the two

@@ -154,14 +154,6 @@ public final class Paragrapher {
             }
             para.add(n);                                                           // run or interior decoration
         }
-        // The fragment IS a contiguous paint span, so the wrapper's paint slot is its earliest painting
-        // child: it sorts into place under inPaintOrder (children keep their own z) and, stored atomically
-        // by SvgOcdWriter, occupies exactly the span it came from. OCDBreaks paint nothing and carry no z
-        // (default 0) — they must be excluded, or they would pin every multi-line paragraph to z=0 and sink
-        // it under every fill.
-        float zmin = Float.MAX_VALUE;
-        for (OCDNode n : para.children()) if (!(n instanceof OCDBreak)) zmin = Math.min(zmin, n.z());
-        if (zmin != Float.MAX_VALUE) para.z(zmin);
-        return para;
+        return para.fitZ();                     // the fragment IS a contiguous paint span: take its slot
     }
 }
