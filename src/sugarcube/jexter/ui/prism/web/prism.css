@@ -864,11 +864,8 @@ html:not([data-theme="dark"]) .px-tooltabs .px-tooltab.px-wip.active { color:#c0
   .px-foot { grid-template-columns:auto 1fr auto; gap:.25rem; padding:0 .3rem; }
 }
 
-/* ── The reader (?reader, tools.js readerOnly) ──────────────────────────────────
-   Prism reading and nothing else: no tool tabs, no ribbon, no tool pane, no conversion settings, no
-   console; the menu keeps Open, Close and About. The head names the book instead of the tools. */
+/* ── The reader edition (reader.html, body.px-reader — tools.js readerOnly) ─────────────────────
+   Its page carries the reading half only; the head names the book where the workbench shows its tools. */
 .px-book { display:none; }
 body.px-reader .px-book { display:block; min-width:0; max-width:60vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   font-size:.85rem; font-weight:600; color:var(--qry-text); }
-body.px-reader :is(.px-tooltabs, .px-ribbon, .px-pane-r, #split-right, #toggle-drawer, #b-config, #b-help,
-  #m-undo, #m-export, #m-fonts, #m-console, #app-menu hr, .px-status) { display:none !important; }

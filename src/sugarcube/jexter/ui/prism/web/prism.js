@@ -85,7 +85,7 @@ async function main() {
   ({ book }  = await import('/shared/js/book.js'));     // after the seam exists — see the note on top
   ({ shots } = await import('/shared/js/shot.js'));
   watchMembers();
-  installLogCapture();                                              // capture console.* into the footer console
+  if (!readerOnly) installLogCapture();                             // capture console.* into the footer console (F2)
   if (localStorage.getItem('prism:theme') == null) theme.mode('dark'); // dark by default, like Prism
   wireChrome();
   try { await initSW(); }
@@ -872,36 +872,42 @@ function exportName(ext) {
 function wireSplitters() {
   const body = $.opt('.px-body'); if (!body) return;
   makeSplitter('#split-left',  { container: body, prop: '--px-rail-w',   min: 170, max: 480, persist: 'prism:rail-w' });
+  if (readerOnly) return;                                     // the reader has no tool pane, no console
   makeSplitter('#split-right', { container: body, prop: '--px-drawer-w', from: 'end', min: 210, max: 560, persist: 'prism:drawer-w' });
   makeSplitter('#split-log',   { container: document.documentElement, prop: '--px-log-h', axis: 'y', from: 'end',
                                  min: 140, max: () => Math.round(window.innerHeight * 0.88), persist: 'prism:log-h' });
 }
 
-function wireChrome() {
-  if (readerOnly) $('body').cls('+px-reader');   // the reader: no workbench chrome (tools.js, prism.css)
-  wireSplitters();
+/** What only the workbench carries: the console, the tool pane's fold, the conversion settings, the
+ *  export, the shortcuts sheet. reader.html has none of it, and none of it is wired there. */
+function wireWorkbench() {
   wireConsole();
-  $('#toggle-rail').on('click', () => $('body').cls('~rail-collapsed'));
-  // A phone gives the page the width: the rail starts folded there and opens over the stage (prism.css).
-  if (matchMedia('(max-width: 760px)').matches) $('body').cls('+rail-collapsed');
-  // The tool panel folds the same way, from the corner it lives in. Purely visual: the tool stays
-  // active, its ribbon stays, only the pane is out of the way — so nothing has to be re-selected.
+  // The tool panel folds the same way as the rail, from the corner it lives in. Purely visual: the tool
+  // stays active, its ribbon stays, only the pane is out of the way — so nothing has to be re-selected.
   $('#toggle-drawer').on('click', () => $('body').cls('~drawer-collapsed'));
-  makeMenu('#app-menu');
   $('#b-config').on('click', () => dialog('config-drawer').open());
   { const u = $.opt('#unit');
     if (u) { u.value = unit; u.on('change', () => setUnit(u.value)); } }
+  $('#m-export').on('click', () => dialog('export-dialog').open());
+  $('#b-help').on('click', () => dialog('help-dialog').open());
+  $('#m-console').on('click', () => toggleLog());
+}
+
+function wireChrome() {
+  wireSplitters();
+  if (!readerOnly) wireWorkbench();
+  $('#toggle-rail').on('click', () => $('body').cls('~rail-collapsed'));
+  // A phone gives the page the width: the rail starts folded there and opens over the stage (prism.css).
+  if (matchMedia('(max-width: 760px)').matches) $('body').cls('+rail-collapsed');
+  makeMenu('#app-menu');
   attachTouch($('#epub-scroll'), (x, y) => [x, y]);   // gestures over the gaps between pages
 
   const pick = () => $('#file-input').click();
   $('#m-open').on('click', pick);
   $('#m-close').on('click', closeBook);
-  $('#m-export').on('click', () => dialog('export-dialog').open());
-  $('#b-help').on('click', () => dialog('help-dialog').open());
   { const setIc = () => { $('#b-theme').html(`<i data-icon="${theme.isDark() ? 'sun' : 'moon'}"></i>`); };
     $('#b-theme').on('click', () => { theme.toggle(); setIc(); });
     setIc(); }
-  $('#m-console').on('click', () => toggleLog());
   // (no #m-theme: the header button #b-theme above owns the toggle AND its icon. The menu item it
   // belonged to is gone; the leftover binding warned on every boot and, had the element come back,
   // would have toggled without updating the icon — two authorities for one control.)

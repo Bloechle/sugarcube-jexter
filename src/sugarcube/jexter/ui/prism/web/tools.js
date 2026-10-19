@@ -39,12 +39,12 @@ export function setDevMode(on) {
   renderTabs();
 }
 
-/** THE READER: Prism reading, and nothing else (`?reader` — a host that hands people a book to read, never
- *  a workbench). Every tool still loads, but none can be reached: the tab bar is empty, `setTool` only
- *  ever lands on home, the workbench's chrome is hidden (prism.css, `body.px-reader`) and its keys are
- *  off (prism.js). What stays is the reader: the rail (pages, contents, search), the layouts, the zoom,
- *  read aloud, the theme. */
-export const readerOnly = (() => { try { return new URLSearchParams(location.search).has('reader'); } catch { return false; } })();
+/** THE READER EDITION (reader.html, `<body class="px-reader">`): Prism reading, and nothing else — for a
+ *  host that hands people a book to read, never a workbench. Its page loads the chassis and read aloud
+ *  only, so no tool registers but home; `setTool` lands on home whatever it is asked, the tab bar stays
+ *  empty, and the workbench's wiring and keys are skipped (prism.js). What it is: the rail (pages,
+ *  contents, search), the layouts, the zoom, read aloud, the theme. */
+export const readerOnly = document.body?.classList.contains('px-reader') ?? false;
 
 export const toolOf = id => tools.find(t => t.id === id);
 /** What the tab bar shows: everything in dev mode, the finished ones otherwise — nothing to the reader. */

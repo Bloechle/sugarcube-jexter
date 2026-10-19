@@ -177,10 +177,14 @@ OVER the stage, opaque (prism.css, last block); the tabs keep their icons, the f
 pager and the zoom; a book whose first page is wider than the stage opens at the stage's width, not
 100%. Prism is also served by a host that is not an engine (a web reader of results): `?epub=<url>`
 fetches the book, takes its name from the response's Content-Disposition, and with no `ok` at
-`/api/health` the engine-only affordances stay hidden. `?reader` makes it THE reader (tools.js
-`readerOnly`): no tool tab (setTool lands on home only), no ribbon, no tool pane, no settings, no
-shortcuts sheet, no console, no Ctrl+E / F2 / dev mode; the menu keeps Open, Close, About; the head
-names the book (`#book-title`). The tools still load — the reader is the workbench with its doors shut.
+`/api/health` the engine-only affordances stay hidden. **The reader edition is a page of its own, `reader.html`** (2026-10-19): the workbench's reading half
+(head, rail, stage, footer, About) with `<body class="px-reader">`, loading `prism.js` and `tts.js` ONLY —
+no tool module exists there, so the edition is not the workbench hidden but the workbench absent.
+`tools.js` `readerOnly` reads the body class; `prism.js` then skips what only the workbench carries
+(`wireWorkbench`: console, tool pane, settings, export, shortcuts; the log capture; the right and log
+splitters; F2 / Ctrl+E / dev mode). A web host ships `reader.html` and what it reaches, never
+`index.html`. Its markup is the workbench's reading half copied: a change to the rail, the stage or the
+footer is made in BOTH pages.
 
 ### Forms — a tool for data that has no ink (2026-09-13)
 
