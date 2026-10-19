@@ -175,16 +175,10 @@ is a bug: those lines are sentences, and nowrap silently truncates them mid-word
 **A phone (≤ 760 px, 2026-10-19)**: the rail starts folded (prism.js `wireChrome`) and both panes open
 OVER the stage, opaque (prism.css, last block); the tabs keep their icons, the footer keeps the rail, the
 pager and the zoom; a book whose first page is wider than the stage opens at the stage's width, not
-100%. Prism is also served by a host that is not an engine (a web reader of results): `?epub=<url>`
+100%. Prism is the WORKBENCH, served where an engine runs beside it: a web site that only lets people
+read ships its own light reader, never Prism (Jean-Luc, 2026-10-19 — the two are kept apart). `?epub=<url>`
 fetches the book, takes its name from the response's Content-Disposition, and with no `ok` at
-`/api/health` the engine-only affordances stay hidden. **The reader edition is a page of its own, `reader.html`** (2026-10-19): the workbench's reading half
-(head, rail, stage, footer, About) with `<body class="px-reader">`, loading `prism.js` and `tts.js` ONLY —
-no tool module exists there, so the edition is not the workbench hidden but the workbench absent.
-`tools.js` `readerOnly` reads the body class; `prism.js` then skips what only the workbench carries
-(`wireWorkbench`: console, tool pane, settings, export, shortcuts; the log capture; the right and log
-splitters; F2 / Ctrl+E / dev mode). A web host ships `reader.html` and what it reaches, never
-`index.html`. Its markup is the workbench's reading half copied: a change to the rail, the stage or the
-footer is made in BOTH pages.
+`/api/health` the engine-only affordances stay hidden.
 
 ### Forms — a tool for data that has no ink (2026-09-13)
 

@@ -863,9 +863,3 @@ html:not([data-theme="dark"]) .px-tooltabs .px-tooltab.px-wip.active { color:#c0
   #b-help, .px-status, .px-foot-r > .px-seg, #fit-page-btn { display:none; }
   .px-foot { grid-template-columns:auto 1fr auto; gap:.25rem; padding:0 .3rem; }
 }
-
-/* ── The reader edition (reader.html, body.px-reader — tools.js readerOnly) ─────────────────────
-   Its page carries the reading half only; the head names the book where the workbench shows its tools. */
-.px-book { display:none; }
-body.px-reader .px-book { display:block; min-width:0; max-width:60vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  font-size:.85rem; font-weight:600; color:var(--qry-text); }
