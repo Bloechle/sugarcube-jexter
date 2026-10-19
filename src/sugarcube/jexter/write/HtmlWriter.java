@@ -159,7 +159,8 @@ public final class HtmlWriter {
         if (tag.equals("nav")) sb.append(" class=\"toc\"");
         sb.append(">\n");
         if (inline != null && !inline.isEmpty()) sb.append(text(inline)).append('\n');
-        for (OCDStructNode c : s.children()) render(c, doc, ix, sb, assets);
+        for (OCDStructNode c : s.children())
+            if (inline == null || !OCDIndex.isInline(c)) render(c, doc, ix, sb, assets);   // the inline text already holds it
         sb.append("</").append(tag).append(">\n");
     }
 

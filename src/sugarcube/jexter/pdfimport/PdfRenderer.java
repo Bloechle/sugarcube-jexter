@@ -2,7 +2,6 @@ package sugarcube.jexter.pdfimport;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.graphics.form.PDTransparencyGroup;
 import org.apache.pdfbox.pdmodel.graphics.state.PDGraphicsState;
 import org.apache.pdfbox.pdmodel.graphics.state.PDSoftMask;
@@ -71,6 +70,19 @@ public final class PdfRenderer extends PdfStreamEngine {
     private record GroupCtx(String blend) {}
     private final Deque<GroupCtx> gstack = new ArrayDeque<>();
     private boolean inMask = false;   // true while rendering a soft-mask group (don't re-apply masks)
+    private final Deque<Boolean> layers = new ArrayDeque<>();   // open optional-content sequences: hidden?
+    private int hidden;
+
+    @Override protected void beginLayer(String layerId, String name) {
+        var l = doc.layer(layerId);
+        boolean off = l != null && !l.visible();
+        layers.push(off);
+        if (off) hidden++;
+    }
+
+    @Override protected void endLayer() {
+        if (!layers.isEmpty() && layers.pop()) hidden--;
+    }
 
     protected PdfRenderer(PDPage pd, OCDDocument doc, OCDPage page, FontExtractor fonts,
                           Graphics2D g, AffineTransform pageTx, Map<String, BufferedImage> cache, int cw, int ch) {
@@ -85,15 +97,10 @@ public final class PdfRenderer extends PdfStreamEngine {
     /** Render page {@code i} of an already-loaded document straight to a raster with our painting. */
     public static BufferedImage render(PDDocument pdf, int i, double dpi) throws IOException {
         PDPage pd = pdf.getPage(i);
-        PDRectangle mb = pd.getMediaBox();
         OCDDocument doc = new OCDDocument();
+        PdfCatalog.read(pdf, doc);                       // the layers' visibility, as the importer reads it
         FontExtractor fonts = new FontExtractor(doc);
-        OCDPage page = new OCDPage(
-                new JxRect(mb.getLowerLeftX(), mb.getLowerLeftY(), mb.getWidth(), mb.getHeight()));
-        PDRectangle cb = pd.getCropBox();
-        if (cb != null)
-            page.cropBox(new JxRect(cb.getLowerLeftX(), cb.getLowerLeftY(), cb.getWidth(), cb.getHeight()));
-        page.rotation(pd.getRotation());
+        OCDPage page = PdfCatalog.page(pd);              // the importer's frame, so the two compare like for like
 
         // Canvas setup mirrors OCDRenderer.render (white bg, page /Rotate, scale + Y-flip).
         double scale = dpi / 72.0;
@@ -125,6 +132,10 @@ public final class PdfRenderer extends PdfStreamEngine {
             AffineTransform pageTx = g.getTransform();
             Map<String, BufferedImage> cache = new HashMap<>();
             PdfRenderer engine = new PdfRenderer(pd, doc, page, fonts, g, pageTx, cache, w, h);
+            // The same inputs as the importer (output intent, reference raster): the direct render differs
+            // from the OCD one only by what the model loses, never by what one side was not handed.
+            engine.intentCmyk(OutputIntentCmyk.of(PdfCatalog.outputIntent(pdf)));
+            engine.referenceRaster = PdfCatalog.referenceRaster(pdf, i);
             engine.processPage(pd);
             engine.flushText();   // flush any run still open at page end
         } finally {
@@ -143,6 +154,7 @@ public final class PdfRenderer extends PdfStreamEngine {
 
     // -- sink: paint each node inline into the current target --------------------
     @Override protected void addNode(OCDNode n) {
+        if (hidden > 0) return;                       // inside a layer switched off
         applyGroupCtx(n);
         OCDRenderer.paintNode(targets.peek(), n, page, doc, pageTx, cache);
     }
@@ -183,10 +195,9 @@ public final class PdfRenderer extends PdfStreamEngine {
     }
 
     /**
-     * A group drawn under a Luminosity soft mask (e.g. a soft drop shadow). PDFBox masks the whole
-     * group by the luminosity of a separate mask group. We render the content to one layer and the
-     * mask to another (over its backdrop colour), multiply the content's alpha by the mask
-     * luminosity, then composite the masked layer once.
+     * A group drawn under a soft mask (e.g. a soft drop shadow). We render the content to one layer and the
+     * mask group to another, both transparent, apply the mask ({@link SoftMasks#apply}, the importer's own),
+     * then composite the masked layer once.
      */
     private void renderMaskedGroup(PDTransparencyGroup form, PDSoftMask sm, String blend, float alpha) throws IOException {
         Graphics2D parent = targets.peek();
@@ -201,28 +212,18 @@ public final class PdfRenderer extends PdfStreamEngine {
             try { descendGroup(form); flushText(); }
             finally { targets.pop(); cg.dispose(); }
 
-            // 2. mask layer (its content rendered over the backdrop luminance)
+            // 2. mask layer (its group alone: SoftMasks composites the backdrop)
             BufferedImage mask = new BufferedImage(cw, ch, BufferedImage.TYPE_INT_ARGB);
             Graphics2D mg = mask.createGraphics();
             applyHints(mg);
-            int bd = backdropLuma(sm);
-            mg.setColor(new Color(bd, bd, bd));
-            mg.fillRect(0, 0, cw, ch);
             mg.setTransform(pageTx);
             targets.push(mg);
             try { descendGroup(sm.getGroup()); flushText(); }
             finally { targets.pop(); mg.dispose(); }
 
-            // 3. content alpha *= mask luminosity (PDF Luminosity: 0.30R + 0.59G + 0.11B)
-            int[] cpx = ((java.awt.image.DataBufferInt) content.getRaster().getDataBuffer()).getData();
-            int[] mpx = ((java.awt.image.DataBufferInt) mask.getRaster().getDataBuffer()).getData();
-            int n = Math.min(cpx.length, mpx.length);
-            for (int i = 0; i < n; i++) {
-                int m = mpx[i];
-                int lum = (77 * ((m >> 16) & 255) + 150 * ((m >> 8) & 255) + 29 * (m & 255)) >> 8;
-                int a = ((cpx[i] >>> 24) * lum) / 255;
-                cpx[i] = (a << 24) | (cpx[i] & 0x00FFFFFF);
-            }
+            // 3. content alpha *= mask value
+            SoftMasks.apply(((java.awt.image.DataBufferInt) content.getRaster().getDataBuffer()).getData(),
+                            ((java.awt.image.DataBufferInt) mask.getRaster().getDataBuffer()).getData(), sm);
 
             // 4. composite the masked content once
             compositeLayer(parent, content, blend, alpha);

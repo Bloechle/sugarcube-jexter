@@ -1,21 +1,16 @@
 package sugarcube.jexter.pdfimport;
 
-import sugarcube.jexter.core.ConvertOptions;
 import org.apache.pdfbox.contentstream.PDFGraphicsStreamEngine;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSDictionary;
-import org.apache.pdfbox.cos.COSInteger;
-import org.apache.pdfbox.cos.COSObject;
 import org.apache.pdfbox.cos.COSStream;
-import org.apache.pdfbox.io.RandomAccessReadBuffer;
-import org.apache.fontbox.ttf.TTFParser;
-import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDVectorFont;
 import org.apache.pdfbox.pdmodel.graphics.PDLineDashPattern;
 import org.apache.pdfbox.pdmodel.graphics.blend.BlendMode;
+import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.pdmodel.graphics.form.PDTransparencyGroup;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImage;
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceGray;
@@ -27,19 +22,14 @@ import org.apache.pdfbox.pdmodel.graphics.color.PDColor;
 import org.apache.pdfbox.pdmodel.graphics.color.PDColorSpace;
 import org.apache.pdfbox.pdmodel.graphics.color.PDPattern;
 import org.apache.pdfbox.pdmodel.graphics.shading.PDShading;
-import org.apache.pdfbox.pdmodel.graphics.shading.PDShadingType2;
-import org.apache.pdfbox.pdmodel.graphics.shading.PDShadingType3;
 import org.apache.pdfbox.pdmodel.graphics.pattern.PDAbstractPattern;
 import org.apache.pdfbox.pdmodel.graphics.pattern.PDShadingPattern;
 import org.apache.pdfbox.cos.COSArray;
-import org.apache.pdfbox.cos.COSBoolean;
 import org.apache.pdfbox.util.Matrix;
 import org.apache.pdfbox.util.Vector;
-import org.apache.pdfbox.pdmodel.graphics.state.PDSoftMask;
 
 import sugarcube.jexter.core.JxColor;
 import sugarcube.jexter.core.JxLog;
-import sugarcube.jexter.core.JxProgress;
 import sugarcube.jexter.core.JxPath;
 import sugarcube.jexter.core.JxRect;
 import sugarcube.jexter.core.JxStroke;
@@ -64,16 +54,10 @@ import java.awt.geom.Path2D;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.util.ArrayList;
-import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Abstract base that walks a PDF page's content stream with PDFBox's
@@ -109,15 +93,35 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
     protected abstract void addNode(OCDNode n);
 
     // ── marked-content / MCID tracking (for tagged-PDF structure ingestion) ──────
-    private final java.util.Deque<Integer> mcidStack = new java.util.ArrayDeque<>();
+
+    /** A marked-content id in the numbering it belongs to: the page's ({@code stream} null), or a form XObject's
+     *  own when the form states {@code /StructParents} — its MCIDs restart at 0 and the structure tree reaches
+     *  them through a reference that names the stream ({@code /Stm}, PDF 14.7.4.3). Keyed by the page alone,
+     *  a form's MCID 0 was filed under the page's MCID 0 and the two elements shared their content. */
+    public record Mcid(COSStream stream, int id) {}
+
+    private static final Mcid NO_MCID = new Mcid(null, -1);
+    private final java.util.Deque<Mcid> mcidStack = new java.util.ArrayDeque<>();
+    // the form XObjects being descended that number their own marked content, innermost first
+    private final java.util.Deque<COSStream> mcidScopes = new java.util.ArrayDeque<>();
     // optional-content (/OC) nesting, parallel to mcidStack: each entry is a layer id, or "" when
     // the marked-content sequence is not optional content.
     private final java.util.Deque<String> ocStack = new java.util.ArrayDeque<>();
 
-    /** Innermost enclosing marked-content id, or -1 if the content is untagged. */
-    protected int currentMcid() {
-        for (Integer m : mcidStack) if (m != null && m >= 0) return m;
-        return -1;
+    /** Innermost enclosing marked-content id, or null if the content is untagged. */
+    protected Mcid currentMcid() {
+        for (Mcid m : mcidStack) if (m.id() >= 0) return m;
+        return null;
+    }
+
+    @Override public void showForm(PDFormXObject form) throws IOException {
+        boolean own = ownsMcids(form);
+        if (own) mcidScopes.push(form.getCOSObject());
+        try { super.showForm(form); } finally { if (own) mcidScopes.pop(); }
+    }
+
+    private static boolean ownsMcids(PDFormXObject form) {
+        return form.getCOSObject().containsKey(COSName.STRUCT_PARENTS);
     }
 
     /** Hooks for optional-content layers: a subclass (the importer) opens an OCDLayerContent on
@@ -131,7 +135,8 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         String op = operator.getName();
         if ("BDC".equals(op) || "BMC".equals(op)) {
             flushText();                       // commit the run under its current MCID before the context changes
-            mcidStack.push(mcidOf(operands));
+            int id = mcidOf(operands);
+            mcidStack.push(id < 0 ? NO_MCID : new Mcid(mcidScopes.peek(), id));
             String[] layer = "BDC".equals(op) ? layerOf(operands) : null;   // optional content (/OC) only on BDC
             ocStack.push(layer != null ? layer[0] : "");                    // "" = not an OC sequence
             if (layer != null) beginLayer(layer[0], layer[1]);
@@ -189,11 +194,13 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
     /** Descend into a transparency-group form's content (PDFBox's default {@code Do} handling).
      *  Exposed so a subclass can reuse the descent while replacing the group composite policy. */
     protected void descendGroup(PDTransparencyGroup form) throws IOException {
-        super.showTransparencyGroup(form);
+        boolean own = ownsMcids(form);
+        if (own) mcidScopes.push(form.getCOSObject());
+        try { super.showTransparencyGroup(form); } finally { if (own) mcidScopes.pop(); }
     }
 
     /** PDF blend-mode name for a PDFBox {@link BlendMode} (null for Normal/unmapped). */
-    protected static String blendName(BlendMode bm) { return BLEND.get(bm); }
+    protected static String blendName(BlendMode bm) { return PdfColors.blendName(bm); }
 
     // open text run (glyphs grouped by font/fill/mode/baseline)
     private OCDText run;
@@ -241,173 +248,6 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         this.mergeGlyphClips = mergeGlyphClips;
     }
 
-    // ── embedded-font robustness ────────────────────────────────────────────────
-    /** DELIBERATE EXCEPTION — the one place jexter mutates PDFBox's loaded model.
-     *  The rule everywhere else is "delegate PDF/font interpretation to PDFBox"; here
-     *  we can't, because the defect is inside FontBox and the jar is vendored.
-     *
-     *  <p>Some PDFs embed subset TrueType fonts whose {@code post} (PostScript names)
-     *  table is truncated/corrupt; FontBox aborts the *entire* font on it, so PDFBox
-     *  substitutes a stand-in and the real glyphs are lost. {@code post} is non-critical
-     *  for rendering, so when a {@code FontFile2} fails to parse we downgrade its
-     *  {@code post} to version 3.0 (header only, no name array) — then {@code glyf}/
-     *  {@code loca}/{@code cmap} load and the true glyphs render. Untouched when healthy;
-     *  the edit lives only in the transient in-memory document (never the user's file). */
-    static void repairEmbeddedTrueTypeFonts(PDDocument pdf, ConvertOptions opts) {
-        // Every embedded font is parsed to find out whether it is healthy — 213 descriptors and 1.7 s on a
-        // press book, all of it before a single page is touched. It reports, or the wait is silent.
-        // Listing the descriptors is a full COS scan — 663 ms on a 1014-page book, 416 ms on a press
-        // issue that has 3 embedded TrueType fonts out of 499 descriptors — and it is one opaque call,
-        // so it can be named but not counted through.
-        opts.at(JxProgress.Stage.FONTS, 0, 0);
-        java.util.List<COSObject> descriptors = pdf.getDocument().getObjectsByType(COSName.getPDFName("FontDescriptor"));
-        int seen = 0;
-        for (COSObject obj : descriptors) {
-            if (seen % 25 == 0) opts.at(JxProgress.Stage.FONTS, seen, descriptors.size());
-            seen++;
-            if (!(obj.getObject() instanceof COSDictionary d)) continue;
-            if (!(d.getDictionaryObject(COSName.FONT_FILE2) instanceof COSStream s)) continue;
-            try {
-                byte[] b = readStream(s);
-                // Screen on the post table before parsing: every repair below rewrites post, so a font
-                // whose post is already 3.0 (or has none) cannot be changed by one — the clone would
-                // equal the original and would fail the same way. Parsing it to find that out cost
-                // 752 ms of the 1071 on a 213-font book, where the directory read costs 23 ms and
-                // leaves 10 fonts worth parsing.
-                Table post = table(b, "post");
-                if (post == null || version(b, post.off) == POST_3_0) continue;
-                if (ttfParses(b)) continue;                 // healthy → leave alone
-                byte[] fixed = rebuiltPost(b, post);        // first choice: KEEP the names
-                if (fixed == null || !ttfParses(fixed)) {
-                    // Last resort: drop the names entirely. Only legitimate when the program carries a
-                    // cmap, because then the cmap is the code→glyph authority and post is decoration.
-                    // With no cmap the names ARE the mapping: a font repaired this way loads, maps every
-                    // code to .notdef and paints NOTHING — worse than the substitute PDFBox would have
-                    // used, and invisible to every gate but a pixel. Measured on a press page: two faces,
-                    // 68 and 73 codes, 0 inked (see the note above rebuiltPost).
-                    if (table(b, "cmap") == null) continue;
-                    fixed = b.clone();
-                    fixed[post.off] = 0; fixed[post.off + 1] = 3; fixed[post.off + 2] = 0; fixed[post.off + 3] = 0;
-                    if (!ttfParses(fixed)) continue;        // unfixable → let PDFBox fall back
-                }
-                try (OutputStream os = s.createOutputStream(COSName.FLATE_DECODE)) { os.write(fixed); }
-                s.setItem(COSName.LENGTH1, COSInteger.get(fixed.length));
-            } catch (IOException ignored) { }
-        }
-    }
-
-    private static byte[] readStream(COSStream s) throws IOException {
-        try (InputStream in = s.createInputStream()) { return in.readAllBytes(); }
-    }
-
-    private static boolean ttfParses(byte[] b) {
-        try { new TTFParser(true).parse(new RandomAccessReadBuffer(b)); return true; }
-        catch (Exception e) { return false; }
-    }
-
-    private static final int POST_3_0 = 0x00030000;
-    private static final int POST_HEADER = 32;          // version … maxMemType1, then numberOfGlyphs
-
-    /** One entry of the sfnt table directory: where the entry itself sits, and what it points at. */
-    private record Table(int entry, int off, int len) { }
-
-    /** The {@code tag} table of {@code b}, or null when there is none — the one place the table
-     *  directory is walked. */
-    private static Table table(byte[] b, String tag) {
-        try {
-            DataInputStream in = new DataInputStream(new ByteArrayInputStream(b));
-            in.skipBytes(4);                                    // sfnt version
-            int n = in.readUnsignedShort();
-            in.skipBytes(6);                                    // searchRange/entrySelector/rangeShift
-            for (int i = 0; i < n; i++) {
-                int entry = 12 + i * 16;
-                byte[] t = new byte[4];
-                in.readFully(t);
-                in.skipBytes(4);                                // checksum
-                long off = in.readInt() & 0xffffffffL;
-                long len = in.readInt() & 0xffffffffL;
-                if (tag.equals(new String(t, java.nio.charset.StandardCharsets.US_ASCII)) && off + 4 <= b.length)
-                    return new Table(entry, (int) off, (int) Math.min(len, b.length - off));
-            }
-        } catch (IOException malformed) { /* no directory to read: nothing to repair */ }
-        return null;
-    }
-
-    /**
-     * Rebuild a truncated {@code post} 2.0 table, KEEPING every glyph name that is still there.
-     *
-     * <p>The defect these fonts carry is in the name array alone: the header, the glyph count and the
-     * whole index array are intact, and so are the first names — which are the ones the document uses,
-     * since a subset is ordered by first use. FontBox nevertheless aborts the entire font when the
-     * array ends early, PDFBox substitutes, and the real glyphs are lost.
-     *
-     * <p>So the table is rewritten with the names that parsed and an empty name for each one missing,
-     * APPENDED at the end of the program with the directory entry re-pointed at it: no other table
-     * moves, and nothing already valid is touched. Keeping the names matters because a simple
-     * non-symbolic TrueType with no {@code cmap} maps a code through its glyph NAME and nothing else —
-     * throwing them away is what made two faces of a press page load perfectly and paint nothing.
-     *
-     * @return the repaired program, or null when the table is not a repairable post 2.0
-     */
-    private static byte[] rebuiltPost(byte[] b, Table post) {
-        try {
-            if (version(b, post.off) != 0x00020000) return null;
-            int at = post.off + POST_HEADER;
-            int numGlyphs = ((b[at] & 255) << 8) | (b[at + 1] & 255);
-            if (numGlyphs <= 0 || at + 2 + numGlyphs * 2 > b.length) return null;
-            int[] index = new int[numGlyphs];
-            int maxIndex = 0;
-            for (int i = 0; i < numGlyphs; i++) {
-                index[i] = ((b[at + 2 + i * 2] & 255) << 8) | (b[at + 3 + i * 2] & 255);
-                maxIndex = Math.max(maxIndex, index[i]);
-            }
-            int needed = Math.max(0, maxIndex - 257);            // names past the 258 standard Macintosh ones
-            // Read the Pascal strings that ARE there, stopping at the first one the table cannot hold.
-            java.util.List<byte[]> names = new java.util.ArrayList<>();
-            int p = at + 2 + numGlyphs * 2, end = Math.min(post.off + post.len, b.length);
-            while (names.size() < needed && p < end) {
-                int len = b[p] & 255;
-                if (p + 1 + len > end) break;                     // the truncation itself
-                names.add(java.util.Arrays.copyOfRange(b, p + 1, p + 1 + len));
-                p += 1 + len;
-            }
-            if (names.isEmpty()) return null;                    // nothing salvaged: not worth the rewrite
-
-            java.io.ByteArrayOutputStream t = new java.io.ByteArrayOutputStream();
-            t.write(b, post.off, POST_HEADER + 2 + numGlyphs * 2);   // header + count + index, verbatim
-            for (byte[] n : names) { t.write(n.length); t.write(n, 0, n.length); }
-            for (int i = names.size(); i < needed; i++) t.write(0);  // an empty name: legal, and unmappable
-            byte[] table = t.toByteArray();
-
-            int newOff = (b.length + 3) & ~3;                      // sfnt tables are 4-byte aligned
-            byte[] out = java.util.Arrays.copyOf(b, newOff + ((table.length + 3) & ~3));
-            System.arraycopy(table, 0, out, newOff, table.length);
-            put32(out, post.entry + 4, checksum(table));
-            put32(out, post.entry + 8, newOff);
-            put32(out, post.entry + 12, table.length);
-            return out;
-        } catch (RuntimeException malformed) { return null; }
-    }
-
-    /** The sfnt table checksum: the sum of the table's 32-bit words, zero-padded to a word. */
-    private static int checksum(byte[] t) {
-        int sum = 0;
-        for (int i = 0; i < t.length; i += 4) {
-            int w = 0;
-            for (int k = 0; k < 4; k++) w = (w << 8) | (i + k < t.length ? t[i + k] & 255 : 0);
-            sum += w;
-        }
-        return sum;
-    }
-
-    private static void put32(byte[] b, int at, int v) {
-        b[at] = (byte) (v >>> 24); b[at + 1] = (byte) (v >>> 16); b[at + 2] = (byte) (v >>> 8); b[at + 3] = (byte) v;
-    }
-
-    private static int version(byte[] b, int at) {
-        return ((b[at] & 255) << 24) | ((b[at + 1] & 255) << 16) | ((b[at + 2] & 255) << 8) | (b[at + 3] & 255);
-    }
-
     // ── path construction (page-space) ─────────────────────────────────────────
     @Override public void moveTo(float x, float y)                                  { path.moveTo(x, y); }
     @Override public void lineTo(float x, float y)                                  { path.lineTo(x, y); }
@@ -434,7 +274,7 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
     // ── painting ────────────────────────────────────────────────────────────────
     @Override public void fillPath(int windingRule) throws IOException {
         path.setWindingRule(windingRule);
-        if (needsReferenceRaster() && emitFromReference(new Area(path)))
+        if (beyondVectors(getGraphicsState(), false) && emitFromReference(new Area(path)))
             { applyPendingClip(); path = new JxPath(); return; }
         emit(fillPaint(new OCDPath(path)));
         applyPendingClip();
@@ -442,6 +282,8 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
     }
 
     @Override public void strokePath() throws IOException {
+        if (beyondVectors(getGraphicsState(), true) && emitFromReference(strokedArea()))
+            { applyPendingClip(); path = new JxPath(); return; }
         OCDPath outline = strokeOutline();
         if (outline != null) emit(outline);
         else {
@@ -455,8 +297,12 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
 
     @Override public void fillAndStrokePath(int windingRule) throws IOException {
         path.setWindingRule(windingRule);
-        if (needsReferenceRaster() && emitFromReference(new Area(path)))
-            { applyPendingClip(); path = new JxPath(); return; }
+        PDGraphicsState gs = getGraphicsState();
+        if (beyondVectors(gs, false) || beyondVectors(gs, true)) {
+            Area ink = new Area(path);
+            ink.add(strokedArea());
+            if (emitFromReference(ink)) { applyPendingClip(); path = new JxPath(); return; }
+        }
         OCDPath outline = strokeOutline();
         if (outline != null) { emit(fillPaint(new OCDPath(path))); emit(outline); }
         else {
@@ -493,8 +339,23 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         double smax = Math.sqrt((p + disc) / 2), smin = Math.sqrt(Math.max(0, (p - disc) / 2));
         if (smin <= 1e-9 || smax / smin < 1.02) return null;          // isotropic enough, or degenerate
         if (transformWidth(lw) < 0.05 || lw * smin < 0.05) return null;   // a hairline stays a hairline
+        Shape ink = penOutline(0);
+        if (ink == null) return null;
+        JxPath outline = new JxPath(ink);
+        outline.setWindingRule(java.awt.geom.Path2D.WIND_NON_ZERO);
+        OCDPath o = new OCDPath(outline).fill(strokeArgb());
+        o.fillCmyk(strokeCmyk());                                     // the pen's colour, now a fill
+        return o;
+    }
+
+    /** The current path as the stroke paints it, in page space: the pen traced in USER space (untransformed
+     *  width and dash, never thinner than {@code minWidth} there), the outline carried forward by the CTM —
+     *  exact under any CTM, dashes and caps included. Null when the CTM cannot be inverted. */
+    private Shape penOutline(double minWidth) {
+        PDGraphicsState gs = getGraphicsState();
+        AffineTransform ctm = gs.getCurrentTransformationMatrix().createAffineTransform();
         try {
-            java.awt.Shape local = ctm.createInverse().createTransformedShape(path);
+            Shape local = ctm.createInverse().createTransformedShape(path);
             double[] dash = null;
             PDLineDashPattern dp = gs.getLineDashPattern();
             if (dp != null && dp.getDashArray() != null && dp.getDashArray().length > 0) {
@@ -502,17 +363,19 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
                 dash = new double[da.length];
                 for (int i = 0; i < da.length; i++) dash[i] = da[i];
             }
-            // the pen in USER space (untransformed width and dash): the CTM is applied to its outline after
-            java.awt.BasicStroke pen = new JxStroke(lw, JxStroke.Cap.of(gs.getLineCap()), JxStroke.Join.of(gs.getLineJoin()),
-                    gs.getMiterLimit(), dash, dp == null ? 0 : dp.getPhase()).awt(1, 0);
-            JxPath outline = new JxPath(ctm.createTransformedShape(pen.createStrokedShape(local)));
-            outline.setWindingRule(java.awt.geom.Path2D.WIND_NON_ZERO);
-            OCDPath o = new OCDPath(outline).fill(strokeArgb());
-            o.fillCmyk(strokeCmyk());                                 // the pen's colour, now a fill
-            return o;
+            java.awt.BasicStroke pen = new JxStroke(gs.getLineWidth(), JxStroke.Cap.of(gs.getLineCap()), JxStroke.Join.of(gs.getLineJoin()),
+                    gs.getMiterLimit(), dash, dp == null ? 0 : dp.getPhase()).awt(1, minWidth);
+            return ctm.createTransformedShape(pen.createStrokedShape(local));
         } catch (java.awt.geom.NoninvertibleTransformException | IllegalArgumentException e) {
             return null;
         }
+    }
+
+    /** What a stroke of the current path covers, for cropping it from the reference: a hairline is given
+     *  one page unit, and a pen that cannot be traced the path's own bounds. */
+    private Area strokedArea() {
+        Shape ink = penOutline(1 / Math.max(1e-6, transformWidth(1)));
+        return new Area(ink != null ? ink : path.getBounds2D());
     }
 
     /** Apply the current non-stroking paint to a path: the solid argb, plus a first-class gradient
@@ -530,17 +393,18 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
     protected java.util.function.Supplier<BufferedImage> referenceRaster;
     private BufferedImage refRasterCache;
 
-    /** True when the current non-stroking paint cannot be expressed by the model as vectors:
-     *  a tiling pattern, or any paint under a soft mask (ExtGState /SMask) — a gradient fill and a
-     *  `sh` included. Those two used to take their own vector route and dropped the mask on the way:
-     *  a blue gradient that fades out over a photo under a luminosity mask came back as an opaque
-     *  slab hiding the photo (a press cover ad, measured). The model has a gradient; it has no mask. */
-    private boolean needsReferenceRaster() {
-        PDGraphicsState gs = getGraphicsState();
+    /** True when a paint in this state cannot be expressed by the model as vectors: anything under a soft
+     *  mask (ExtGState /SMask) — fill, stroke, glyph, image, gradient and {@code sh} alike — or a tiling
+     *  pattern in the paint used ({@code stroking} or not). The model has a gradient; it has no mask. Checked
+     *  for fills alone, a soft-masked stroke, glyph or image painted opaque, and a blue gradient fading over a
+     *  photo came back as a slab hiding it (a press cover ad, measured). The importer and the reference
+     *  raster ({@link ReferenceRaster}) ask the same question, so the crop holds exactly what is cropped. */
+    static boolean beyondVectors(PDGraphicsState gs, boolean stroking) {
         if (gs.getSoftMask() != null) return true;
-        if (gs.getNonStrokingColorSpace() instanceof PDPattern pcs) {
+        PDColorSpace cs = stroking ? gs.getStrokingColorSpace() : gs.getNonStrokingColorSpace();
+        if (cs instanceof PDPattern pcs) {
             try {
-                return pcs.getPattern(gs.getNonStrokingColor())
+                return pcs.getPattern(stroking ? gs.getStrokingColor() : gs.getNonStrokingColor())
                         instanceof org.apache.pdfbox.pdmodel.graphics.pattern.PDTilingPattern;
             } catch (Exception e) { return true; }
         }
@@ -559,10 +423,13 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         Area clip = getGraphicsState().getCurrentClippingPath();
         if (clip != null) a.intersect(clip);
         if (a.isEmpty()) return true;                       // nothing visible: consumed
-        Rectangle2D b0 = a.getBounds2D();
-        if (b0.getWidth() < 0.5 || b0.getHeight() < 0.5) return true;
+        if (a.getBounds2D().getWidth() < 0.5 || a.getBounds2D().getHeight() < 0.5) return true;
         JxRect pb = page.effectiveBox();
         double sx = ref.getWidth() / pb.width(), sy = ref.getHeight() / pb.height();
+        // The reference holds the offending paint alone, so the crop may reach past its exact outline: one pixel
+        // more keeps the antialiased edge the reference drew, which a hard clip on the outline would cut away.
+        a.add(new Area(new java.awt.BasicStroke((float) (2 / Math.min(sx, sy))).createStrokedShape(a)));
+        Rectangle2D b0 = a.getBounds2D();
         // Snap the crop to the reference pixel grid: the copy becomes an exact 1:1 pixel
         // transfer (no sub-pixel phase — decisive on high-frequency fills like tilings).
         Rectangle2D b = new Rectangle2D.Double(
@@ -629,12 +496,12 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
             if (area.isEmpty()) return;
             Rectangle2D b = area.getBounds2D();
             if (b.getWidth() < 0.5 || b.getHeight() < 0.5) return;
-            if (getGraphicsState().getSoftMask() != null && emitFromReference(area)) return;
+            if (beyondVectors(getGraphicsState(), false) && emitFromReference(area)) return;
             float alpha = (float) getGraphicsState().getNonStrokeAlphaConstant();
 
             // Axial/radial → first-class gradient: emit the fill region (extent ∩ clip) as an OCDPath
             // carrying the gradient paint, instead of rasterising. Mesh/function shadings fall through.
-            OCDGradient grad = gradientOf(sh, ctm, alpha);
+            OCDGradient grad = PdfColors.gradientOf(sh, ctm, alpha);
             if (grad != null) {
                 emit(new OCDPath(new JxPath(area)).fill(grad.flatArgb()).fillGradient(grad));
                 return;
@@ -675,6 +542,10 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
     }
 
     @Override public void drawImage(PDImage pdImage) throws IOException {
+        if (getGraphicsState().getSoftMask() != null) {                // the image under its mask, from the reference
+            AffineTransform ctm = getGraphicsState().getCurrentTransformationMatrix().createAffineTransform();
+            if (emitFromReference(new Area(ctm.createTransformedShape(new Rectangle2D.Double(0, 0, 1, 1))))) return;
+        }
         // A stencil (ImageMask) has no colours of its own: it paints the CURRENT non-stroking
         // colour through its 1-bit mask. getImage() would give black — ask for the stencil
         // rendered in the live fill colour instead (exactly what PageDrawer does).
@@ -781,7 +652,11 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
     @Override public void beginText() throws IOException {
         super.beginText();
         textClippings = new ArrayList<>();
+        maskedInk = null;
     }
+
+    // glyphs painted under a soft mask in this text object: their ink comes from the reference, once, at ET
+    private Area maskedInk;
 
     /** ET — fold any accumulated text clip (Tr modes 4–7) into the graphics-state clip, so content
      *  painted "through" the clipping text (e.g. an image filling textured/gradient glyphs) is masked
@@ -797,6 +672,7 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
             dropClip();
         }
         textClippings = null;
+        if (maskedInk != null) { flushText(); emitFromReference(maskedInk); maskedInk = null; }
         super.endText();
     }
 
@@ -821,6 +697,16 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
 
         int fill = fillArgb();
         int mode = getGraphicsState().getTextState().getRenderingMode().intValue();
+        // Under a soft mask the INK comes from the reference (cropped at ET) and the run stays as text with
+        // no ink of its own — invisible text is text: dropped, it would repaint identically and de-OCR the page.
+        if (referenceRaster != null && getGraphicsState().getSoftMask() != null && mode != 3 && mode != 7) {
+            Shape ink = clipGlyph(trm, font, code);
+            if (ink != null) {
+                if (maskedInk == null) maskedInk = new Area();
+                maskedInk.add(new Area(ink));
+                mode = mode >= 4 ? 7 : 3;
+            }
+        }
         // Tr 4–7 add the glyph to the text clip. The base engine does not accumulate it, so we
         // rebuild the glyph's page-space outline from the font and buffer it for ET.
         if (textClippings != null && getGraphicsState().getTextState().getRenderingMode().isClip()) {
@@ -955,7 +841,7 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         n.z(z++);   // paint order; id minted later by IdStamper
         String cid = currentClipId();
         if (cid != null) n.clipId(cid);
-        String name = BLEND.get(getGraphicsState().getBlendMode());
+        String name = blendName(getGraphicsState().getBlendMode());
         if (name != null) n.blend(name);
         addNode(n);
     }
@@ -1063,54 +949,18 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
     /** The fill's colour AS THE DOCUMENT STATED IT, when that was CMYK — see {@link sugarcube.jexter.core.JxCmyk}. */
     private sugarcube.jexter.core.JxCmyk fillCmyk() {
         PDGraphicsState gs = getGraphicsState();
-        return cmykOf(gs.getNonStrokingColorSpace(), gs.getNonStrokingColor(), fillArgb());
+        return PdfColors.cmykOf(gs.getNonStrokingColorSpace(), gs.getNonStrokingColor(), fillArgb());
     }
 
     private sugarcube.jexter.core.JxCmyk strokeCmyk() {
         PDGraphicsState gs = getGraphicsState();
-        return cmykOf(gs.getStrokingColorSpace(), gs.getStrokingColor(), strokeArgb());
-    }
-
-    /**
-     * DeviceCMYK as it is; a Separation or DeviceN whose ALTERNATE is DeviceCMYK through its own tint
-     * transform — which is what a spot colour means to any reader without that ink, and exactly what a
-     * press subset carries. Everything else (ICC-based CMYK included: its profile would be lost by a
-     * bare {@code k}) states no CMYK and keeps the sRGB alone.
-     */
-    private static sugarcube.jexter.core.JxCmyk cmykOf(PDColorSpace cs, PDColor color, int argb) {
-        float[] v = cmykComponents(cs, color);
-        return v == null ? null : new sugarcube.jexter.core.JxCmyk(v[0], v[1], v[2], v[3], argb);
-    }
-
-    /** The paint as four CMYK components, when it is one (see {@link #cmykOf}); null otherwise. */
-    private static float[] cmykComponents(PDColorSpace cs, PDColor color) {
-        try {
-            float[] v = color == null ? null : color.getComponents();
-            if (v == null) return null;
-            if (cs instanceof org.apache.pdfbox.pdmodel.graphics.color.PDDeviceCMYK) {
-                if (v.length != 4) return null;
-            } else if (cs instanceof org.apache.pdfbox.pdmodel.graphics.color.PDSeparation sep) {
-                if (!(sep.getAlternateColorSpace() instanceof org.apache.pdfbox.pdmodel.graphics.color.PDDeviceCMYK)) return null;
-                v = sep.getCOSObject() instanceof org.apache.pdfbox.cos.COSArray a ? tint(a, v) : null;
-            } else if (cs instanceof org.apache.pdfbox.pdmodel.graphics.color.PDDeviceN dn) {
-                if (!(dn.getAlternateColorSpace() instanceof org.apache.pdfbox.pdmodel.graphics.color.PDDeviceCMYK)) return null;
-                v = dn.getTintTransform().eval(v);
-            } else return null;
-            return v == null || v.length != 4 ? null : v;
-        } catch (Exception e) {
-            return null;                                       // unreadable tint → sRGB only, as before
-        }
+        return PdfColors.cmykOf(gs.getStrokingColorSpace(), gs.getStrokingColor(), strokeArgb());
     }
 
     /** The document's CMYK output intent, when it has one — installed by the importer, shared by every
      *  page. Null: {@code DeviceCMYK} converts through PDFBox's built-in profile, as it always did. */
     private OutputIntentCmyk intentCmyk;
     void intentCmyk(OutputIntentCmyk c) { this.intentCmyk = c; }
-
-    /** A Separation's tint transform, read off its array: {@code [/Separation name alternate tintTransform]}. */
-    private static float[] tint(org.apache.pdfbox.cos.COSArray sep, float[] v) throws IOException {
-        return org.apache.pdfbox.pdmodel.common.function.PDFunction.create(sep.getObject(3)).eval(v);
-    }
 
     private int strokeArgb() {
         PDGraphicsState gs = getGraphicsState();
@@ -1138,11 +988,11 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
                 return sampled != null ? sampled : neutral(alpha);
             }
             if (intentCmyk != null) {                          // CMYK means what the output intent says it means
-                float[] k = cmykComponents(cs, color);
-                if (k != null) return argb(intentCmyk.toRGB(k), alpha);
+                float[] k = PdfColors.cmykComponents(cs, color);
+                if (k != null) return PdfColors.argb(intentCmyk.toRGB(k), alpha);
             }
             float[] rgb = cs.toRGB(color.getComponents());
-            return argb(rgb, alpha);
+            return PdfColors.argb(rgb, alpha);
         } catch (Exception e) {   // IOException, UnsupportedOperationException (patterns), malformed CS
             JxLog.debug(PdfStreamEngine.class, "color conversion failed \u2192 neutral grey", e);
             return neutral(alpha);
@@ -1160,7 +1010,7 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
             if (sh == null) return null;
             int type = sh.getShadingType();
             if (type != 1 && type != 2 && type != 3) return null;                        // mesh: no function to walk
-            float[] dom = toArr(sh.getCOSObject().getCOSArray(COSName.DOMAIN));
+            float[] dom = PdfColors.toArr(sh.getCOSObject().getCOSArray(COSName.DOMAIN));
             float d0 = (dom != null && dom.length >= 2) ? dom[0] : 0f;
             float d1 = (dom != null && dom.length >= 2) ? dom[1] : 1f;
             PDColorSpace cs = sh.getColorSpace();
@@ -1171,13 +1021,13 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
                 float[] rgb;
                 try { rgb = cs.toRGB(sh.evalFunction(new float[]{ d0 + (d1 - d0) * i / (float) (N - 1) })); }
                 catch (Exception skip) { continue; }
-                r += clamp8(Math.round(rgb[0] * 255));
-                g += clamp8(Math.round(rgb[1] * 255));
-                b += clamp8(Math.round(rgb[2] * 255));
+                r += PdfColors.clamp8(Math.round(rgb[0] * 255));
+                g += PdfColors.clamp8(Math.round(rgb[1] * 255));
+                b += PdfColors.clamp8(Math.round(rgb[2] * 255));
                 n++;
             }
             if (n == 0) return null;
-            return JxColor.rgba((int) (r / n), (int) (g / n), (int) (b / n), clamp8(Math.round(alpha * 255))).argb();
+            return JxColor.rgba((int) (r / n), (int) (g / n), (int) (b / n), PdfColors.clamp8(Math.round(alpha * 255))).argb();
         } catch (Exception e) {
             JxLog.debug(PdfStreamEngine.class, "shading sample failed \u2192 neutral grey", e);
             return null;
@@ -1194,7 +1044,7 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
             PDAbstractPattern pat = pcs.getPattern(gs.getNonStrokingColor());
             if (pat instanceof PDShadingPattern sp) {
                 Matrix m = Matrix.concatenate(getInitialMatrix(), sp.getMatrix());   // pattern space → page
-                return gradientOf(sp.getShading(), m, (float) gs.getNonStrokeAlphaConstant());
+                return PdfColors.gradientOf(sp.getShading(), m, (float) gs.getNonStrokeAlphaConstant());
             }
         } catch (Exception e) {
             JxLog.debug(PdfStreamEngine.class, "shading pattern resolve failed", e);
@@ -1202,89 +1052,5 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         return null;
     }
 
-    /** Sample a PDF axial (type 2) / radial (type 3) shading into an {@link OCDGradient}. The
-     *  colour ramp is sampled from the shading's function across its domain; {@code m} maps the
-     *  shading's own coordinate space to page space. Returns null for other shading types (the
-     *  caller rasterises those). */
-    private static OCDGradient gradientOf(PDShading sh, Matrix m, float alpha) {
-        try {
-            int type = sh.getShadingType();
-            float[] co; float[] dom; COSArray ext;
-            if (type == 2) {
-                PDShadingType2 s = (PDShadingType2) sh;
-                co = s.getCoords().toFloatArray(); dom = toArr(s.getDomain()); ext = s.getExtend();
-            } else if (type == 3) {
-                PDShadingType3 s = (PDShadingType3) sh;
-                co = s.getCoords().toFloatArray(); dom = toArr(s.getDomain()); ext = s.getExtend();
-            } else {
-                return null;   // 1 (function-based) / 4–7 (mesh) → rasterise
-            }
-            double[] coords = new double[co.length];
-            for (int i = 0; i < co.length; i++) coords[i] = co[i];
-            float d0 = (dom != null && dom.length == 2) ? dom[0] : 0f;
-            float d1 = (dom != null && dom.length == 2) ? dom[1] : 1f;
-            boolean e0 = ext != null && ext.size() == 2 && ext.getObject(0) instanceof COSBoolean b0 && b0.getValue();
-            boolean e1 = ext != null && ext.size() == 2 && ext.getObject(1) instanceof COSBoolean b1 && b1.getValue();
-
-            PDColorSpace cs = sh.getColorSpace();
-            int a8 = clamp8(Math.round(alpha * 255));
-            final int N = 33;                          // linear interpolation between 33 samples
-            float[] offs = new float[N];
-            int[]   cols = new int[N];
-            for (int i = 0; i < N; i++) {
-                float f = i / (float) (N - 1);
-                float[] rgb = cs.toRGB(sh.evalFunction(new float[]{ d0 + (d1 - d0) * f }));
-                cols[i] = JxColor.rgba(clamp8(Math.round(rgb[0] * 255)),
-                                       clamp8(Math.round(rgb[1] * 255)),
-                                       clamp8(Math.round(rgb[2] * 255)), a8).argb();
-                offs[i] = f;
-            }
-            OCDGradient.Kind kind = (type == 2) ? OCDGradient.Kind.LINEAR : OCDGradient.Kind.RADIAL;
-            OCDGradient g = new OCDGradient(kind, coords, offs, cols,
-                    JxTransform.of(m.createAffineTransform()), e0, e1);
-            return g.isValid() ? g : null;
-        } catch (Exception e) {
-            JxLog.debug(PdfStreamEngine.class, "gradient extraction failed \u2192 fallback", e);
-            return null;
-        }
-    }
-
-    private static float[] toArr(COSArray a) { return a == null ? null : a.toFloatArray(); }
-    private static int clamp8(int v) { return v < 0 ? 0 : Math.min(255, v); }
-
-    private static int argb(float[] rgb, float a) {
-        return JxColor.rgba(Math.round(rgb[0] * 255), Math.round(rgb[1] * 255), Math.round(rgb[2] * 255),
-                Math.round(a * 255)).argb();
-    }
-
-    private static final Map<BlendMode, String> BLEND = new IdentityHashMap<>();
-    static {
-        BLEND.put(BlendMode.MULTIPLY, "Multiply");
-        BLEND.put(BlendMode.SCREEN, "Screen");
-        BLEND.put(BlendMode.OVERLAY, "Overlay");
-        BLEND.put(BlendMode.DARKEN, "Darken");
-        BLEND.put(BlendMode.LIGHTEN, "Lighten");
-        BLEND.put(BlendMode.COLOR_DODGE, "ColorDodge");
-        BLEND.put(BlendMode.COLOR_BURN, "ColorBurn");
-        BLEND.put(BlendMode.HARD_LIGHT, "HardLight");
-        BLEND.put(BlendMode.SOFT_LIGHT, "SoftLight");
-        BLEND.put(BlendMode.DIFFERENCE, "Difference");
-        BLEND.put(BlendMode.EXCLUSION, "Exclusion");
-        BLEND.put(BlendMode.HUE, "Hue");
-        BLEND.put(BlendMode.SATURATION, "Saturation");
-        BLEND.put(BlendMode.COLOR, "Color");
-        BLEND.put(BlendMode.LUMINOSITY, "Luminosity");
-    }
-
-    /** The luminance an SMask composites against — the same reading for the model importer and for the
-     *  direct renderer, which is why it lives on the engine they both extend rather than twice below it. */
-    protected static int backdropLuma(PDSoftMask sm) {
-        try {
-            var bc = sm.getCOSObject().getDictionaryObject(org.apache.pdfbox.cos.COSName.BC);
-            if (bc instanceof org.apache.pdfbox.cos.COSArray arr && arr.size() > 0)
-                return Math.round(((org.apache.pdfbox.cos.COSNumber) arr.getObject(0)).floatValue() * 255);
-        } catch (Exception ignore) { }
-        return 0;
-    }
 
 }

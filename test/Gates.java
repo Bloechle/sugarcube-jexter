@@ -20,15 +20,31 @@
 // it is produced, so it is never committed. Name PDFs to gate those instead:
 //   java -cp "target/test-classes:target/classes:lib/*" Gates a.pdf …   (SOURCE_DATE_EPOCH set; `;` on Windows)
 
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.documentinterchange.logicalstructure.PDMarkedContentReference;
+import org.apache.pdfbox.pdmodel.documentinterchange.logicalstructure.PDStructureElement;
+import org.apache.pdfbox.pdmodel.interactive.action.PDActionGoTo;
+import org.apache.pdfbox.rendering.PDFRenderer;
+import org.apache.pdfbox.pdmodel.interactive.action.PDActionURI;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDDestination;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDNamedDestination;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem;
 import sugarcube.jexter.core.JxStroke;
 import sugarcube.jexter.core.JxTransform;
 import sugarcube.jexter.ocd.io.OCDReader;
 import sugarcube.jexter.ocd.io.OCDVocab;
 import sugarcube.jexter.ocd.model.*;
+import sugarcube.jexter.ocd.render.OCDRenderer;
 import sugarcube.jexter.pdfimport.PdfImporter;
+import sugarcube.jexter.pdfimport.PdfRenderer;
 import sugarcube.jexter.write.Conversion;
 import sugarcube.jexter.write.SvgOcdWriter;
 
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -75,6 +91,9 @@ public final class Gates {
             OCDDocument model = PdfImporter.convert(pdf);
             gate("MODEL",    () -> model(model, tmp.resolve(pdf.getName() + ".model.ocd.epub")));
             gate("TIERS",    () -> tiers(container.toFile()));
+            gate("NAV",      () -> nav(pdf, model));
+            gate("TAGS",     () -> tags(pdf, model));
+            gate("PIXELS",   () -> pixels(pdf, model));
             gate("STRADDLE", () -> straddle(model));
             gate("CLIPS",    () -> clips(model, OCDReader.read(container.toFile())));
             gate("COPY",     () -> copies(OCDReader.read(container.toFile())));
@@ -140,6 +159,12 @@ public final class Gates {
         List<String> bad = new ArrayList<>();
         if (src.pageCount() != back.pageCount()) bad.add("pages " + src.pageCount() + " -> " + back.pageCount());
         if (src.fonts().size() != back.fonts().size()) bad.add("fonts " + src.fonts().size() + " -> " + back.fonts().size());
+        for (var f : src.fonts().values())                            // a cmap entry names the glyph OF that character
+            for (var e : f.cmap().entrySet()) {
+                var g = f.glyph(e.getValue());
+                String ch = new String(Character.toChars(e.getKey()));
+                if (g == null || !ch.equals(g.unicode())) bad.add(f.id() + " maps '" + ch + "' to glyph " + e.getValue() + (g == null ? "" : " (" + g.unicode() + ")"));
+            }
         for (String ext : List.of("png", "jpg")) {                    // a document read back already holds names
             String fresh = back.newImageRef(ext);
             if (back.images().containsKey(fresh)) bad.add("a new image ref collides with a stored one: " + fresh);
@@ -249,6 +274,132 @@ public final class Gates {
     }
 
     // ── STRADDLE ─────────────────────────────────────────────────────────────────
+
+    // ── NAV ──────────────────────────────────────────────────────────────────────
+
+    /** Every bookmark and every internal link lands where PDFBox resolves it — an explicit destination, a name
+     *  in {@code /Names /Dests}, a name in the catalog's {@code /Dests}, or a GoTo action carrying any of them. */
+    private static List<String> nav(File pdf, OCDDocument model) throws Exception {
+        List<String> bad = new ArrayList<>();
+        try (PDDocument src = Loader.loadPDF(pdf)) {
+            var outline = src.getDocumentCatalog().getDocumentOutline();
+            List<String> want = new ArrayList<>(), got = new ArrayList<>();
+            if (outline != null) for (PDOutlineItem it : outline.children()) bookmarks(src, it, want);
+            for (OCDOutline o : model.outline()) bookmarks(o, got);
+            if (!want.equals(got)) bad.add("outline " + got + ", PDFBox says " + want);
+            for (int i = 0; i < src.getNumberOfPages(); i++) {
+                List<Integer> pages = new ArrayList<>();
+                for (var an : src.getPage(i).getAnnotations())
+                    if (an instanceof PDAnnotationLink lk && !(lk.getAction() instanceof PDActionURI)) {
+                        PDDestination d = lk.getDestination();
+                        if (d == null && lk.getAction() instanceof PDActionGoTo go) d = go.getDestination();
+                        if (d instanceof PDNamedDestination n) d = src.getDocumentCatalog().findNamedDestinationPage(n);
+                        if (d instanceof PDPageDestination pd && pd.retrievePageNumber() >= 0) pages.add(pd.retrievePageNumber());
+                    }
+                List<Integer> mine = model.page(i).links().stream().filter(l -> !l.isExternal()).map(OCDLink::pageIndex).toList();
+                if (!pages.equals(mine)) bad.add("page " + (i + 1) + " links to " + mine + ", PDFBox says " + pages);
+            }
+        }
+        return bad;
+    }
+
+    private static void bookmarks(PDDocument src, PDOutlineItem it, List<String> out) throws Exception {
+        PDPage p = it.findDestinationPage(src);
+        out.add(it.getTitle() + "@" + (p == null ? -1 : src.getPages().indexOf(p)));
+        for (PDOutlineItem c : it.children()) bookmarks(src, c, out);
+    }
+
+    private static void bookmarks(OCDOutline o, List<String> out) {
+        out.add(o.title() + "@" + o.pageIndex());
+        for (OCDOutline c : o.children()) bookmarks(c, out);
+    }
+
+    // ── PIXELS ───────────────────────────────────────────────────────────────────
+
+    /** The model paints what PDFBox paints: at 72 dpi, without annotations, under 1 % of a page's pixels may
+     *  differ by more than a quarter of the range on any channel (antialiasing and font hinting stay well
+     *  under it). The direct renderer — our painting straight from the PDF, fed what the importer is fed —
+     *  must agree with the model's render to 0.25 %: a gap there is lost in the model, not in the painting. */
+    private static List<String> pixels(File pdf, OCDDocument model) throws Exception {
+        List<String> bad = new ArrayList<>();
+        try (PDDocument src = Loader.loadPDF(pdf)) {
+            PDFRenderer reference = new PDFRenderer(src);
+            reference.setAnnotationsFilter(a -> false);
+            for (int i = 0; i < src.getNumberOfPages(); i++) {
+                BufferedImage ocd = OCDRenderer.render(model.page(i), model, 72, false);
+                double ref = differs(reference.renderImage(i, 1f), ocd), direct = differs(PdfRenderer.render(src, i, 72), ocd);
+                if (ref > 1)     bad.add(String.format("page %d: %.2f %% of pixels differ from PDFBox", i + 1, ref));
+                if (direct > 0.25) bad.add(String.format("page %d: %.2f %% of pixels differ from the direct render", i + 1, direct));
+            }
+        }
+        return bad;
+    }
+
+    /** Percentage of pixels (over the common area) whose largest channel difference exceeds 64. */
+    private static double differs(BufferedImage a, BufferedImage b) {
+        int w = Math.min(a.getWidth(), b.getWidth()), h = Math.min(a.getHeight(), b.getHeight());
+        long n = 0;
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+            int p = a.getRGB(x, y), q = b.getRGB(x, y);
+            for (int s = 0; s < 24; s += 8) if (Math.abs(((p >> s) & 255) - ((q >> s) & 255)) > 64) { n++; break; }
+        }
+        return 100.0 * n / Math.max(1, (long) w * h);
+    }
+
+    // ── TAGS ─────────────────────────────────────────────────────────────────────
+
+    /** A tagged PDF's tree lands as the author wrote it: every heading, paragraph, list and item, typed by its
+     *  STANDARD type (the RoleMap followed), an LBody folded into its item, each with content when it marks
+     *  some — and no content claimed by two elements (a form's MCIDs are not the page's). */
+    private static List<String> tags(File pdf, OCDDocument model) throws Exception {
+        List<String> bad = new ArrayList<>();
+        try (PDDocument src = Loader.loadPDF(pdf)) {
+            var root = src.getDocumentCatalog().getStructureTreeRoot();
+            if (root == null || root.getKids().isEmpty()) return bad;
+            OCDStructure pdfTree = model.structureById("pdf");
+            if (pdfTree == null) return List.of("tagged, but no \"pdf\" structure");
+            List<String> want = new ArrayList<>(), got = new ArrayList<>();
+            for (Object k : root.getKids()) if (k instanceof PDStructureElement e) tokens(e, want);
+            tokens(pdfTree.root(), got);
+            if (!want.equals(got)) bad.add("tree " + got + ", source " + want);
+            var seen = new HashSet<OCDStructNode.Ref>();
+            refs(pdfTree.root(), seen, bad);
+        }
+        return bad;
+    }
+
+    private static void tokens(PDStructureElement e, List<String> out) {
+        String t = e.getStandardStructureType();
+        if (t != null && t.matches("H[1-6]?|P|L|LI")) out.add(t + (marks(e) ? "*" : ""));
+        for (Object k : e.getKids())
+            if (k instanceof PDStructureElement c && !"LBody".equals(c.getStandardStructureType())) tokens(c, out);
+            else if (k instanceof PDStructureElement body) for (Object kk : body.getKids()) if (kk instanceof PDStructureElement c) tokens(c, out);
+    }
+
+    /** Whether the element marks content of its own — directly, or through its LBody. */
+    private static boolean marks(PDStructureElement e) {
+        for (Object k : e.getKids())
+            if (k instanceof Integer || k instanceof PDMarkedContentReference) return true;
+            else if (k instanceof PDStructureElement c && "LBody".equals(c.getStandardStructureType()) && marks(c)) return true;
+        return false;
+    }
+
+    private static void tokens(OCDStructNode n, List<String> out) {
+        String t = switch (n.type()) {
+            case HEADING   -> n.level() > 0 ? "H" + n.level() : "H";
+            case PARAGRAPH -> "P";
+            case LIST      -> "L";
+            case ITEM      -> "LI";
+            default        -> null;
+        };
+        if (t != null) out.add(t + (n.refs().isEmpty() ? "" : "*"));
+        for (OCDStructNode c : n.children()) tokens(c, out);
+    }
+
+    private static void refs(OCDStructNode n, Set<OCDStructNode.Ref> seen, List<String> bad) {
+        for (var r : n.refs()) if (!seen.add(r)) bad.add("node " + r.nodeId() + " on page " + (r.page() + 1) + " claimed twice");
+        for (OCDStructNode c : n.children()) refs(c, seen, bad);
+    }
 
     private static List<String> straddle(OCDDocument doc) {
         List<String> bad = new ArrayList<>();

@@ -2,6 +2,8 @@ package sugarcube.jexter.pdfimport;
 
 import sugarcube.jexter.core.JxClock;
 import org.apache.pdfbox.cos.COSDictionary;
+import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.documentinterchange.logicalstructure.PDMarkedContentReference;
@@ -12,6 +14,7 @@ import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDNode;
 import sugarcube.jexter.ocd.model.OCDStructNode;
 import sugarcube.jexter.ocd.model.OCDStructure;
+import sugarcube.jexter.pdfimport.PdfStreamEngine.Mcid;
 
 import java.util.HashMap;
 import java.util.List;
@@ -30,50 +33,61 @@ public final class TaggedStructureBuilder {
 
     private TaggedStructureBuilder() {}
 
+    private static final COSName STM = COSName.getPDFName("Stm");     // the content stream an MCR's MCID lives in
+
     public static void build(OCDDocument doc, PDStructureTreeRoot root, PDDocument pdf,
-                             Map<Integer, Map<Integer, List<OCDNode>>> mcidByPage) {
+                             Map<Integer, Map<Mcid, List<OCDNode>>> mcidByPage) {
         Map<COSDictionary, Integer> pageIndex = new HashMap<>();
         int i = 0;
         for (PDPage p : pdf.getPages()) pageIndex.put(p.getCOSObject(), i++);
+        Tree t = new Tree(pageIndex, mcidByPage);
 
         OCDStructNode rootStruct = new OCDStructNode(OCDStructNode.Type.DOCUMENT);
         for (Object kid : root.getKids())
-            if (kid instanceof PDStructureElement e) rootStruct.add(element(e, -1, pageIndex, mcidByPage));
+            if (kid instanceof PDStructureElement e) rootStruct.add(t.element(e, -1));
         doc.addStructure(new OCDStructure("pdf", "PDF (tagged)", OCDStructure.Source.PDF)
                 .by("TaggedStructureBuilder").at(JxClock.millis()).how("PDF/UA tag tree").root(rootStruct));
     }
 
-    private static OCDStructNode element(PDStructureElement e, int inheritedPage,
-                                     Map<COSDictionary, Integer> pageIndex,
-                                     Map<Integer, Map<Integer, List<OCDNode>>> mcidByPage) {
-        OCDStructNode.Type type = mapType(e.getStructureType());
-        OCDStructNode s = new OCDStructNode(type).level(level(e.getStructureType()));
-        String alt = e.getAlternateDescription() != null ? e.getAlternateDescription()
-                   : e.getActualText() != null ? e.getActualText() : e.getTitle();
-        if (alt != null)             s.alt(alt);
-        if (e.getLanguage() != null) s.lang(e.getLanguage());
+    private record Tree(Map<COSDictionary, Integer> pageIndex, Map<Integer, Map<Mcid, List<OCDNode>>> mcidByPage) {
 
-        int elemPage = pageOf(e.getPage(), pageIndex, inheritedPage);
-        for (Object kid : e.getKids()) {
-            if (kid instanceof PDStructureElement child) {
-                s.add(element(child, elemPage, pageIndex, mcidByPage));
-            } else if (kid instanceof PDMarkedContentReference mcr) {
-                addRefs(s, pageOf(mcr.getPage(), pageIndex, elemPage), mcr.getMCID(), mcidByPage);
-            } else if (kid instanceof Integer mcid) {
-                addRefs(s, elemPage, mcid, mcidByPage);
-            }
-            // PDObjectReference (image/annot OBJR) and others: not mapped to refs here
+        /** An element, typed by its STANDARD type: a producer's own types (Word's, InDesign's) reach one through
+         *  the RoleMap, which {@code getStandardStructureType} follows — the raw type made them all OTHER. */
+        OCDStructNode element(PDStructureElement e, int inheritedPage) {
+            String type = e.getStandardStructureType();
+            OCDStructNode s = new OCDStructNode(mapType(type)).level(level(type));
+            String alt = e.getAlternateDescription() != null ? e.getAlternateDescription()
+                       : e.getActualText() != null ? e.getActualText() : e.getTitle();
+            if (alt != null)             s.alt(alt);
+            if (e.getLanguage() != null) s.lang(e.getLanguage());
+            kids(s, e, pageOf(e.getPage(), pageIndex, inheritedPage));
+            return s;
         }
-        return s;
-    }
 
-    private static void addRefs(OCDStructNode s, int page, int mcid,
-                                Map<Integer, Map<Integer, List<OCDNode>>> mcidByPage) {
-        if (page < 0 || mcid < 0) return;
-        Map<Integer, List<OCDNode>> m = mcidByPage.get(page);
-        if (m == null) return;
-        List<OCDNode> nodes = m.get(mcid);
-        if (nodes != null) for (OCDNode n : nodes) if (n.id() != null) s.addRef(page, n.id());
+        /** The element's kids into {@code s}. An {@code LBody} is not a node of its own: its content IS the
+         *  item's body, beside the item's label — kept as an ITEM, it nested an item in an item and the
+         *  writers lost the body or wrote {@code <li>} in {@code <li>}. */
+        void kids(OCDStructNode s, PDStructureElement e, int page) {
+            for (Object kid : e.getKids()) {
+                if (kid instanceof PDStructureElement child) {
+                    if ("LBody".equals(child.getStandardStructureType())) kids(s, child, pageOf(child.getPage(), pageIndex, page));
+                    else s.add(element(child, page));
+                } else if (kid instanceof PDMarkedContentReference mcr) {
+                    COSStream stm = mcr.getCOSObject().getCOSStream(STM);
+                    refs(s, pageOf(mcr.getPage(), pageIndex, page), new Mcid(stm, mcr.getMCID()));
+                } else if (kid instanceof Integer mcid) {
+                    refs(s, page, new Mcid(null, mcid));
+                }
+                // PDObjectReference (image/annot OBJR) and others: not mapped to refs here
+            }
+        }
+
+        void refs(OCDStructNode s, int page, Mcid mcid) {
+            if (page < 0 || mcid.id() < 0) return;
+            Map<Mcid, List<OCDNode>> m = mcidByPage.get(page);
+            List<OCDNode> nodes = m == null ? null : m.get(mcid);
+            if (nodes != null) for (OCDNode n : nodes) if (n.id() != null) s.addRef(page, n.id());
+        }
     }
 
     private static int pageOf(PDPage p, Map<COSDictionary, Integer> idx, int fallback) {
@@ -92,7 +106,7 @@ public final class TaggedStructureBuilder {
             case "H", "TITLE"                                    -> OCDStructNode.Type.HEADING;
             case "P"                                             -> OCDStructNode.Type.PARAGRAPH;
             case "L"                                             -> OCDStructNode.Type.LIST;
-            case "LI", "LBODY"                                   -> OCDStructNode.Type.ITEM;
+            case "LI"                                            -> OCDStructNode.Type.ITEM;
             case "TABLE"                                         -> OCDStructNode.Type.TABLE;
             case "TR"                                            -> OCDStructNode.Type.ROW;
             case "TH", "TD"                                      -> OCDStructNode.Type.CELL;

@@ -186,13 +186,12 @@ is exact.
   `getImage()`.
 - **Tiling patterns fell to the gray-128 fallback** (64% → correct) and
   **ExtGState /SMask was ignored** (50% → 0.8): both now route through ONE
-  reference-raster fallback — `needsReferenceRaster()` (tiling pattern fill, or
-  any paint under a soft mask) → `emitFromReference(area)` crops the lazily
-  PDFBox-rendered page raster (2 px/unit, 4 MP cap — the mesh-shading budget)
-  clipped to fill∩clip and emits an OCDImage. Same principle as mesh shadings:
-  "PDFBox is the reference rasteriser". Z order preserved (later content still
-  covers); content painted BELOW a semi-transparent fallback region gets baked
-  in — the documented trade.
+  reference-raster fallback — `beyondVectors()` (tiling pattern, or any paint
+  under a soft mask) → `emitFromReference(area)` crops the lazily rendered
+  `ReferenceRaster` (2 px/unit, 4 MP cap — the mesh-shading budget) clipped to
+  area∩clip and emits an OCDImage. Same principle as mesh shadings: "PDFBox is
+  the reference rasteriser". Since 2026-10-19 the reference draws ONLY those
+  paints, transparent: nothing below or above is baked into the crop any more.
 
 Verified green elsewhere without changes: blend modes, CalRGB/Lab/Separation/
 Indexed, WinAnsi/MacRoman/Differences encodings, image SMask + 16-bit

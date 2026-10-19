@@ -961,7 +961,7 @@ model gates are blind to it (the layer COUNT round-trips either way, `Rich` repo
 `layers=2 -> 2`, `ModelRt` sees no changed field), and only a Chromium render laid
 against the PDFBox reference shows the extra text. The registry is document-level
 presentation metadata, so it is now read at document level — `extractLayers`, beside
-`extractMetadata`/`extractOutline` — which also gives `order` a real value instead of 0.
+`PdfCatalog.read` — which also gives `order` a real value instead of 0.
 `beginLayer` keeps its fallback for an OCG referenced by content but never declared.
 
 **The written page needs a REAL browser — this is a separate surface, not a
@@ -1644,7 +1644,7 @@ pikepdf → bisect the content stream (drop one `Do`, keep only one) → read th
 | 1 | orange frames round stars and photos, fat coloured rules | a path neither filled nor stroked (zero-alpha fill) was WRITTEN — `m l l h` then `Q`; the path is not graphics state, it survives `Q`, and the next `S` strokes it | `PdfWriter.paintPath` returns early |
 | 2 | a whole page red, logo doubled (63 %) | a Multiply group's blend was applied to each CHILD — PDF composites the group first | `OCDGroup.compositesAsOne` · `PdfWriter` writes a `/Group /Transparency` form (an `PDAppearanceStream`: PDFBox 3 opens a content stream on no other form, `PDAbstractContentStream` is package-private) · `OCDRenderer.paintAsOne` |
 | 3 | yellow drop shadows came out dark grey | `BlendComposite` blended against a transparent pixel as if it were black — PDF §11.3.6 weights B(cb,cs) by the backdrop alpha | `BlendComposite.compose` |
-| 4 | a translucent blue became an opaque slab over a photo | `sh` and gradient fills under an ExtGState SMask took their own vector route and dropped the mask | `needsReferenceRaster` covers them |
+| 4 | a translucent blue became an opaque slab over a photo | `sh` and gradient fills under an ExtGState SMask took their own vector route and dropped the mask | `beyondVectors` covers them |
 | 5 | a cover more violet, a translucent layer too strong | the page's `/Group /CS /DeviceCMYK` was dropped: the page composites in CMYK, which gamut-maps every RGB photo on it | `OCDPage.cmykBlending` · `data-blending="cmyk"` · written back as the page `/Group` |
 | 6 | a white halo behind a headline | a WHITE Multiply shadow, baked in isolation, is white; on the page it is invisible | `PdfImporter.liftBlend` lifts a uniform leaf blend onto the baked image |
 | 7 | chart gridlines as black bars | pen under `0 -6.9853 0.14316 0 cm`: `transformWidth` averages both axes (11.8 pt), the ellipse is 0.34 pt across | `PdfStreamEngine.strokeOutline` — the exact outline, only when the CTM is anisotropic |
@@ -2111,7 +2111,7 @@ It holds invariants that every engine change must keep. Gate them with
 - **Split import from writer before hunting.** `RenderOcd` rasters the model straight from
   `PdfImporter` + `OCDRenderer`. If the model render already shows the defect the writer is
   innocent — that one call cut a day of the legal-notices hunt to an afternoon.
-- **The post repair must never take the glyph NAMES away.** `repairEmbeddedTrueTypeFonts`
+- **The post repair must never take the glyph NAMES away.** `TrueTypeRepair.repair`
   downgraded a truncated `post` to version 3.0 so the program would parse. On a simple
   non-symbolic TrueType with **no `cmap`** — a subset a press producer emits by the dozen — the
   post names ARE the code→glyph mapping: the repaired font then loads, maps every code to
@@ -2134,10 +2134,13 @@ It holds invariants that every engine change must keep. Gate them with
   every Type3 glyph silently vanishes. Charprocs are processed by the engine
   itself (marks become vector content; not extractable text).
 - **One reference-raster fallback** — paints the model cannot vectorise
-  (tiling-pattern fills, anything under an ExtGState /SMask) go through
-  `needsReferenceRaster()` → `emitFromReference()`: crop of the lazy PDFBox
-  page render (2 px/unit, 4 MP cap). Stencils paint via
-  `getStencilImage(fill colour)`, never `getImage()`.
+  (tiling patterns, anything under an ExtGState /SMask: fill, stroke, glyph,
+  image, `sh`) go through `PdfStreamEngine.beyondVectors()` →
+  `emitFromReference()`: crop of the lazy `ReferenceRaster` (2 px/unit, 4 MP
+  cap) — PDFBox drawing ONLY those paints, on a transparent page, without
+  annotations, unrotated, the same predicate on both sides. A masked glyph keeps
+  its run as invisible text (mode 3) and its ink comes from the crop at ET.
+  Stencils paint via `getStencilImage(fill colour)`, never `getImage()`.
 - **Paint order rules the file** — render-transparent OCDGraphic wrappers are
   spliced at write (children emit at their own z, like `inPaintOrder`); only
   groups with a paint context stay atomic. Gradient paths always carry flat

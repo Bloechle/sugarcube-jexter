@@ -4,6 +4,7 @@ import sugarcube.jexter.core.JxPath;
 import sugarcube.jexter.core.JxRect;
 import sugarcube.jexter.core.JxTransform;
 import sugarcube.jexter.ocd.model.OCDAnnotation;
+import sugarcube.jexter.ocd.model.OCDLayerContent;
 import sugarcube.jexter.ocd.model.OCDBreak;
 import sugarcube.jexter.ocd.model.OCDClip;
 import sugarcube.jexter.ocd.model.OCDDocument;
@@ -33,6 +34,8 @@ import java.awt.RadialGradientPaint;
 import java.awt.RenderingHints;
 import java.awt.Shape;
 import java.awt.geom.AffineTransform;
+import java.awt.geom.Area;
+import java.awt.geom.Rectangle2D;
 import java.awt.geom.Point2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
@@ -192,6 +195,8 @@ public final class OCDRenderer {
         if ((node instanceof OCDText  && !view.text())
                 || (node instanceof OCDPath  && !view.paths())
                 || (node instanceof OCDImage && !view.images())) return;
+        // a layer switched off paints nothing — the cover, a raster export and a pixel check alike
+        if (node instanceof OCDLayerContent lc && doc.layer(lc.layerId()) != null && !doc.layer(lc.layerId()).visible()) return;
         AffineTransform savedT = g.getTransform();
         Shape savedClip = g.getClip();
         Composite savedComposite = g.getComposite();
@@ -415,9 +420,13 @@ public final class OCDRenderer {
     private static void paintPath(Graphics2D g, OCDPath p) {        JxPath geo = p.geometry();
         if (geo == null) return;
         if (p.isFilled()) {
-            if (p.hasGradient()) g.setPaint(gradientPaint(p.fillGradient()));
-            else                 g.setColor(new Color(p.fill(), true));
-            g.fill(geo);
+            Shape area = geo;
+            if (p.hasGradient()) {
+                g.setPaint(gradientPaint(p.fillGradient()));
+                Shape reach = reach(p.fillGradient());
+                if (reach != null) { Area a = new Area(geo); a.intersect(new Area(reach)); area = a; }
+            } else g.setColor(new Color(p.fill(), true));
+            g.fill(area);
         }
         if (p.isStroked()) {
             g.setColor(new Color(p.stroke(), true));
@@ -428,12 +437,31 @@ public final class OCDRenderer {
 
     /** Build a Java2D gradient {@link Paint} from an {@link OCDGradient}. The gradient's coords are
      *  in its own space; its transform (gradient→page) is passed as the paint's gradient transform,
-     *  so anisotropic/sheared gradients stay correct. {@code NO_CYCLE} pads the ends (PDF Extend). */
+     *  so anisotropic/sheared gradients stay correct. {@code NO_CYCLE} pads the ends (PDF Extend);
+     *  an end that does not extend is cut by {@link #reach}, or — the start of a radial — by a
+     *  transparent stop inside its start circle. Java2D has no start radius: the stops are moved out
+     *  to {@code r0 / r1}, exact for concentric circles. */
     private static Paint gradientPaint(OCDGradient grad) {
         float[] fractions = sanitizeFractions(grad.offsets());
         int[] argb = grad.colors();
         Color[] colors = new Color[argb.length];
         for (int i = 0; i < argb.length; i++) colors[i] = new Color(argb[i], true);
+        if (!grad.isLinear() && grad.coords()[5] > 0) {
+            double k = Math.max(0, Math.min(1, grad.coords()[2] / grad.coords()[5]));
+            if (k > 0) {
+                for (int i = 0; i < fractions.length; i++) fractions[i] = (float) (k + fractions[i] * (1 - k));
+                if (!grad.extend0() && k > 1e-3) {                        // nothing inside the start circle
+                    float[] f = new float[fractions.length + 2];
+                    Color[] c = new Color[colors.length + 2];
+                    f[0] = 0; f[1] = (float) Math.max(1e-5, k - 1e-4);
+                    c[0] = c[1] = new Color(0, true);
+                    System.arraycopy(fractions, 0, f, 2, fractions.length);
+                    System.arraycopy(colors, 0, c, 2, colors.length);
+                    fractions = sanitizeFractions(f);
+                    colors = c;
+                } else fractions = sanitizeFractions(fractions);
+            }
+        }
         JxTransform t = grad.transform();
         AffineTransform gt = new AffineTransform(t.a(), t.b(), t.c(), t.d(), t.tx(), t.ty());
         double[] co = grad.coords();
@@ -455,6 +483,26 @@ public final class OCDRenderer {
         } catch (RuntimeException e) {           // degenerate geometry → flat fallback
             return new Color(grad.flatArgb(), true);
         }
+    }
+
+    /** Where a gradient paints when an end does not extend (PDF {@code Extend false}), in page space: beyond
+     *  the end circle of a radial, before / after the axis of a linear, nothing. Null when it paints everywhere. */
+    private static Shape reach(OCDGradient grad) {
+        double[] co = grad.coords();
+        JxTransform t = grad.transform();
+        AffineTransform gt = new AffineTransform(t.a(), t.b(), t.c(), t.d(), t.tx(), t.ty());
+        if (!grad.isLinear()) {
+            if (grad.extend1() || co[5] <= 0) return null;
+            return gt.createTransformedShape(new java.awt.geom.Ellipse2D.Double(co[3] - co[5], co[4] - co[5], 2 * co[5], 2 * co[5]));
+        }
+        if (grad.extend0() && grad.extend1()) return null;
+        double dx = co[2] - co[0], dy = co[3] - co[1], len = Math.hypot(dx, dy);
+        if (len <= 0) return null;
+        final double FAR = 1e6;                                   // along the normal: unbounded in practice
+        double s0 = grad.extend0() ? -FAR : 0, s1 = grad.extend1() ? FAR : len;
+        AffineTransform axis = new AffineTransform(dx / len, dy / len, -dy / len, dx / len, co[0], co[1]);
+        Shape band = axis.createTransformedShape(new Rectangle2D.Double(s0, -FAR, s1 - s0, 2 * FAR));
+        return gt.createTransformedShape(band);
     }
 
     /** Java2D demands strictly-increasing fractions in [0,1]; nudge any duplicates/regressions. */
@@ -520,10 +568,21 @@ public final class OCDRenderer {
 
     private static float clampAlpha(float a) { return a < 0 ? 0 : (a > 1 ? 1 : a); }
 
+    /** The image, PREMULTIPLIED when it has alpha: interpolated straight, a transparent pixel's colour (black,
+     *  as an encoder stores it) bleeds into its neighbours, and every soft edge — a cropped glyph, a shadow —
+     *  comes out with a dark fringe. */
     private static BufferedImage load(byte[] data) {
         if (data == null || data.length == 0) return null;
         try {
-            return ImageIO.read(new ByteArrayInputStream(data));
+            BufferedImage img = ImageIO.read(new ByteArrayInputStream(data));
+            if (img == null || !img.getColorModel().hasAlpha() || img.isAlphaPremultiplied()) return img;
+            BufferedImage pre = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_INT_ARGB_PRE);
+            Graphics2D g = pre.createGraphics();
+            try {
+                g.setComposite(AlphaComposite.Src);
+                g.drawImage(img, 0, 0, null);
+            } finally { g.dispose(); }
+            return pre;
         } catch (Exception e) {
             return null;
         }

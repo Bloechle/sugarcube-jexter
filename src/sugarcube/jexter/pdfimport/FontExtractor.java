@@ -71,7 +71,11 @@ final class FontExtractor {
         if (done.add(id + "#" + code) && !f.hasGlyph(code)) {
             String uni = unicode != null ? unicode : "";
             f.add(new OCDGlyph(code, uni, outline(font, code), advance(font, code)));
-            if (!uni.isEmpty()) f.map(uni.codePointAt(0), code);
+            // The cmap says which glyph IS a character: only a glyph that maps to exactly one, and only the first
+            // such glyph — a ligature ("ff" in one glyph, as pdfTeX writes it) took over its first letter, and
+            // every "f" typed into the document afterwards came out as "ff".
+            if (uni.codePointCount(0, uni.length()) == 1 && !f.cmap().containsKey(uni.codePointAt(0)))
+                f.map(uni.codePointAt(0), code);
         }
         return id;
     }

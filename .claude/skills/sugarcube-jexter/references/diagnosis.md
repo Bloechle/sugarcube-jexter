@@ -179,7 +179,7 @@ is ≤ ~1.6× the point size is a self-clip; real column/box clips are far large
 A subset TrueType embedded with a `post` table v2.0 whose name array is empty
 makes FontBox reject the whole font; PDFBox then substitutes a stand-in and the
 font's custom code points map to the wrong glyphs. **Fix (extractor side):**
-`PdfImporter.repairEmbeddedTrueTypeFonts` rewrites that font's `post` version to
+`TrueTypeRepair.repair` rewrites that font's `post` version to
 3.0 (header-only, no names) in the in-memory `PDDocument` — `glyf`/`loca`/`cmap`
 stay byte-identical, so the author's real outlines render. No-op on healthy
 fonts; the file on disk is never touched. This is the one deliberate spot where

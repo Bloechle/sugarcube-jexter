@@ -135,6 +135,9 @@ final class OCDIndex {
     private static final java.util.EnumSet<OCDStructNode.Type> INLINE =
             java.util.EnumSet.of(OCDStructNode.Type.SPAN, OCDStructNode.Type.CODE, OCDStructNode.Type.OTHER);
 
+    /** Whether {@link #text} of the parent already carries this child's text (an inline SPAN/CODE/OTHER). */
+    static boolean isInline(OCDStructNode s) { return INLINE.contains(s.type()); }
+
     /** A run tagged with the page it was referenced from — node ids are page-scoped, so reading order
      *  is restored by sorting on {@code (page, sequential-id)} across own + inline-descendant refs. */
     private record Run(int page, OCDText text) {}
@@ -166,7 +169,7 @@ final class OCDIndex {
                                 .forEach(t -> out.add(new Run(r.page(), t)));
             }
         for (OCDStructNode c : s.children())
-            if (INLINE.contains(c.type())) collect(c, page, out);   // recurse inline emphasis; stop at block children
+            if (isInline(c)) collect(c, page, out);              // recurse inline emphasis; stop at block children
     }
 
     /** Sequential reading-order key from a page-scoped node id (e.g. {@code "t45"} -> 45). */

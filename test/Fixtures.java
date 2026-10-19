@@ -16,10 +16,12 @@ import org.apache.pdfbox.pdmodel.documentinterchange.markedcontent.PDPropertyLis
 import org.apache.pdfbox.pdmodel.font.*;
 import org.apache.pdfbox.pdmodel.font.encoding.WinAnsiEncoding;
 import org.apache.pdfbox.pdmodel.graphics.color.*;
+import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.pdmodel.graphics.image.*;
 import org.apache.pdfbox.pdmodel.graphics.optionalcontent.*;
 import org.apache.pdfbox.pdmodel.graphics.shading.*;
 import org.apache.pdfbox.pdmodel.graphics.state.*;
+import org.apache.pdfbox.pdmodel.interactive.action.PDActionGoTo;
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionURI;
 import org.apache.pdfbox.pdmodel.interactive.annotation.*;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.*;
@@ -62,12 +64,14 @@ final class Fixtures {
         FEATURES.put("text_render_modes", (Page) Fixtures::renderModes);
         FEATURES.put("text_clip_image", (Page) Fixtures::clipImage);
         FEATURES.put("text_tiny_leading", (Page) Fixtures::tinyLeading);
+        FEATURES.put("text_ligature", (Page) Fixtures::ligature);
         FEATURES.put("vector_shapes", (Page) Fixtures::shapes);
         FEATURES.put("vector_clipping", (Page) Fixtures::clipping);
         FEATURES.put("vector_transforms", (Page) Fixtures::transforms);
         FEATURES.put("vector_gradient", (Page) Fixtures::gradient);
         FEATURES.put("vector_dash_caps", (Page) Fixtures::dashCaps);
         FEATURES.put("vector_svg_like", (Page) Fixtures::svgLike);
+        FEATURES.put("vector_soft_mask", (Whole) Fixtures::softMask);
         FEATURES.put("color_rgb", (Page) Fixtures::rgb);
         FEATURES.put("color_cmyk", (Page) Fixtures::cmyk);
         FEATURES.put("color_spot", (Page) Fixtures::spot);
@@ -143,6 +147,10 @@ final class Fixtures {
 
     /** A font for scripts Liberation lacks: one box glyph per character, compiled by the engine. */
     private static PDType0Font boxes(PDDocument pdf, String chars, double advance) throws IOException {
+        return PDType0Font.load(pdf, new ByteArrayInputStream(JxFont.toOtf(boxFont(chars, advance))));
+    }
+
+    private static OCDFont boxFont(String chars, double advance) {
         OCDFont f = new OCDFont("FixtureBoxes").ascent(0.8).descent(0.2);
         f.add(new OCDGlyph(0, null, new JxPath(), advance));
         int gid = 0;
@@ -155,7 +163,7 @@ final class Fixtures {
         }
         f.add(new OCDGlyph(++gid, " ", new JxPath(), advance / 2));
         f.map(' ', gid);
-        return PDType0Font.load(pdf, new ByteArrayInputStream(JxFont.toOtf(f)));
+        return f;
     }
 
     // ── text ─────────────────────────────────────────────────────────────────────
@@ -173,6 +181,35 @@ final class Fixtures {
         text(cs, d.sans(), 16, 20 * MM, H - 50 * MM, "Liberation Sans, Type0 / CIDFontType2 subset.");
         PDFont simple = PDTrueTypeFont.load(d.pdf, liberation(), WinAnsiEncoding.INSTANCE);
         text(cs, simple, 16, 20 * MM, H - 62 * MM, "Liberation Sans, simple TrueType with WinAnsi.");
+    }
+
+    /**
+     * A ligature as pdfTeX writes one: ONE glyph whose ToUnicode is TWO letters ("ff"). The word "of" comes first,
+     * so the font's single "f" is known before the ligature arrives — the ligature must not take its place.
+     */
+    private static void ligature(Doc d, PDPageContentStream cs) throws IOException {
+        String chars = "ofice\uE000";                         // the ligature box sits at a private-use code point
+        PDType0Font font = PDType0Font.load(d.pdf, new ByteArrayInputStream(JxFont.toOtf(boxFont(chars, 0.6))), false);
+        StringBuilder bf = new StringBuilder();
+        int[] cps = chars.codePoints().toArray();
+        for (int cp : cps) {
+            byte[] code = font.encode(new String(Character.toChars(cp)));     // Identity-H: two bytes
+            String uni = cp == 0xE000 ? "ff" : new String(Character.toChars(cp));
+            StringBuilder hex = new StringBuilder();
+            for (char c : uni.toCharArray()) hex.append(String.format("%04X", (int) c));
+            bf.append(String.format("<%02X%02X> <%s>%n", code[0] & 255, code[1] & 255, hex));
+        }
+        String cmap = "/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n"
+                + "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n"
+                + "/CMapName /Adobe-Identity-UCS def /CMapType 2 def\n"
+                + "1 begincodespacerange <0000> <FFFF> endcodespacerange\n"
+                + cps.length + " beginbfchar\n" + bf + "endbfchar\n"
+                + "endcmap CMapName currentdict /CMap defineresource pop end end\n";
+        COSStream toUnicode = d.pdf.getDocument().createCOSStream();
+        try (var out = toUnicode.createOutputStream()) { out.write(cmap.getBytes(java.nio.charset.StandardCharsets.US_ASCII)); }
+        font.getCOSObject().setItem(COSName.TO_UNICODE, toUnicode);
+        text(cs, font, 24, 20 * MM, H - 50 * MM, "of");
+        text(cs, font, 24, 20 * MM, H - 62 * MM, "o\uE000ice");      // reads "office"
     }
 
     private static void cjk(Doc d, PDPageContentStream cs) throws IOException {
@@ -330,14 +367,128 @@ final class Fixtures {
         cs.shadingFill(shading(3, new float[] { 135 * MM, H - 70 * MM, 0, 135 * MM, H - 70 * MM, 22 * MM },
                 new float[] { 1, 1, 1 }, new float[] { 0.12f, 0.54f, 0.3f }));
         cs.restoreGraphicsState();
-        // A radial whose start circle has a radius and whose end does not extend: what SVG cannot say
-        // (FORMAT §B3 fr, data-extend); `sh` under a clip lands as a gradient on a path.
+        // A radial whose start circle has a radius and whose START does not extend (nothing inside it): what
+        // SVG cannot say (FORMAT §B3 fr, data-extend); `sh` under a clip lands as a gradient on a path.
         cs.saveGraphicsState();
         cs.addRect(20 * MM, H - 150 * MM, 60 * MM, 50 * MM);
         cs.clip();
         cs.shadingFill(shading(3, new float[] { 50 * MM, H - 125 * MM, 6 * MM, 50 * MM, H - 125 * MM, 20 * MM },
-                new float[] { 0.95f, 0.8f, 0.2f }, new float[] { 0.5f, 0.1f, 0.6f }, true, false));
+                new float[] { 0.95f, 0.8f, 0.2f }, new float[] { 0.5f, 0.1f, 0.6f }, false, true));
         cs.restoreGraphicsState();
+    }
+
+    /**
+     * Soft masks, everywhere the model cannot say them: a luminosity mask (a white-to-black ramp) over a fill, a
+     * stroke, a line of text and an image, each over a backdrop and under text painted after; then two masked
+     * groups — a luminosity mask whose CMYK backdrop [0 0 0 0] is WHITE, and an alpha mask. Page 2 repeats a
+     * masked fill on a page turned by /Rotate 90.
+     */
+    private static void softMask(Doc d) throws IOException {
+        PDExtendedGraphicsState ramp = mask(d, COSName.LUMINOSITY, null, null, fcs -> {
+            fcs.shadingFill(shading(2, new float[] { 20 * MM, 0, 190 * MM, 0 }, new float[] { 1, 1, 1 }, new float[] { 0, 0, 0 }));
+        });
+        try (var cs = d.page(A4)) {
+            d.header(cs, "vector_soft_mask");
+            cs.setNonStrokingColor(new Color(250, 236, 160));                       // the backdrop the mask lets through
+            cs.addRect(15 * MM, H - 175 * MM, 180 * MM, 140 * MM);
+            cs.fill();
+            cs.saveGraphicsState();
+            cs.setGraphicsStateParameters(ramp);
+            cs.setNonStrokingColor(new Color(30, 70, 200));
+            cs.addRect(20 * MM, H - 70 * MM, 170 * MM, 25 * MM);
+            cs.fill();
+            cs.setStrokingColor(new Color(200, 30, 30));
+            cs.setLineWidth(8);
+            cs.moveTo(20 * MM, H - 80 * MM);
+            cs.lineTo(190 * MM, H - 80 * MM);
+            cs.stroke();
+            cs.setNonStrokingColor(new Color(20, 120, 40));
+            text(cs, d.sans(), 28, 20 * MM, H - 98 * MM, "Masked text, fading out");
+            cs.drawImage(JPEGFactory.createFromImage(d.pdf, gradient(256, 160), 0.88f), 20 * MM, H - 125 * MM, 170 * MM, 22 * MM);
+            cs.restoreGraphicsState();
+
+            // A CMYK luminosity mask with a WHITE backdrop: everything shows but the black square it paints.
+            PDExtendedGraphicsState white = mask(d, COSName.LUMINOSITY, PDDeviceCMYK.INSTANCE, new float[] { 0, 0, 0, 0 }, fcs -> {
+                fcs.setNonStrokingColor(new PDColor(new float[] { 0, 0, 0, 1 }, PDDeviceCMYK.INSTANCE));
+                fcs.addRect(40 * MM, H - 160 * MM, 15 * MM, 15 * MM);
+                fcs.fill();
+            });
+            cs.saveGraphicsState();
+            cs.setGraphicsStateParameters(white);
+            cs.drawForm(group(d, new Color(0, 150, 90), 20 * MM, H - 170 * MM, 55 * MM, 35 * MM));
+            cs.restoreGraphicsState();
+            // An ALPHA mask: the group's coverage, not its colours — two bands at full and at 30 % alpha.
+            PDExtendedGraphicsState alpha = mask(d, COSName.ALPHA, null, null, fcs -> {
+                fcs.setNonStrokingColor(Color.BLACK);
+                fcs.addRect(100 * MM, H - 170 * MM, 40 * MM, 35 * MM);
+                fcs.fill();
+                PDExtendedGraphicsState faint = new PDExtendedGraphicsState();
+                faint.setNonStrokingAlphaConstant(0.3f);
+                fcs.setGraphicsStateParameters(faint);
+                fcs.addRect(140 * MM, H - 170 * MM, 45 * MM, 35 * MM);
+                fcs.fill();
+            });
+            cs.saveGraphicsState();
+            cs.setGraphicsStateParameters(alpha);
+            cs.drawForm(group(d, new Color(150, 0, 120), 100 * MM, H - 170 * MM, 85 * MM, 35 * MM));
+            cs.restoreGraphicsState();
+
+            cs.setNonStrokingColor(Color.BLACK);                                     // painted AFTER, over the masks
+            text(cs, d.sans(), 11, 22 * MM, H - 64 * MM, "Text painted after the mask, over it");
+        }
+        try (var cs = d.page(A4)) {
+            cs.setNonStrokingColor(new Color(250, 236, 160));
+            cs.addRect(15 * MM, H - 120 * MM, 120 * MM, 80 * MM);
+            cs.fill();
+            cs.saveGraphicsState();
+            cs.setGraphicsStateParameters(ramp);
+            cs.setNonStrokingColor(new Color(30, 70, 200));
+            cs.addRect(25 * MM, H - 90 * MM, 90 * MM, 30 * MM);
+            cs.fill();
+            cs.restoreGraphicsState();
+            cs.setNonStrokingColor(Color.BLACK);
+            text(cs, d.sans(), 14, 25 * MM, H - 100 * MM, "Masked fill on a page turned by /Rotate 90");
+        }
+        d.pdf.getPage(1).setRotation(90);
+    }
+
+    private interface Drawing { void draw(PDFormContentStream cs) throws IOException; }
+
+    /** An ExtGState whose /SMask is a group of the given subtype painted by {@code content} — in {@code cs}
+     *  (none = the page's), with backdrop {@code bc} when given. */
+    private static PDExtendedGraphicsState mask(Doc d, COSName subtype, PDColorSpace cs, float[] bc, Drawing content) throws IOException {
+        PDFormXObject g = new PDFormXObject(d.pdf);
+        g.setBBox(A4);
+        g.setResources(new PDResources());
+        COSDictionary attrs = new COSDictionary();
+        attrs.setItem(COSName.S, COSName.TRANSPARENCY);
+        if (cs != null) attrs.setItem(COSName.CS, cs.getCOSObject());
+        g.getCOSObject().setItem(COSName.GROUP, attrs);
+        try (var fcs = new PDFormContentStream(g)) { content.draw(fcs); }
+        COSDictionary sm = new COSDictionary();
+        sm.setItem(COSName.TYPE, COSName.MASK);
+        sm.setItem(COSName.S, subtype);
+        sm.setItem(COSName.G, g);
+        if (bc != null) { COSArray a = new COSArray(); for (float v : bc) a.add(new COSFloat(v)); sm.setItem(COSName.BC, a); }
+        PDExtendedGraphicsState gs = new PDExtendedGraphicsState();
+        gs.getCOSObject().setItem(COSName.SMASK, sm);
+        return gs;
+    }
+
+    /** A transparency group painting one rectangle — what a masked {@code Do} draws. */
+    private static PDFormXObject group(Doc d, Color c, float x, float y, float w, float h) throws IOException {
+        PDFormXObject g = new PDFormXObject(d.pdf);
+        g.setBBox(A4);
+        g.setResources(new PDResources());
+        COSDictionary attrs = new COSDictionary();
+        attrs.setItem(COSName.S, COSName.TRANSPARENCY);
+        g.getCOSObject().setItem(COSName.GROUP, attrs);
+        try (var fcs = new PDFormContentStream(g)) {
+            fcs.setNonStrokingColor(c);
+            fcs.addRect(x, y, w, h);
+            fcs.fill();
+        }
+        return g;
     }
 
     private static void dashCaps(Doc d, PDPageContentStream cs) throws IOException {
@@ -537,8 +688,26 @@ final class Fixtures {
         }
         PDPage p1 = d.pdf.getPage(0), p2 = d.pdf.getPage(1);
         p1.getAnnotations().add(uriLink(new PDRectangle(20 * MM, H - 63 * MM, 100 * MM, 6 * MM), "https://example.org"));
-        p1.getAnnotations().add(goTo(new PDRectangle(20 * MM, H - 78 * MM, 100 * MM, 6 * MM), p2, H));
         outline(d.pdf, new Object[] { "Chapter 1", p1 }, new Object[] { "Chapter 2", p2 });
+        // What LaTeX (hyperref) and InDesign write: NAMED destinations. The second bookmark names "chapter.2"
+        // from the /Names /Dests tree, the internal link names "toc.2" from the catalog's older /Dests
+        // dictionary — both must land on page 2 like an explicit destination.
+        var tree = new PDDestinationNameTreeNode();
+        tree.setNames(Map.of("chapter.2", xyz(p2, H)));
+        var names = new PDDocumentNameDictionary(d.pdf.getDocumentCatalog());
+        names.setDests(tree);
+        d.pdf.getDocumentCatalog().setNames(names);
+        COSDictionary dests = new COSDictionary();
+        dests.setItem("toc.2", xyz(p2, H));
+        d.pdf.getDocumentCatalog().getCOSObject().setItem(COSName.DESTS, dests);
+        d.pdf.getDocumentCatalog().getDocumentOutline().getLastChild().setDestination(new PDNamedDestination("chapter.2"));
+        var internal = new PDAnnotationLink();
+        internal.setRectangle(new PDRectangle(20 * MM, H - 78 * MM, 100 * MM, 6 * MM));
+        var go = new PDActionGoTo();
+        go.setDestination(new PDNamedDestination("toc.2"));
+        internal.setAction(go);
+        internal.setBorderStyle(noBorder());
+        p1.getAnnotations().add(internal);
     }
 
     private static void metadata(Doc d) throws IOException {
@@ -643,7 +812,25 @@ final class Fixtures {
                               { "P", font, 10f, 310f, "Premier paragraphe, marque comme P dans l'arbre de balises." },
                               { "H2", bold, 12f, 275f, "Sous-titre de section" },
                               { "P", font, 10f, 248f, "Second paragraphe. La structure vient du PDF, pas de la geometrie." },
-                              { "P", font, 10f, 228f, "Sa suite, sur une autre ligne, mais le MEME element P." } };
+                              { "P", font, 10f, 228f, "Sa suite, sur une autre ligne, mais le MEME element P." },
+                              { "Lbl", font, 10f, 200f, "1." },
+                              { "LBody", font, 10f, 186f, "Le corps de l'item, dans son LBody." } };
+        // A form XObject that numbers its OWN marked content (/StructParents): its MCID 0 is not the page's.
+        PDFormXObject note = new PDFormXObject(d.pdf);
+        note.setBBox(new PDRectangle(400, 400));
+        note.setResources(new PDResources());
+        note.getCOSObject().setInt(COSName.STRUCT_PARENTS, 1);
+        try (var fcs = new PDFormContentStream(note)) {
+            COSDictionary props = new COSDictionary();
+            props.setInt(COSName.MCID, 0);
+            fcs.beginMarkedContent(COSName.P, PDPropertyList.create(props));
+            fcs.beginText();
+            fcs.setFont(font, 9);
+            fcs.newLineAtOffset(40, 120);
+            fcs.showText("Une note dans un form XObject, MCID 0 de son propre flux.");
+            fcs.endText();
+            fcs.endMarkedContent();
+        }
         try (var cs = d.page(new PDRectangle(400, 400))) {
             text(cs, font, 8, 40, 380, "MATRIX::tagged");
             for (int mcid = 0; mcid < blocks.length; mcid++) {
@@ -654,14 +841,18 @@ final class Fixtures {
                 text(cs, (PDFont) b[1], (Float) b[2], 40, (Float) b[3], (String) b[4]);
                 cs.endMarkedContent();
             }
+            cs.drawForm(note);
         }
         PDPage page = d.pdf.getPage(0);
         page.setStructParents(0);
         var root = new PDStructureTreeRoot();
+        // The title is a producer's OWN type ("Titre"), standard only through the RoleMap — what Word and
+        // InDesign write for every style.
+        root.setRoleMap(Map.of("Titre", "H1"));
         var document = new PDStructureElement("Document", root);
         root.appendKid(document);
-        Object[][] groups = { { "H1", new int[] { 0 } }, { "P", new int[] { 1 } }, { "H2", new int[] { 2 } }, { "P", new int[] { 3, 4 } } };
         COSArray byMcid = new COSArray();
+        Object[][] groups = { { "Titre", new int[] { 0 } }, { "P", new int[] { 1 } }, { "H2", new int[] { 2 } }, { "P", new int[] { 3, 4 } } };
         for (Object[] g : groups) {
             var e = new PDStructureElement((String) g[0], document);
             e.setPage(page);
@@ -671,10 +862,33 @@ final class Fixtures {
             }
             document.appendKid(e);
         }
+        // L > LI > (Lbl, LBody): the LBody is the item's body, not an item of its own.
+        var list = new PDStructureElement("L", document);
+        var item = new PDStructureElement("LI", list);
+        var label = new PDStructureElement("Lbl", item);
+        var body = new PDStructureElement("LBody", item);
+        for (var e : List.of(list, item, label, body)) e.setPage(page);
+        label.appendKid(5);
+        body.appendKid(6);
+        byMcid.add(label);
+        byMcid.add(body);
+        item.appendKid(label);
+        item.appendKid(body);
+        list.appendKid(item);
+        document.appendKid(list);
+        // The note reaches its MCID through a reference that names the form's stream.
+        var noteP = new PDStructureElement("P", document);
+        noteP.setPage(page);
+        var mcr = new PDMarkedContentReference();
+        mcr.setPage(page);
+        mcr.setMCID(0);
+        mcr.getCOSObject().setItem(COSName.getPDFName("Stm"), note.getCOSObject());
+        noteP.appendKid(mcr);
+        document.appendKid(noteP);
         var parentTree = new PDNumberTreeNode(PDParentTreeValue.class);
-        parentTree.setNumbers(Map.of(0, new PDParentTreeValue(byMcid)));
+        parentTree.setNumbers(Map.of(0, new PDParentTreeValue(byMcid), 1, new PDParentTreeValue(new COSArray(List.of(noteP)))));
         root.setParentTree(parentTree);
-        root.setParentTreeNextKey(1);
+        root.setParentTreeNextKey(2);
         d.pdf.getDocumentCatalog().setStructureTreeRoot(root);
         var mark = new PDMarkInfo();
         mark.setMarked(true);
