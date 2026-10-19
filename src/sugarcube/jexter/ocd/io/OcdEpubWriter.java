@@ -32,7 +32,7 @@ import static sugarcube.jexter.core.JxName.safe;
  * </ul>
  *
  * <p>Editable = the presence of {@code ocd/}. For platform distribution, export the
- * <i>generic</i> EPUB ({@link EpubWriter}: native selectable text + compiled OTF, no members).
+ * <i>generic</i> EPUB ({@code write.EpubWriter}: native selectable text + compiled OTF, no members).
  */
 public final class OcdEpubWriter {
 

@@ -6,7 +6,6 @@ import sugarcube.jexter.core.JxRect;
 import sugarcube.jexter.core.JxTransform;
 import sugarcube.jexter.core.OcrClient;
 import sugarcube.jexter.ocd.analysis.Analysis;
-import sugarcube.jexter.ocd.io.OCDVocab;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDFont;
 import sugarcube.jexter.ocd.model.OCDGlyph;

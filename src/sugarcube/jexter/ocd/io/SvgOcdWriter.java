@@ -35,7 +35,7 @@ import static sugarcube.jexter.core.JxNum.fmt;
  * <ul>
  *   <li>{@code <svg data-ocd="page" data-version="2" data-mediabox="x y w h" [data-bleedbox|data-trimbox|data-artbox]
  *       [data-dpi] [data-rotate] [data-blending]>} — viewBox = the CROP WINDOW over the media frame, Y-up→SVG flip exactly
- *       as {@link SvgWriter} (same audited math);</li>
+ *       as {@link SvgPaint} (the same audited math as {@code write.SvgWriter});</li>
  *   <li>{@code OCDParagraph} → {@code <g id data-ocd="paragraph">} containing {@code <g data-ocd="line">}
  *       line groups (children in CONTENT order, split on {@link sugarcube.jexter.ocd.model.OCDBreak}
  *       — pure grouping, render-neutral);</li>
@@ -51,7 +51,7 @@ import static sugarcube.jexter.core.JxNum.fmt;
  *   <li>PDF link annotations → native {@code <a href>} hit-rects in a trailing {@code <g
  *       data-ocd="links">} (clickable in any reader; internal targets point at the sibling page
  *       file and carry {@code data-y}, the destination's y anchor);</li>
- *   <li>{@code OCDPath}/{@code OCDImage} → {@link SvgWriter}'s audited emitters, with ids;
+ *   <li>{@code OCDPath}/{@code OCDImage} → {@link SvgPaint}'s audited emitters, with ids;
  *       groups → {@code <g id data-ocd="g|gr|media">}; clips/gradients/styles deduped.</li>
  * </ul>
  *
@@ -436,7 +436,7 @@ public final class SvgOcdWriter {
         if (order >= 0) sb.append(" data-order=\"").append(order).append('"');
     }
 
-    /** The model's attributes on an element a shared {@link SvgWriter} helper paints (path, image): the id,
+    /** The model's attributes on an element a shared {@link SvgPaint} helper paints (path, image): the id,
      *  {@code extra} (a leading-space attribute list), then the reading order. */
     private static String attrs(OCDNode n, String extra, int order) {
         return "id=\"" + n.id() + "\"" + extra + (order >= 0 ? " data-order=\"" + order + "\"" : "");
@@ -489,7 +489,7 @@ public final class SvgOcdWriter {
           .append(' ').append(f(r.width())).append(' ').append(f(r.height())).append('"');
     }
 
-    /** Paint CSS for a run — {@link SvgWriter}'s semantics on outline glyphs: stroke widths are
+    /** Paint CSS for a run — {@link SvgPaint}'s semantics on outline glyphs: stroke widths are
      *  divided by the font size (the {@code <use>} scale re-multiplies them back to text space). What
      *  paints is the model's to say ({@link OCDText#paintsFill}, {@link OCDText#paintsStroke}). */
     private static String textCss(OCDText t, double fs) {

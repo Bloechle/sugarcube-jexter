@@ -1,7 +1,6 @@
 package sugarcube.jexter.ocd.analysis;
 
 import sugarcube.jexter.ocd.model.OCDDocument;
-import sugarcube.jexter.ocd.model.OCDGroup;
 import sugarcube.jexter.ocd.model.OCDNode;
 import sugarcube.jexter.ocd.model.OCDPage;
 import sugarcube.jexter.ocd.model.OCDParagraph;

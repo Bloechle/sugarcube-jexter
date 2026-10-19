@@ -439,7 +439,7 @@ wrong on a rotation, which is exactly how it once escaped notice.
   > Getting it backwards is silent: the page still looks perfect and only the words come
   > out in the wrong order, on exactly the documents where the order was worth stating.
   >
-  > The re-sort rule is `OCDReader.reorder`'s, which is the authority: the key is
+  > The re-sort rule is `SvgOcdReader.reorder`'s, which is the authority: the key is
   > `data-order` when stated, and the node's own position when it is not — a node without
   > the attribute was emitted at its content position already. The client states the same
   > rule once, in `ocd.js` (`inReadingOrder`, `readingRuns`).

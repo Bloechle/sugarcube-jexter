@@ -6,9 +6,6 @@ import java.awt.geom.Area;
 import java.awt.geom.Path2D;
 import java.awt.geom.PathIterator;
 import java.awt.geom.Rectangle2D;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
 
 /**
  * The one path primitive of the doc model — geometry only, no paint.

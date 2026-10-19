@@ -13,7 +13,6 @@ import sugarcube.jexter.core.JxLog;
 import sugarcube.jexter.core.JxNum;
 import sugarcube.jexter.core.JxProgress;
 import sugarcube.jexter.core.JxRect;
-import sugarcube.jexter.core.JxTransform;
 import sugarcube.jexter.ocd.analysis.Analysis;
 import sugarcube.jexter.ocd.analysis.Cleaner;
 import sugarcube.jexter.ocd.model.OCDDocument;
@@ -26,10 +25,8 @@ import sugarcube.jexter.ocd.model.OCDPage;
 import sugarcube.jexter.ocd.render.OCDRenderer;
 
 import javax.imageio.ImageIO;
-import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayDeque;

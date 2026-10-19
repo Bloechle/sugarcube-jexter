@@ -21,8 +21,6 @@ import sugarcube.jexter.core.JxTransform;
 import sugarcube.jexter.ocd.model.OCDGradient;
 
 import java.io.IOException;
-import java.util.IdentityHashMap;
-import java.util.Map;
 
 /**
  * How a PDF's paint becomes the model's, where no graphics state is needed: the source CMYK behind a colour,

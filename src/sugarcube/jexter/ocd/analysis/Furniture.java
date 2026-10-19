@@ -2,7 +2,6 @@ package sugarcube.jexter.ocd.analysis;
 
 import sugarcube.jexter.core.JxLog;
 import sugarcube.jexter.core.JxText;
-import sugarcube.jexter.core.JxRect;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDNode;
 import sugarcube.jexter.ocd.model.OCDPage;

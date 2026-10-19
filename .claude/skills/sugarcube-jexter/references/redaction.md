@@ -32,7 +32,7 @@ buyers pay and the product decision stay PRIVATE (account skill `repo-skills`,
 ## Done 2026-09-02 — step (a), the redaction checker AND the redactor (public side)
 
 `redact/RedactionAudit.java` — `audit(OCDDocument) → Report`, the `audit` target
-(`--to=audit`, so Prism/API have it via /api/convert); CLI `tool/Redact audit in [--json]`,
+(`--to=audit`, so Prism/API have it via /api/convert); CLI `cli.Redact audit in [--json]`,
 exit 1 when anything is recoverable. Model change: `OCDAnnotation.Markup.REDACT` (+ the
 `"Redact"` case in `PdfImporter.markup`, FORMAT.md annots vocabulary); `Conversion.load`
 made public (the one load authority, now reused by tools).

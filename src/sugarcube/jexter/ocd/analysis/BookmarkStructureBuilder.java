@@ -2,7 +2,6 @@ package sugarcube.jexter.ocd.analysis;
 
 import sugarcube.jexter.core.JxClock;
 import sugarcube.jexter.ocd.analysis.Segmenter.Block;
-import sugarcube.jexter.core.JxText;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDOutline;
 import sugarcube.jexter.ocd.model.OCDStructNode;
@@ -11,7 +10,6 @@ import sugarcube.jexter.ocd.model.OCDStructure;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Locale;
 
 /**
  * Resolves the PDF <b>bookmark tree</b> ({@link OCDDocument#outline()}) into a projectable logical structure.

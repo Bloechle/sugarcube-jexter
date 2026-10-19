@@ -9,7 +9,6 @@ import sugarcube.jexter.core.JxStringer;
 import sugarcube.jexter.ocd.model.OCDAnnotation;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDImage;
-import sugarcube.jexter.ocd.model.OCDNode;
 import sugarcube.jexter.ocd.model.OCDPage;
 import sugarcube.jexter.ocd.model.OCDPath;
 import sugarcube.jexter.ocd.model.OCDText;

@@ -13,7 +13,8 @@ Canonical Document**:
 ```
 PDF ─[convert.PdfImporter]→ OCDDocument ─[analysis]→ structured OCDDocument
                             (the model)        │
-                                               └─[write.*]→ PDF · EPUB · EPUB-reflow · HTML · SVG · MD · DocTags · OCD-EPUB
+                                               ├─[write.*]→ PDF · EPUB · EPUB-reflow · HTML · SVG · MD · DocTags
+                                               └─[ocd.io]→ OCD-EPUB ─[ocd.io.OCDReader]→ OCDDocument
                                                   ocd.render.OCDRenderer → raster
 ```
 
@@ -363,18 +364,21 @@ Refactored, public layout — all under `sugarcube.jexter`:
   (reflowable HTML5 from the OCD structure tree — also the content engine behind
   `ReflowEpubWriter` via `body()`/`chapters()` + an `Assets` sink that externalizes
   images/media or inlines them as data URIs), `DocTagsWriter` (Docling/SmolDocling **DocTags** markup — block tags + `<loc_>` boxes on a 0–500 grid + OTSL tables; LLM/RAG ingestion, exact geometry not ML-inferred). `MarkdownWriter` (clean LLM/RAG Markdown — reading-order content view, GFM tables; the readable companion to DocTags' grounded view).
-  The **OCD-EPUB** working format is written here too — `OcdEpubWriter` (container) +
-  `SvgOcdWriter` (SVG-OCD v2 pages: paths only, `data-text`/`data-order`/`data-size`, native `<a>`
-  links, shared `pages/fonts.svg`) + `OcdMembers` (the `jexter/` JSON members) — and read back
-  by `ocd.io.OCDReader`. **`Conversion` is the one entry point and the single target
+  The **OCD-EPUB** working format is NOT here: the whole codec lives in `ocd.io` — `OcdEpubWriter`
+  (container) + `SvgOcdWriter` (SVG-OCD pages: paths only, `data-text`/`data-order`/`data-size`,
+  native `<a>` links, shared `pages/fonts.svg`) + `OcdMembers` (the `ocd/` JSON members), read back
+  by `OCDReader` (container) + `SvgOcdReader` (a page, the font sheet). `SvgPaint` (ocd.io) is the
+  SVG paint both dialects share; `EpubPackage` (ocd.io) the package all three EPUBs share.
+  **`sugarcube.jexter.Conversion` (the package root) is the one entry point and the single target
   registry** (`svg · pdf · epub · epub-reflow · html · md · doctags · ocd · stages`): every
   writer shares `write(doc, OutputStream, ConvertOptions)` (`Projection`), the target is
   inferred from the output extension or forced with `--to=`, and the **source is sniffed,
-  never declared** (`%PDF` ⇒ import + export, `PK` ⇒ OCD-EPUB re-export). `OCDIndex` is the
+  never declared** (`%PDF` ⇒ import + export, `PK` ⇒ OCD-EPUB re-export). `ocd.model.OCDIndex` is the
   read-out: plain concatenation of run text + soft-hyphen rejoin, nothing else.
   A **pageless document is refused** at `Conversion.load` («Document has no pages»).
-- **`tool`** — runnable entry points built on the library: `Redact` (the audit/apply
-  CLI), the OCR and LLM host bindings. Normalizing a PDF (PDF → OCD → PDF) is
+- **`bind`** — the OCR and LLM host bindings (`AzureOcrClient`, `TesseractOcrClient`,
+  `HttpLlmClient`) and their env binders `OcrEngines` / `LlmEngines`; **`cli`** — `Redact`
+  (the audit/apply CLI). Every command line parses through `core.Args`. Normalizing a PDF (PDF → OCD → PDF) is
   `ui.jx.Jexter`: with arguments it is the headless `JexterCli`, whose
   `--key=value` reaches every `ConvertOptions` setting.
 - **`ui`** — local browser-driven apps (zero-dep JDK `com.sun.net.httpserver`;
@@ -1469,8 +1473,9 @@ the v2 grammar; `ocd.js`'s AUTHORING path still spoke v1:
 python3 - <<'EOF'
 import re, glob
 eng = set()
-for f in ['src/sugarcube/jexter/write/SvgOcdWriter.java','src/sugarcube/jexter/write/SvgWriter.java',
-          'src/sugarcube/jexter/write/OcdEpubWriter.java','src/sugarcube/jexter/ocd/io/OCDReader.java',
+for f in ['src/sugarcube/jexter/ocd/io/SvgOcdWriter.java','src/sugarcube/jexter/ocd/io/SvgPaint.java',
+          'src/sugarcube/jexter/ocd/io/OcdEpubWriter.java','src/sugarcube/jexter/ocd/io/OCDReader.java',
+          'src/sugarcube/jexter/ocd/io/SvgOcdReader.java',
           'src/sugarcube/jexter/ocd/io/OCDVocab.java']:
     eng |= set(re.findall(r'data-[a-z][a-z0-9-]*', open(f, encoding='utf-8').read()))
 for f in glob.glob('src/sugarcube/jexter/ui/**/*.js', recursive=True):
@@ -1657,8 +1662,8 @@ itself was measured first and left alone: on 16 swatches MuPDF and PDFBox agree 
 0,94,157 vs 0,94,158), poppler does not — so the honest fix is to let each reader convert the source's own
 colour, not to pick a profile. Also fixed on the way: `OCDRenderer` restored the clip BEFORE the transform
 (a clip set under the node's matrix came back scaled by it — latent until the canvas carried a clip); both
-SVG writers dropped a group's blend and alpha (`SvgWriter.groupStyle`); `ColorDodge` was written
-`colordodge`, which no CSS knows and the reader turned into `Colordodge` (`SvgWriter.cssBlend`).
+SVG writers dropped a group's blend and alpha (`SvgPaint.groupStyle`); `ColorDodge` was written
+`colordodge`, which no CSS knows and the reader turned into `Colordodge` (`core.JxBlend`, the one blend table).
 
 **A ninth, found only on the WHOLE file: the output intent.** doc-B's blue stayed "very slightly
 different" after the CMYK was carried as `k`. The source's catalog holds `/OutputIntents` with Coated
@@ -2191,7 +2196,7 @@ It holds invariants that every engine change must keep. Gate them with
   clipped node; in double the wrapper is bare and the page lost 388 tags and 32 KB.
   Precision is the invariant, memory is not.
 - **A clip has ONE id and ONE carrier, and the carrier is native.**
-  `SvgWriter.clipRef` is the id authority: the `<clipPath>` id IS the model clip
+  `SvgPaint.clipRef` is the id authority: the `<clipPath>` id IS the model clip
   id (`c7`), with the model's geometry in page space, verbatim. A presentation id
   minted per `<defs>` entry (`"clip" + clips.size()`, deduped on geometry) is a
   SECOND naming authority — the defs then say `clip4` while the nodes say `c7`,
@@ -2363,7 +2368,7 @@ Read it before proposing or prioritising a product feature. What binds the code 
 
 - **Chosen sequence**: redaction checker (demo) → PDF/UA writer + veraPDF CI gate → a
   tables/figures pass in Prism. Done: the `redact` package (audit target + `redact` option,
-  `tool/Redact` CLI) — the audit-derived zone is CEILED at its covering box's z (only what the box
+  `cli.Redact` CLI) — the audit-derived zone is CEILED at its covering box's z (only what the box
   hid goes; without it, repairing a TikZ figure erased the labels sitting under their own white
   backgrounds) and the mark goes to the bottom of the paint order (or the geometric audit still
   sees IMAGE_UNDER_BOX on a scan whose pixels were painted). Full notes:

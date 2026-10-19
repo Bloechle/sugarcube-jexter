@@ -20,7 +20,6 @@ import sugarcube.jexter.ocd.model.OCDStructure;
 import sugarcube.jexter.ocd.model.OCDText;
 
 import javax.imageio.ImageIO;
-import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.geom.Area;

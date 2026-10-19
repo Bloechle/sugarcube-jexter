@@ -3,9 +3,7 @@ package sugarcube.jexter.font;
 import sugarcube.jexter.core.JxJson;
 import sugarcube.jexter.core.JxName;
 import sugarcube.jexter.core.JxPath;
-import sugarcube.jexter.core.JxStringer;
 import sugarcube.jexter.ocd.model.OCDFont;
-import sugarcube.jexter.ocd.model.OCDGlyph;
 import sugarcube.jexter.trace.TraceOptions;
 import sugarcube.jexter.trace.TracedShape;
 import sugarcube.jexter.trace.Tracer;
@@ -36,8 +34,8 @@ import java.util.Locale;
  * {@code FontServlet} both delegate here, so the foundry logic lives in exactly one place.
  *
  * <p>A glyph may arrive already vectorized ({@code em} instead of {@code png}) — that branch exists for
- * an EXISTING font loaded for editing, and {@code convert.TtfImporter} is what produces it. This class
- * does not import it: {@code font} stays FontBox-free and {@code font → convert} would be a backward
+ * an EXISTING font loaded for editing, and {@code pdfimport.TtfImporter} is what produces it. This class
+ * does not import it: {@code font} stays FontBox-free and {@code font → pdfimport} would be a backward
  * edge, so the caller composes the two.
  *
  * <pre>

@@ -8,7 +8,6 @@ import org.apache.fontbox.ttf.TrueTypeFont;
 import org.apache.pdfbox.io.RandomAccessReadBuffer;
 
 import sugarcube.jexter.core.JxPath;
-import sugarcube.jexter.core.JxStringer;
 
 import java.awt.geom.AffineTransform;
 import java.awt.geom.GeneralPath;
@@ -39,7 +38,7 @@ import java.util.List;
  * own proportions (o 612, l 278, H 752 per 1000 em).
  *
  * <p><b>Foundry does NOT import this class, on purpose.</b> {@code font} is deliberately FontBox-free —
- * the compilation side must stay parseable without a font library — and {@code font → convert} would be
+ * the compilation side must stay parseable without a font library — and {@code font → pdfimport} would be
  * the graph's only backward edge. The two halves are composed by whoever holds both: a Font Studio
  * surface, or {@code tool}. A dependency here would buy convenience with the layering.
  */

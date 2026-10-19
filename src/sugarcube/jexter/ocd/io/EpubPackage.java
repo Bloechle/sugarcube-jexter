@@ -3,7 +3,6 @@ package sugarcube.jexter.ocd.io;
 import sugarcube.jexter.ocd.model.OCDIndex;
 import sugarcube.jexter.core.JxClock;
 import sugarcube.jexter.core.JxName;
-import sugarcube.jexter.core.JxNum;
 import sugarcube.jexter.core.JxText;
 import sugarcube.jexter.core.JxZip;
 import sugarcube.jexter.ocd.model.OCDDocument;
@@ -26,8 +25,8 @@ import java.util.function.Function;
 import java.util.Locale;
 
 /**
- * Shared EPUB3 packaging — the parts that a fixed-layout replica ({@link EpubWriter}) and a
- * reflowable export ({@link ReflowEpubWriter}) produce identically: the OCF container, the cover,
+ * Shared EPUB3 packaging — the parts that a fixed-layout replica ({@code write.EpubWriter}) and a
+ * reflowable export ({@code write.ReflowEpubWriter}) produce identically: the OCF container, the cover,
  * Dublin Core + accessibility metadata, the navigation document and NCX (parameterised by how a
  * heading resolves to an href), the package skeleton, and small text helpers. Each writer keeps
  * only what genuinely differs (content documents, spine, and the {@code rendition:layout} flag).

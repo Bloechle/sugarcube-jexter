@@ -30,7 +30,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -318,7 +317,7 @@ public final class Conversion {
                 .end().toString();
     }
     /** Add an existing TrueType/OpenType font to the document's library, for the characters given (or
-     *  printable ASCII). {@code convert.TtfImporter} reads the outlines — it is the FontBox-coupled half —
+     *  printable ASCII). {@code pdfimport.TtfImporter} reads the outlines — it is the FontBox-coupled half —
      *  and they are stored as an ordinary {@link OCDFont}, which is what makes the rest free: the writer
      *  emits {@code pages/fonts.svg} from the model, so an added font is written, read back and rendered by
      *  exactly the code every imported font goes through.

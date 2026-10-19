@@ -12,7 +12,7 @@ import java.io.OutputStream;
  * encode UTF-8; binary projections (PDF, EPUB) write their container bytes directly. Whole-document
  * writers ignore {@link ConvertOptions#PAGE}; the per-page SVG projection honors it.
  *
- * <p>This is what lets {@link Conversion} treat all writers identically — one method reference per
+ * <p>This is what lets {@link sugarcube.jexter.Conversion} treat all writers identically — one method reference per
  * target, no per-writer output-shape adapters. Each writer keeps its richer core (a {@code String}
  * for the text projections, a per-page {@code render} for SVG); this is the uniform façade over it.
  */

@@ -4,7 +4,6 @@ import sugarcube.jexter.core.JxClock;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.core.JxJson;
 import sugarcube.jexter.core.JxNum;
-import sugarcube.jexter.core.JxText;
 import sugarcube.jexter.core.JxLog;
 import sugarcube.jexter.core.JxStringer;
 import sugarcube.jexter.core.LlmClient;

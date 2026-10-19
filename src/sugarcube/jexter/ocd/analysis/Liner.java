@@ -1,7 +1,6 @@
 package sugarcube.jexter.ocd.analysis;
 
 import sugarcube.jexter.core.JxRect;
-import sugarcube.jexter.core.JxNum;
 import sugarcube.jexter.ocd.model.OCDText;
 
 import java.util.ArrayList;
