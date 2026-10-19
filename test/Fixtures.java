@@ -154,8 +154,9 @@ final class Fixtures {
      * Press setting, as a newspaper producer writes it: no space glyph anywhere, every word placed by a TJ
      * offset. A justified column whose word spaces vary from tight to loose, a results table whose names hold
      * a word space beside wide column gaps, tracked capitals, a headline under Tz, and two columns set on
-     * baselines offset by half a line — each one a way the word spaces were lost (glued words, or two
-     * columns read as one line with no space left in it).
+     * baselines offset by half a line, running on under a photo set across their gutter, and a title set tight
+     * over a two-column list — each one a way the words were lost (glued, or read row by row across the
+     * columns).
      */
     private static void press(Doc d, PDPageContentStream cs) throws IOException {
         PDFont times = new PDType1Font(Standard14Fonts.FontName.TIMES_ROMAN);
@@ -186,8 +187,32 @@ final class Fixtures {
         float col = 40 * MM, gutter = 4 * MM;
         for (int i = 0; i < left.length; i++) words.add(justified(cs, times, 9, x, y - i * 11, left[i], col));
         for (int i = 0; i < right.length; i++) words.add(justified(cs, times, 9, x + col + gutter, y - 5.5f - i * 11, right[i], col));
+        // a photo set across the gutter, both columns running on under it: a shape that cut the order filled
+        // the gutter and the region was sorted by y, row by row across the columns
+        cs.setNonStrokingColor(new Color(200, 200, 200));
+        cs.addRect(x + col - 10 * MM, y - 62.5f, gutter + 20 * MM, 20);
+        cs.fill();
+        cs.setNonStrokingColor(Color.BLACK);
+        String[] left2 = { "et pour longtemps encore", "avec le soutien du canton", "comme chaque année" },
+                 right2 = { "selon le calendrier prévu", "par le conseil communal", "lors de sa séance" };
+        int at = words.size() - right.length;
+        for (int i = 0; i < left2.length; i++) words.add(at + i, justified(cs, times, 9, x, y - 71.5f - i * 11, left2[i], col));
+        for (int i = 0; i < right2.length; i++) words.add(justified(cs, times, 9, x + col + gutter, y - 77 - i * 11, right2[i], col));
+        // a title over a two-column list with no gap under it, the rows on shared baselines: the title covers
+        // the gutter and no horizontal valley parts it from the list, so no projection cut exists — the
+        // region was read row by row across both columns
+        y -= 130;
+        words.add(tj(cs, bold, 11, x, y, "Les rendez-vous de la semaine dans la région", null, 0, 100));
+        String[] l2 = { "Lundi", "Marché couvert", "Mardi", "Concert au parc" };
+        String[] r2 = { "Jeudi", "Fête du village", "Samedi", "Course populaire" };
+        for (int i = 0; i < l2.length; i++) words.add(tj(cs, i % 2 == 0 ? bold : times, 8, x, row(y, i), l2[i], null, 0, 100));
+        for (int i = 0; i < r2.length; i++) words.add(tj(cs, i % 2 == 0 ? bold : times, 8, x + col + gutter, row(y, i), r2[i], null, 0, 100));
         WORDS.put("text_press", words);
     }
+
+    /** The baseline of row {@code i} of a list of entries — a day and its event — set {@code 8 pt} apart, the
+     *  entries {@code 5 pt} further: each entry a paragraph of its own. */
+    private static float row(float top, int i) { return top - 11 - i * 8 - i / 2 * 5; }
 
     /** One justified line: its word gaps share whatever {@code width} leaves after the words. */
     private static String justified(PDPageContentStream cs, PDFont f, float size, float x, float y, String line,

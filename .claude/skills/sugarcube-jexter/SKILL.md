@@ -343,6 +343,10 @@ Analysis (`ocd.analysis`)
   measured on the other has not been measured. The `text_press` fixture and the WORDS gate hold the press
   shapes (justified spaces, results tables, tracking, Tz, offset columns); a line's band is its tallest
   run, never a growing union; an inkless glyph with no text is a space whose ToUnicode was forgotten.
+- Column order on a press page is checked with the paragraphs' boxes in content order, page by page — a
+  gate that only reads words passes a page read row by row across its columns. Three shapes hid the
+  columns: a proto-line cut at 1 em of the LARGER run (a newspaper gutter is ≈ 1 em), a photo or box over
+  the gutter (only text cuts the order), a title set tight over a two-column list (`XYCut.headed`).
 
 ## 6 · Client traps (Prism, the Inspector, Jexter)
 

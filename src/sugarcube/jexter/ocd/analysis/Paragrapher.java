@@ -136,7 +136,7 @@ public final class Paragrapher {
         // the document is stored as it reads. Reordering is render-safe by construction now that paint follows
         // z, not flow; re-analysis is geometry-based, so it is unaffected.
         nodes.clear();
-        nodes.addAll(XYCut.order(out, OCDNode::bounds));
+        nodes.addAll(XYCut.order(out, OCDNode::bounds, n -> n instanceof OCDParagraph));   // the text cuts; a photo or a box rides
     }
 
     /** Wrap one paint-contiguous fragment — its runs plus the decorations interleaved among them — into an

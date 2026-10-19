@@ -77,6 +77,10 @@ public final class XYCut {
     private static final int    CROSS_MIN_OVERLAPS  = 2;
     /** Minimum relative valley depth (0–1) to accept a cut. */
     private static final double MIN_VALLEY_DEPTH    = 0.10;
+    /** × the text's line: the narrowest gutter. A newspaper sets its columns about one em apart (9 pt for
+     *  8.5 pt type, a 10 pt line), poppler takes 0.7 em: half a line is under every gutter met and over
+     *  every word space, which the proto-lines have already closed anyway (a line is cut at a gutter). */
+    private static final double GUTTER_LINES        = 0.5;
     /** × the median block width: a vertical gap this wide splits whatever stands beside it. */
     private static final double BLOCK_GUTTER        = 0.15;
     /** Profile floor: coverage ≤ NOISE × peak counts as empty. */
@@ -87,20 +91,31 @@ public final class XYCut {
     /** Order {@code items} top-to-bottom, left-to-right by reading flow. Items with no usable
      *  bounds keep their input order and trail at the end (stable). */
     public static <T> List<T> order(List<T> items, Function<T, JxRect> bounds) {
+        return order(items, bounds, it -> true);
+    }
+
+    /** {@link #order}, with only the items {@code cuts} accepts cutting the columns: the others — a photo
+     *  across three columns, a tinted box behind a sidebar, a rule, a background — are placed by their top
+     *  among the ordered ones. On a press page they covered every gutter, so the text was read in one band
+     *  across the whole page. They still SCREEN a row cut: a photo set across two columns, both running on
+     *  under it, leaves no row valley to cut the columns at, so each column reads down past it. */
+    public static <T> List<T> order(List<T> items, Function<T, JxRect> bounds, java.util.function.Predicate<T> cuts) {
         if (items == null) return new ArrayList<>();
         if (items.size() <= 1) return new ArrayList<>(items);
 
-        List<Item<T>> all = new ArrayList<>(items.size());
+        List<Item<T>> all = new ArrayList<>(items.size()), aside = new ArrayList<>();
         List<T> tail = new ArrayList<>();
         for (T it : items) {
             JxRect b = bounds.apply(it);
-            if (b != null && !b.isEmpty()) all.add(new Item<>(it, b));
-            else tail.add(it);
+            if (b == null || b.isEmpty()) tail.add(it);
+            else (cuts.test(it) ? all : aside).add(new Item<>(it, b));
         }
+        if (all.isEmpty()) { all = aside; aside = new ArrayList<>(); }
         if (all.isEmpty()) return new ArrayList<>(items);
 
         Metrics m = metrics(all);
-        List<Item<T>> cross = new ArrayList<>(), normal = new ArrayList<>();
+        for (Item<T> it : aside) m.screens.add(it.b);
+        List<Item<T>> cross = new ArrayList<>(aside), normal = new ArrayList<>();
         classifyCross(all, m, cross, normal);
 
         List<Item<T>> flat = new ArrayList<>();
@@ -175,7 +190,7 @@ public final class XYCut {
     private static <T> void splitInto(List<Item<T>> items, Metrics m, List<List<Item<T>>> leaves) {
         if (items.size() <= 1) { leaves.add(new ArrayList<>(items)); return; }
         JxRect region = bbox(items);
-        Valley hV = deepestValley(profile(items, region, true),  m.minHGap);
+        Valley hV = deepestValley(screened(profile(items, region, true), region, m.screens), m.minHGap);
         Valley vV = deepestValley(profile(items, region, false), m.minVGap);
         double hd = hV != null ? hV.depth : 0, vd = vV != null ? vV.depth : 0;
         if (hd >= vd && hd > MIN_VALLEY_DEPTH) {
@@ -192,9 +207,40 @@ public final class XYCut {
                     || bbox(left).height() > 2 * m.line && bbox(right).height() > 2 * m.line;
             if (!left.isEmpty() && !right.isEmpty() && columns) { splitInto(left, m, leaves); splitInto(right, m, leaves); return; }
         }
+        if (headed(items, m, leaves)) return;
         List<Item<T>> leaf = new ArrayList<>(items);
         leaf.sort(Comparator.comparingDouble((Item<T> it) -> -it.cy).thenComparingDouble(it -> it.cx));
         leaves.add(leaf);
+    }
+
+    /** The L-shape no projection can cut: a heading set over two columns with no gap under it — a short
+     *  two-column list under its title — covers the gutter, and leaves no horizontal
+     *  valley either, so the region was read row by row across both columns. When the wide items stand wholly
+     *  above (or below) everything else and their absence opens a gutter, they are read first (last) and the
+     *  columns are cut. Returns whether it cut. */
+    private static <T> boolean headed(List<Item<T>> items, Metrics m, List<List<Item<T>>> leaves) {
+        double wide = CROSS_BETA * m.medianWidth;
+        List<Item<T>> head = new ArrayList<>(), rest = new ArrayList<>(), foot = new ArrayList<>(), w = new ArrayList<>();
+        for (Item<T> it : items) (it.b.width() > wide ? w : rest).add(it);
+        if (w.isEmpty() || rest.size() < 2) return false;
+        JxRect body = bbox(rest);
+        for (Item<T> it : w) {
+            if (it.b.y() >= body.maxY()) head.add(it);
+            else if (it.b.maxY() <= body.y()) foot.add(it);
+            else return false;                                         // a wide item beside the body: not a heading
+        }
+        Valley v = deepestValley(profile(rest, body, false), m.minVGap);
+        if (v == null || v.depth <= MIN_VALLEY_DEPTH) return false;
+        List<Item<T>> left = new ArrayList<>(), right = new ArrayList<>();
+        for (Item<T> it : rest) (it.cx < v.cut ? left : right).add(it);
+        boolean columns = v.span >= m.medianWidth * BLOCK_GUTTER
+                || bbox(left).height() > 2 * m.line && bbox(right).height() > 2 * m.line;
+        if (left.isEmpty() || right.isEmpty() || !columns) return false;
+        if (!head.isEmpty()) splitInto(head, m, leaves);
+        splitInto(left, m, leaves);
+        splitInto(right, m, leaves);
+        if (!foot.isEmpty()) splitInto(foot, m, leaves);
+        return true;
     }
 
     /** Run {@link #splitInto} and return the leaf groups, each already in reading order. */
@@ -217,17 +263,19 @@ public final class XYCut {
         Metrics m = new Metrics();
         m.medianWidth  = JxNum.median(w);
         m.medianHeight = JxNum.median(h);
-        m.minHGap = m.medianHeight * 0.8;    // ≈ one line height for a horizontal split
+        double[] hs = h.clone();
+        java.util.Arrays.sort(hs);
+        double line = hs[hs.length / 10];
+        m.line = line;
+        // a horizontal gap is the TEXT's too: 0.8 of a multi-line block's median height asked a press page for
+        // 13 pt between a chapeau and its columns, and 12.8 pt of space there read as no cut at all
+        m.minHGap = Math.min(m.medianHeight, line > 0 ? line : m.medianHeight) * 0.8;   // ≈ one line of the text
         // A gutter is measured against the TEXT, not the block: 15 % of a column-wide block is wider than the
         // gutter of every newspaper and of most two-column papers (a 240 pt column asks 36 pt, the gutter is
         // 22), so no vertical cut was ever allowed there and the columns were read line by line, interleaved.
         // A line is the text's scale: the low decile of item heights (a one-line item exists on any page that
         // has columns) bounds the gap, the way poppler and pdftotext++ bound it by the font size.
-        double[] hs = h.clone();
-        java.util.Arrays.sort(hs);
-        double line = hs[hs.length / 10];
-        m.line = line;
-        m.minVGap = Math.min(m.medianWidth * BLOCK_GUTTER, line > 0 ? line : Double.MAX_VALUE);
+        m.minVGap = Math.min(m.medianWidth * BLOCK_GUTTER, line > 0 ? GUTTER_LINES * line : Double.MAX_VALUE);
         return m;
     }
 
@@ -294,6 +342,20 @@ public final class XYCut {
         return new Axis(p, origin, f);
     }
 
+    /** A Y profile with the screens laid in: each adds the width it covers of the region, over the height it
+     *  covers of it — so no row cut runs through a photo, while the column cut never sees it. */
+    private static Axis screened(Axis ax, JxRect region, List<JxRect> screens) {
+        float[] p = ax.hist();
+        for (JxRect r : screens) {
+            double w = Math.min(r.right(), region.right()) - Math.max(r.x(), region.x());
+            double y0 = Math.max(r.y(), region.y()), y1 = Math.min(r.maxY(), region.maxY());
+            if (w <= 0 || y1 <= y0) continue;
+            int s = clampIdx((int) ((y0 - ax.origin()) * ax.f()), p.length), e = clampIdx((int) ((y1 - ax.origin()) * ax.f()), p.length);
+            for (int i = s; i <= e; i++) p[i] += (float) w;
+        }
+        return ax;
+    }
+
     /** Deepest relative valley in a profile, returned with its cut coordinate. {@code null} if none. */
     private static Valley deepestValley(Axis ax, double minGapCoord) {
         float[] p = ax.hist();
@@ -356,7 +418,10 @@ public final class XYCut {
         final T v; final JxRect b; final double cx, cy;
         Item(T v, JxRect b) { this.v = v; this.b = b; this.cx = b.cx(); this.cy = b.cy(); }
     }
-    private static final class Metrics { double medianWidth, medianHeight, minHGap, minVGap, line; }
+    private static final class Metrics {
+        double medianWidth, medianHeight, minHGap, minVGap, line;
+        final List<JxRect> screens = new ArrayList<>();                  // what blocks a row cut, never a column cut
+    }
     private record Axis(float[] hist, double origin, double f) {}
     private static final class Valley  { double cut, depth, width, span; }   // width in buckets, span in page units
 }

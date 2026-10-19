@@ -29,13 +29,14 @@ final class Liner {
      *  Overlap alone is the line band: same-line runs (a raised/shrunk sub/superscript included) overlap
      *  strongly, tight-leading neighbours only ≈0.1–0.3, so ~1/3 separates them cleanly. */
     private static final double OVERLAP_MIN = 1.0 / 3.0;
-    /** × em: a horizontal gap wider than this between two runs on the same band is a <b>column gutter</b> (or a
-     *  margin line-number standing off the text), not a word space — so the band is cut there into separate
-     *  lines. A word space is ≤ ~0.3 em and even heavily justified spacing stays well under 1 em, while a
-     *  two-column gutter or a margin offset is several em; 1 em is the clean divide. Without this, a left- and
-     *  a right-column line at the same height (they vertically overlap) would merge into one full-width line,
-     *  and XY-Cut downstream could never recover the columns. */
-    private static final double COLUMN_GAP = 1.0;
+    /** × em of the SMALLER run: a horizontal gap wider than this between two runs on the same band may be a
+     *  <b>column gutter</b> (or a margin number standing off the text), so the band is cut there into
+     *  proto-lines. A newspaper sets its columns about one em apart (9 pt for 8.5 pt type) and poppler takes
+     *  0.7 em; at 1 em of the LARGER run, two columns of a press page and a big figure beside a caption
+     *  stayed one line, which bridged the gutter and left XY-Cut no column to find. A wide word space cut
+     *  here costs nothing: XY-Cut only cuts where every line leaves the gap, and inside its leaf the band is
+     *  read whole again ({@code splitColumns=false}). */
+    private static final double COLUMN_GAP = 0.5;
 
     /** A clustered line: mean y and member runs (left→right). Geometry only — no text, no spacing; word
      *  spaces live in the runs as sentinels (the {@link Spacer} authority), read by whoever needs the text. */
@@ -140,7 +141,7 @@ final class Liner {
             OCDText prev = null;
             for (OCDText t : runs) {
                 if (splitColumns && prev != null) {
-                    double em = Math.max(prev.fontSize(), t.fontSize());
+                    double em = Math.min(prev.fontSize(), t.fontSize());
                     double gap = em > 0 ? (box.of(t).minX() - box.of(prev).maxX()) / em : 0;
                     if (gap > COLUMN_GAP) { out.add(lineOf(seg, box)); seg = new ArrayList<>(); }   // gutter / margin → new proto-line
                 }

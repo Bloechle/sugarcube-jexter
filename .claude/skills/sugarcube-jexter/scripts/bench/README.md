@@ -14,6 +14,10 @@ the other half: the browser.
 npm i playwright-core                       # + a Chromium; PLAYWRIGHT_BROWSERS_PATH points at it
 python3 ../make_bench_fixtures.py /tmp/fix  # the documents (see its header)
 cp target/corpus/rich.pdf /tmp/fix/         # the form, links and layers: written by the gates' corpus
+cp target/corpus/rich.pdf /tmp/fix/big.pdf  # indexcost: any multi-page book
+cp target/corpus/text_embedded_ttf.pdf /tmp/fix/withfont.pdf   # retype: a font of its own
+# readingorder, indexcost: order.pdf — two columns, the RIGHT one painted first, its first word SECOND
+# and the left one's FIRST (any generator; paint order must differ from reading order)
 for f in /tmp/fix/*.pdf; do java -cp "$CP" sugarcube.jexter.Conversion \
                                 "$f" "${f%.pdf}.ocd.epub"; done
 cp /tmp/fix/*.ocd.epub $BENCH_ROOT/site/    # the bench serves the site itself

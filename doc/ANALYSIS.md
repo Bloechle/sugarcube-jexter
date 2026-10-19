@@ -14,7 +14,7 @@ and each concern has a single owner.
    and `OCDBreak`, return pure-ink runs. Idempotent (re-analysis re-derives everything).
 2. **`Liner`** — the **line authority**, pure geometry. Bands runs by **vertical overlap alone** (≥ 1/3 of
    the smaller band), so a raised/shrunk **sub/superscript naturally belongs to its line** — no size gate,
-   no lexicon, OCR-robust. `lines(·, true)` cuts columns at a >1 em gutter (proto-lines for XY-Cut);
+   no lexicon, OCR-robust. `lines(·, true)` cuts columns at a gap over ½ em (proto-lines for XY-Cut);
    `lines(·, false)` keeps the whole band (clean final lines inside a leaf).
 3. **`XYCut`** (XY-Cut++) — one engine: `segment` (grouped leaves) for blocks, `order` (flattened) for
    reading order. Cross-layout masking, relative-depth valleys, adaptive thresholds.
@@ -246,7 +246,8 @@ This is a measured architectural fact, not a convenience (see *Why graphics are 
 ### 6. StructureBuilder — the logical layer (text + titles)
 
 Reads the paragraphs back (via `Segmenter.fromParagraph`, so it trusts the segmenter rather than
-re-segmenting), orders the blocks with the shared `XYCut`, and labels each into an `OCDStructNode` tree.
+re-segmenting), takes the blocks in the content's order (the reading order `Paragrapher` set), and labels
+each into an `OCDStructNode` tree.
 
 **Scope: text + titles only.** This pass emits exactly two element types — **HEADING** and
 **PARAGRAPH** — under a `DOCUMENT` root. Figures, tables, captions, lists and code are *deferred to the
@@ -264,8 +265,10 @@ never becomes a heading because its style does not recur.
 ### 7. Reading order — `XYCut.order`
 
 Reading order is **not a separate class**; it is `XYCut.order` — the same XY-Cut++ engine the
-segmenter uses — applied in two places: `Paragrapher` orders the page `content` array (so the array
-order *is* the reading order), and `StructureBuilder` orders the structure blocks. Running furniture
+segmenter uses — applied ONCE: `Paragrapher` orders the page `content` array (so the array order *is*
+the reading order), and `StructureBuilder` reads its blocks in that order. A second cut over the
+structure blocks alone was blind to the photos that screen a row cut, and read a column running on past
+one out of order. Running furniture
 is excluded via `Furniture.isRunning`: a block made of it alone never enters a logical tree (the
 `FURNITURE` gate). Paint order is carried separately by each node's `z`. The read-out (`OCDIndex`)
 follows the content's order too — never the ids, which a restructure leaves behind.
@@ -324,8 +327,10 @@ column becomes one "line" with the other column's lines in it (measured on a two
 read as one line, with no word space left). `Liner` carries **no text and no spaces** — a line is `(yc, runs)`;
 the word spaces are `Spacer`'s job (below).
 
-The `splitColumns` flag is the only variation: `true` cuts a band at any >1 em gutter (proto-lines, so a
-margin number / second column stands alone for XY-Cut); `false` keeps the whole band (the clean final
+The `splitColumns` flag is the only variation: `true` cuts a band at any gap over half an em of the smaller
+run (proto-lines, so a margin number / second column stands alone for XY-Cut — a newspaper sets its
+columns about one em apart, and a cut at a wide word space costs nothing, XY-Cut only cuts where every
+line leaves the gap); `false` keeps the whole band (the clean final
 lines inside a confirmed leaf, where an enumerator parted by an indent rejoins its text).
 
 ### XY-Cut++ — the single cutter
@@ -337,12 +342,18 @@ arXiv:2504.10258, 2025), which fixes plain recursive XY-cut on three points:
 
 - **Cross-layout masking** — an element wider than `β·medianWidth` overlapping ≥2 others is pulled
   out before the cut and re-inserted by vertical position, so a spanning banner or figure never
-  erases a column gutter (the *L-shape problem*).
+  erases a column gutter (the *L-shape problem*). A region no projection can cut — a title set tight
+  over a two-column list, which covers the gutter and leaves no row valley under it — is cut once its
+  wide items, standing wholly above (or below) the rest, are set aside and their absence opens a gutter:
+  they are read first (last), then each column. And in `Paragrapher` only text cuts the page
+  (`order(items, bounds, cuts)`): a photo or a box spanning two columns rides by its vertical position
+  instead of filling the gutter, which sorted the whole page by `y`.
 - **Relative-depth valleys** — cuts run on projection profiles and a valley is scored by its depth
   relative to the surrounding peaks (with a noise floor), so a near-empty corridor still cuts and a
   page margin never does.
-- **Adaptive thresholds** — the minimum gap per axis derives from the page's own items: a horizontal
-  cut from the median item height, a vertical one from the TEXT's line (the low decile of item heights),
+- **Adaptive thresholds** — the minimum gap per axis derives from the page's own items, from the TEXT's
+  line (the low decile of item heights): a horizontal cut at 0.8 of it (or of the median item height, the
+  smaller), a vertical one at half of it,
   the way poppler and pdftotext++ bound a gutter by the font size — not from the block width, which made a
   newspaper or two-column gutter (11–22 pt) narrower than any cut it allowed. A gutter that narrow cuts
   only with a column on each side, taller than two lines: a label and its value apart on one line stay
@@ -439,7 +450,8 @@ leaves) — a graphic spans across the text and bridges the whitespace valleys, 
 
 So the architecture is principled, not incidental: **graphics are clustered separately
 (`GraphicClusterer`) and placed by spatial overlap**, while `XY-Cut++` runs on text only. The single
-clean cutter owns the text; the graphic path owns the drawings; `StructureBuilder` joins them. This is
+clean cutter owns the text; the graphic path owns the drawings; `StructureBuilder` joins them. In the
+ORDER a graphic counts once, and only as a screen: it never cuts a column, and no row cut runs through it. This is
 why the analysis is not one monolithic "cut everything" routine.
 
 

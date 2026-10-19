@@ -21,8 +21,8 @@ import java.util.Map;
 /**
  * Derives the logical {@link OCDStructNode} tree from the {@link Segmenter.Block}s of the document — the
  * same blocks the physical layer ({@link Paragrapher} &rarr; {@link OCDParagraph}) was built from, read
- * back by {@link Segmenter#fromParagraph} (no re-segmentation). Blocks are ordered per page by the
- * shared {@link XYCut} engine, then each text block is labelled HEADING or PARAGRAPH.
+ * back by {@link Segmenter#fromParagraph} (no re-segmentation). Blocks are read per page in the content's
+ * order, the reading order {@link XYCut} gave it, then each text block is labelled HEADING or PARAGRAPH.
  *
  * <p><b>Scope: text + titles only.</b> This pass emits exactly two element types — HEADING and
  * PARAGRAPH. Figures, tables, captions, lists and code are deferred to the downstream LLM-refine layer;
@@ -99,15 +99,16 @@ public final class StructureBuilder {
     }
 
 
-    /** The document's text blocks, ordered per page by the shared {@link XYCut}, keyed by page index. The one
-     *  block source shared by the heuristic outline and {@link BookmarkStructureBuilder}, so both read the same
-     *  segmentation. */
+    /** The document's text blocks per page, keyed by page index, in the content's order — the reading order
+     *  {@link Paragrapher} set with the whole page in view (its photos and boxes included). The one block source
+     *  shared by the heuristic outline and {@link BookmarkStructureBuilder}, so both read the same segmentation;
+     *  a second cut over the text alone, blind to what screens it, read a column past a photo out of order. */
     static Map<Integer, List<Block>> orderedBlocksByPage(OCDDocument doc) {
         Map<Integer, List<Block>> byPage = new LinkedHashMap<>();
         for (int pi = 0; pi < doc.pageCount(); pi++) {
             List<Block> pageBlocks = new ArrayList<>();
             collect(doc, doc.page(pi).content(), pi, pageBlocks);
-            byPage.put(pi, XYCut.order(pageBlocks, b -> b.bounds));
+            byPage.put(pi, pageBlocks);
         }
         return byPage;
     }
