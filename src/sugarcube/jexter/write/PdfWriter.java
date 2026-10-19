@@ -28,6 +28,7 @@ import sugarcube.jexter.core.JxCmyk;
 import sugarcube.jexter.core.JxLog;
 import sugarcube.jexter.core.JxPath;
 import sugarcube.jexter.core.JxRect;
+import sugarcube.jexter.core.JxStroke;
 import sugarcube.jexter.core.JxTransform;
 import sugarcube.jexter.font.JxFont;
 import sugarcube.jexter.ocd.analysis.Spacer;
@@ -222,36 +223,16 @@ public final class PdfWriter {
         if (p.hasGradient()) {
             paintGradient(cs, p);
             if (p.isStroked()) {
-                int s = p.stroke();
-                strokeColor(cs, p, s);
-                cs.setLineWidth((float) Math.max(p.strokeWidth(), 0));
-                cs.setLineCapStyle(p.cap());
-                cs.setLineJoinStyle(p.join());
-                if (p.miterLimit() > 0) cs.setMiterLimit((float) p.miterLimit());
-                if (p.hasDash()) {
-                    double[] d = p.dash();
-                    float[] f = new float[d.length];
-                    for (int i = 0; i < d.length; i++) f[i] = (float) d[i];
-                    cs.setLineDashPattern(f, (float) p.dashPhase());
-                }
+                strokeColor(cs, p, p.stroke());
+                pen(cs, p.pen());
                 emitGeom(cs, p.geometry());
                 cs.stroke();
             }
             return;
         }
         if (p.isStroked()) {
-            int s = p.stroke();
-            strokeColor(cs, p, s);
-            cs.setLineWidth((float) Math.max(p.strokeWidth(), 0));
-            cs.setLineCapStyle(p.cap());
-            cs.setLineJoinStyle(p.join());
-            if (p.miterLimit() > 0) cs.setMiterLimit((float) p.miterLimit());
-            if (p.hasDash()) {
-                double[] d = p.dash();
-                float[] f = new float[d.length];
-                for (int i = 0; i < d.length; i++) f[i] = (float) d[i];
-                cs.setLineDashPattern(f, (float) p.dashPhase());
-            }
+            strokeColor(cs, p, p.stroke());
+            pen(cs, p.pen());
         }
         if (p.isFilled()) fillColor(cs, p, p.fill());
 
@@ -379,31 +360,31 @@ public final class PdfWriter {
         cs.restoreGraphicsState();
     }
 
-    /** Stroke graphics state for an em-scaled glyph outline: page-space width/dash divided by {@code fs}. */
+    /** Stroke graphics state for an em-scaled glyph outline: the pen is in text space, the outline in em. */
     private void setGlyphStroke(PDPageContentStream cs, OCDText t, double fs) throws IOException {
         strokeColor(cs, t, t.stroke());
-        cs.setLineWidth((float) Math.max(t.strokeWidth() / fs, 0));
-        cs.setLineCapStyle(t.cap());
-        cs.setLineJoinStyle(t.join());
-        if (t.miterLimit() > 0) cs.setMiterLimit((float) t.miterLimit());
-        if (t.hasDash()) cs.setLineDashPattern(scaleDash(t.dash(), 1.0 / fs), (float) (t.dashPhase() / fs));
+        pen(cs, t.pen().scaled(1 / fs));
     }
 
-    private static float[] scaleDash(double[] dash, double k) {
-        float[] f = new float[dash.length];
-        for (int i = 0; i < dash.length; i++) f[i] = (float) (dash[i] * k);
-        return f;
-    }
-
-    /** Stroke graphics state for {@code showText}: the line width is user-space (the text matrix scales the
-     *  glyph by font size, but the stroke width is the general line width), so no {@code /fs} division. */
+    /** Stroke graphics state for {@code showText}: the line width is user space (the text matrix scales the
+     *  glyph by font size, not the line width), so the pen goes as it is. */
     private void setTextStroke(PDPageContentStream cs, OCDText t) throws IOException {
         strokeColor(cs, t, t.stroke());
-        cs.setLineWidth((float) Math.max(t.strokeWidth(), 0));
-        cs.setLineCapStyle(t.cap());
-        cs.setLineJoinStyle(t.join());
-        if (t.miterLimit() > 0) cs.setMiterLimit((float) t.miterLimit());
-        if (t.hasDash()) cs.setLineDashPattern(scaleDash(t.dash(), 1.0), (float) t.dashPhase());
+        pen(cs, t.pen());
+    }
+
+    /** The pen as PDF graphics state ({@code w J j M d}) — the one place, for paths and runs. */
+    private static void pen(PDPageContentStream cs, JxStroke pen) throws IOException {
+        cs.setLineWidth((float) Math.max(pen.width(), 0));
+        cs.setLineCapStyle(pen.cap().ordinal());
+        cs.setLineJoinStyle(pen.join().ordinal());
+        if (pen.miterLimit() > 0) cs.setMiterLimit((float) pen.miterLimit());
+        if (pen.hasDash()) {
+            double[] d = pen.dash();
+            float[] f = new float[d.length];
+            for (int i = 0; i < d.length; i++) f[i] = (float) d[i];
+            cs.setLineDashPattern(f, (float) pen.dashPhase());
+        }
     }
 
     // ── text: faithful VISIBLE real text via the embedded font ───────────────

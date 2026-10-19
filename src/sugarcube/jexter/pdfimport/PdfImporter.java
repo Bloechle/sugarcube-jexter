@@ -586,9 +586,9 @@ public final class PdfImporter extends PdfStreamEngine {
         if (b == null) return null;
         double pad = 0;
         if (n instanceof sugarcube.jexter.ocd.model.OCDPath p && p.isStroked())
-            pad = p.strokeWidth() / 2 * (p.join() == java.awt.BasicStroke.JOIN_MITER
-                    ? Math.min(Math.max(p.miterLimit(), 1), 4) : 1);
-        if (n instanceof sugarcube.jexter.ocd.model.OCDText t && t.hasStroke()) pad = t.strokeWidth() / 2;
+            pad = p.pen().width() / 2 * (p.pen().join() == sugarcube.jexter.core.JxStroke.Join.MITER
+                    ? Math.min(Math.max(p.pen().miterLimit(), 1), 4) : 1);
+        if (n instanceof sugarcube.jexter.ocd.model.OCDText t && t.hasStroke()) pad = t.pen().width() / 2;
         return pad <= 0 ? b : new JxRect(b.x() - pad, b.y() - pad, b.width() + 2 * pad, b.height() + 2 * pad);
     }
 

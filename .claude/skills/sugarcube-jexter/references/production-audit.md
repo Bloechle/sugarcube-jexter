@@ -226,7 +226,7 @@ Two findings worth their own lines:
   disk — correct by construction, no clip-rule attribute needed. Don't "fix"
   its absence.
 - **PDF 0-width = thinnest device line**, but SVG width-0 paints nothing and
-  the CSS default 1 over-inks. ONE import convention (`strokeWidth()`,
+  the CSS default 1 over-inks. ONE import convention (`PdfStreamEngine.pen()`,
   PdfStreamEngine): width < 0.05 → 0.75 pt (≈1 device px at 96 dpi), applied at
   all four stroke sites so every projection agrees and B↔D stays 0.
 

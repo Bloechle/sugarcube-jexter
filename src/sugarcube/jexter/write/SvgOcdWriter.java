@@ -517,24 +517,7 @@ public final class SvgOcdWriter {
         } else {
             css.append("fill:none");
         }
-        if (stroked) {
-            double k = fs > 0 ? fs : 1;
-            css.append(";stroke:").append(new JxColor(t.stroke()).rgbHex());
-            if (t.strokeWidth() > 0) css.append(";stroke-width:").append(f(t.strokeWidth() / k));
-            if (t.cap() == 1) css.append(";stroke-linecap:round");
-            else if (t.cap() == 2) css.append(";stroke-linecap:square");
-            if (t.join() == 1) css.append(";stroke-linejoin:round");
-            else if (t.join() == 2) css.append(";stroke-linejoin:bevel");
-            if (t.miterLimit() > 0 && t.miterLimit() != 10) css.append(";stroke-miterlimit:").append(f(t.miterLimit()));
-            if (t.hasDash()) {
-                css.append(";stroke-dasharray:");
-                double[] dash = t.dash();
-                for (int i = 0; i < dash.length; i++) { if (i > 0) css.append(','); css.append(f(dash[i] / k)); }
-                if (t.dashPhase() > 0) css.append(";stroke-dashoffset:").append(f(t.dashPhase() / k));
-            }
-            float sa = new JxColor(t.stroke()).alpha();
-            if (sa < 1f) css.append(";stroke-opacity:").append(f(sa));
-        }
+        if (stroked) SvgWriter.strokeCss(css, t.stroke(), t.pen(), fs > 0 ? fs : 1);
         if (t.hasBlend() && !t.blend().equalsIgnoreCase("Normal"))
             css.append(";mix-blend-mode:").append(SvgWriter.cssBlend(t.blend()));
         return css.toString();

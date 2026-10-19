@@ -2,6 +2,7 @@ package sugarcube.jexter.ocd.model;
 
 import sugarcube.jexter.core.JxPath;
 import sugarcube.jexter.core.JxRect;
+import sugarcube.jexter.core.JxStroke;
 
 /**
  * A vector path. Geometry is a {@link JxPath}; its winding rule <i>is</i> the
@@ -22,14 +23,7 @@ public final class OCDPath extends OCDNode {
     private int    fill   = 0;          // argb; alpha 0 = no fill
     private OCDGradient fillGradient;   // optional gradient fill; when set it overrides the solid fill
     private int    stroke = 0;          // argb; alpha 0 = no stroke
-    private double strokeWidth = 0;
-
-    // stroke style
-    private int      cap;               // 0=butt 1=round 2=square
-    private int      join;              // 0=miter 1=round 2=bevel
-    private double   miterLimit = 10;
-    private double[] dash;              // null/empty = solid
-    private double   dashPhase;
+    private JxStroke pen = JxStroke.DEFAULT;   // how the outline is drawn, in page units
 
     public OCDPath() {}
     public OCDPath(JxPath geometry) { this.geometry = geometry; }
@@ -43,8 +37,9 @@ public final class OCDPath extends OCDNode {
     public int     fill()                  { return fill; }
     public OCDPath fill(int argb)          { this.fill = argb; return this; }
     public int     stroke()                { return stroke; }
-    public OCDPath stroke(int argb, double w) { this.stroke = argb; this.strokeWidth = w; return this; }
-    public double  strokeWidth()           { return strokeWidth; }
+    public OCDPath stroke(int argb)        { this.stroke = argb; return this; }
+    public JxStroke pen()                  { return pen; }
+    public OCDPath pen(JxStroke p)         { this.pen = p == null ? JxStroke.DEFAULT : p; return this; }
 
     /** Optional gradient fill. When present it is the fill; {@link #fill()} stays as a flat
      *  fallback (its argb should be set to {@link OCDGradient#flatArgb()} for non-gradient consumers). */
@@ -55,27 +50,12 @@ public final class OCDPath extends OCDNode {
     public boolean isFilled()   { return (fill   >>> 24) != 0 || hasGradient(); }
     public boolean isStroked()  { return (stroke >>> 24) != 0; }   // width 0 = hairline (PDF `0 w`), still a stroke
 
-    // ── stroke style ─────────────────────────────────────────────────────────
-    public OCDPath lineStyle(int cap, int join, double miter, double[] dash, double phase) {
-        this.cap = cap; this.join = join; this.miterLimit = miter;
-        this.dash = (dash != null && dash.length > 0) ? dash : null; this.dashPhase = phase;
-        return this;
-    }
-    public int      cap()        { return cap; }
-    public int      join()       { return join; }
-    public double   miterLimit() { return miterLimit; }
-    public double[] dash()       { return dash; }
-    public double   dashPhase()  { return dashPhase; }
-    public boolean  hasDash()    { return dash != null && dash.length > 0; }
-
     /** A full copy. {@link sugarcube.jexter.core.JxPath} is a {@code Path2D} and therefore MUTABLE, so
      *  the geometry is duplicated rather than shared — two pages that paint the same drawing must not
      *  edit each other. The gradient is immutable, and shared. */
     @Override public OCDPath copy() {
         OCDPath p = copyInto(new OCDPath(geometry == null ? null : new sugarcube.jexter.core.JxPath(geometry)));
-        p.fill = fill; p.fillGradient = fillGradient; p.stroke = stroke; p.strokeWidth = strokeWidth;
-        p.cap = cap; p.join = join; p.miterLimit = miterLimit;
-        p.dash = dash == null ? null : dash.clone(); p.dashPhase = dashPhase;
+        p.fill = fill; p.fillGradient = fillGradient; p.stroke = stroke; p.pen = pen;   // the pen is immutable
         return p;
     }
 

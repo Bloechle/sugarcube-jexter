@@ -1,6 +1,7 @@
 package sugarcube.jexter.ocd.model;
 
 import sugarcube.jexter.core.JxRect;
+import sugarcube.jexter.core.JxStroke;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,16 +39,9 @@ public final class OCDText extends OCDNode {
     private double fontSize;           // Tf size (text space)
     private int    fill = 0xFF000000;  // argb (alpha = ca); default opaque black
     private int    stroke = 0;         // argb stroke paint (modes 1/2/5/6); alpha 0 = none
-    private double strokeWidth = 0;    // text-space stroke width (PDF line width through the CTM)
+    private JxStroke pen = JxStroke.DEFAULT;   // how the outline is drawn, in text space (PDF line width through the CTM)
     private int    renderMode = FILL;
     private double confidence = Double.NaN; // the recognizer's confidence in this word, [0, 1]; NaN = not recognized text
-
-    // stroke style — parity with OCDPath; only meaningful when the run strokes (modes 1/2/5/6)
-    private int      cap;              // 0=butt 1=round 2=square
-    private int      join;            // 0=miter 1=round 2=bevel
-    private double   miterLimit = 10;
-    private double[] dash;            // null/empty = solid
-    private double   dashPhase;
 
     private final List<Glyph> glyphs = new ArrayList<>();
 
@@ -62,23 +56,12 @@ public final class OCDText extends OCDNode {
     public int     fill()               { return fill; }
     public OCDText fill(int argb)       { this.fill = argb; return this; }
     public int     stroke()             { return stroke; }
-    public double  strokeWidth()        { return strokeWidth; }
-    public OCDText strokePaint(int argb, double w) { this.stroke = argb; this.strokeWidth = w; return this; }
+    public OCDText stroke(int argb)     { this.stroke = argb; return this; }
+    /** The pen, meaningful when the run strokes (modes 1, 2, 5, 6) — the same type a path draws with. */
+    public JxStroke pen()               { return pen; }
+    public OCDText pen(JxStroke p)      { this.pen = p == null ? JxStroke.DEFAULT : p; return this; }
     public int     renderMode()         { return renderMode; }
     public OCDText renderMode(int m)    { this.renderMode = m; return this; }
-
-    // ── stroke style (parity with OCDPath) ──────────────────────────────────────
-    public OCDText lineStyle(int cap, int join, double miter, double[] dash, double phase) {
-        this.cap = cap; this.join = join; this.miterLimit = miter;
-        this.dash = (dash != null && dash.length > 0) ? dash : null; this.dashPhase = phase;
-        return this;
-    }
-    public int      cap()        { return cap; }
-    public int      join()       { return join; }
-    public double   miterLimit() { return miterLimit; }
-    public double[] dash()       { return dash; }
-    public double   dashPhase()  { return dashPhase; }
-    public boolean  hasDash()    { return dash != null && dash.length > 0; }
 
     /** A stroke paint is actually present (mode strokes AND the colour isn't transparent). */
     public boolean hasStrokePaint() { return hasStroke() && (stroke >>> 24) != 0; }
@@ -144,9 +127,7 @@ public final class OCDText extends OCDNode {
      *  entries are shared safely. */
     @Override public OCDText copy() {
         OCDText t = copyInto(new OCDText(fontId, fontSize));
-        t.fill = fill; t.stroke = stroke; t.strokeWidth = strokeWidth; t.renderMode = renderMode; t.confidence = confidence;
-        t.cap = cap; t.join = join; t.miterLimit = miterLimit;
-        t.dash = dash == null ? null : dash.clone(); t.dashPhase = dashPhase;
+        t.fill = fill; t.stroke = stroke; t.pen = pen; t.renderMode = renderMode; t.confidence = confidence;
         t.glyphs.addAll(glyphs);
         return t;
     }

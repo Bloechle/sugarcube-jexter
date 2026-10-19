@@ -20,6 +20,7 @@
 // it is produced, so it is never committed. Name PDFs to gate those instead:
 //   java -cp "target/test-classes:target/classes:lib/*" Gates a.pdf …   (SOURCE_DATE_EPOCH set; `;` on Windows)
 
+import sugarcube.jexter.core.JxStroke;
 import sugarcube.jexter.core.JxTransform;
 import sugarcube.jexter.ocd.io.OCDReader;
 import sugarcube.jexter.ocd.model.*;
@@ -186,16 +187,24 @@ public final class Gates {
             if (a.fill() != b.fill()) d.add(String.format("fill %08X -> %08X", a.fill(), b.fill()));
             if (a.paintsStroke() != b.paintsStroke() || a.paintsStroke() && a.stroke() != b.stroke())
                 d.add(String.format("stroke %08X -> %08X", a.stroke(), b.stroke()));
-            if (a.paintsStroke() && Math.abs(a.strokeWidth() - b.strokeWidth()) > TOLERANCE)
-                d.add("strokeWidth " + a.strokeWidth() + " -> " + b.strokeWidth());
+            if (a.paintsStroke() && !samePen(a.pen(), b.pen())) d.add("pen " + a.pen() + " -> " + b.pen());
         }
         if (x instanceof OCDPath a && y instanceof OCDPath b) {
             if (a.fill() != b.fill()) d.add(String.format("fill %08X -> %08X", a.fill(), b.fill()));
             if (a.stroke() != b.stroke()) d.add(String.format("stroke %08X -> %08X", a.stroke(), b.stroke()));
-            if (Math.abs(a.strokeWidth() - b.strokeWidth()) > TOLERANCE) d.add("strokeWidth " + a.strokeWidth() + " -> " + b.strokeWidth());
+            if (a.isStroked() && !samePen(a.pen(), b.pen())) d.add("pen " + a.pen() + " -> " + b.pen());
             if (!a.geometry().toSvg().equals(b.geometry().toSvg())) d.add("geometry");
         }
         return d;
+    }
+
+    /** Equal at export precision: the container writes four decimals. */
+    private static boolean samePen(JxStroke a, JxStroke b) {
+        double[] x = a.dash(), y = b.dash();
+        if ((x == null) != (y == null) || x != null && x.length != y.length) return false;
+        if (x != null) for (int i = 0; i < x.length; i++) if (Math.abs(x[i] - y[i]) > TOLERANCE) return false;
+        return a.cap() == b.cap() && a.join() == b.join() && Math.abs(a.width() - b.width()) <= TOLERANCE
+                && Math.abs(a.miterLimit() - b.miterLimit()) <= TOLERANCE && Math.abs(a.dashPhase() - b.dashPhase()) <= TOLERANCE;
     }
 
     private static void diff(List<String> out, String what, Object a, Object b) {

@@ -216,7 +216,7 @@ The tree is **100% JavaFX-free** (the apps are web-only — `ui.prism` / `ui.pdf
 
 Refactored, public layout — all under `sugarcube.jexter`:
 
-- **`core`** — the `Jx*` toolkit AND `ConvertOptions` + `JxProgress` (moved here 2026-09-05): `JxPath` (the single path type, `Path2D`
+- **`core`** — the `Jx*` toolkit AND `ConvertOptions` + `JxProgress` (moved here 2026-09-05): `JxStroke` (the one pen type — `OCDPath.pen()` and `OCDText.pen()`; cap/join enums whose ordinals are the PDF and AWT codes and whose names are the SVG keywords; `awt()` owns the dash rules), `JxPath` (the single path type, `Path2D`
   subclass, SVG parse/emit, cubic→quadratic), `JxTransform`/`JxRect`/`JxPoint`
   (immutable `double`), `JxColor` (sRGB `int` argb), `JxStringer` (streaming JSON
   builder) + `JxJson` (JSON parser), `JxName`/`JxNum`/`JxText`, `JxZip`, and `JxLog`
@@ -2165,7 +2165,7 @@ It holds invariants that every engine change must keep. Gate them with
   244k-seam press corpus); slack scale = fontSize × transform aspect
   |T·ex|/|T·ey| (PDF Tz). Judge extraction against PDFTextStripper in BOTH
   directions (glued AND lost) — see production-audit.md, press corpus.
-- **Zero-width strokes** map to 0.75 pt at import (`strokeWidth()`, the one
+- **Zero-width strokes** map to 0.75 pt at import (`PdfStreamEngine.pen()`, the one
   convention) — SVG cannot say "thinnest device line". Clip winding rules are
   resolved by Area at import (no clip-rule in storage — intentional).
 - **The format states, it never infers.** A value that can be *reconstructed* from

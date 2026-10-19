@@ -344,21 +344,15 @@ public final class Redactor {
         JxTransform tr = p.transform();
         JxPath inPage = p.geometry().transformed(tr.awt());          // the zone's space
         boolean outlined = !p.isFilled();
-        Area a = outlined ? new Area(stroke(p, tr.scaleX()).createStrokedShape(inPage)) : inPage.area();
+        // a stroke-only path becomes its outline (a hairline at the thinnest visible width, 0.1)
+        Area a = outlined ? new Area(p.pen().awt(tr.scaleX(), 0.1).createStrokedShape(inPage)) : inPage.area();
         a.subtract(area(zone));
         if (a.isEmpty()) return null;
         JxPath g = new JxPath(a);
         if (!outlined && p.isEvenOdd()) g.evenOdd(); else g.nonZero();
         p.geometry(g).transform(JxTransform.IDENTITY);
-        if (outlined) { p.fill(p.stroke()); p.stroke(0, 0); p.fillGradient(null); }
+        if (outlined) { p.fill(p.stroke()); p.stroke(0); p.fillGradient(null); }
         return p;
-    }
-
-    private static BasicStroke stroke(OCDPath p, double scale) {
-        float[] dash = null;
-        if (p.hasDash()) { dash = new float[p.dash().length]; for (int i = 0; i < dash.length; i++) dash[i] = (float) p.dash()[i]; }
-        return new BasicStroke((float) Math.max(p.strokeWidth() * scale, 0.1),                // hairline → the thinnest visible
-                p.cap(), p.join(), (float) Math.max(1, p.miterLimit()), dash, (float) p.dashPhase());
     }
 
     private static Area area(JxRect r) { return new Area(new Rectangle2D.Double(r.x(), r.y(), r.width(), r.height())); }

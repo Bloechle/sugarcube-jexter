@@ -8,6 +8,7 @@ import sugarcube.jexter.core.JxName;
 import sugarcube.jexter.core.JxLog;
 import sugarcube.jexter.core.JxPath;
 import sugarcube.jexter.core.JxRect;
+import sugarcube.jexter.core.JxStroke;
 import sugarcube.jexter.core.JxTransform;
 import sugarcube.jexter.ocd.model.OCDAnnotation;
 import sugarcube.jexter.ocd.model.OCDAudio;
@@ -49,6 +50,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -549,9 +551,7 @@ public final class OCDReader {
         if (!stated.isEmpty()) t.fill(JxColor.ofHex(stated).argb());
         String stroke = d.get("stroke");
         if (stroke != null && !"none".equals(stroke)) {
-            t.strokePaint(argb(stroke, d.get("stroke-opacity")), num(d.get("stroke-width"), 0) * k);
-            t.lineStyle(cap(d), join(d), num(d.get("stroke-miterlimit"), 10),
-                    dash(d.get("stroke-dasharray"), k), num(d.get("stroke-dashoffset"), 0) * k);
+            t.stroke(argb(stroke, d.get("stroke-opacity"))).pen(pen(d).scaled(k));   // stated in em, held in text space
         }
         blend(d, t);
 
@@ -615,9 +615,7 @@ public final class OCDReader {
         }
         String stroke = d.get("stroke");
         if (stroke != null && !"none".equals(stroke)) {
-            p.stroke(argb(stroke, d.get("stroke-opacity")), num(d.get("stroke-width"), 0));
-            p.lineStyle(cap(d), join(d), num(d.get("stroke-miterlimit"), 10),
-                    dash(d.get("stroke-dasharray"), 1), num(d.get("stroke-dashoffset"), 0));
+            p.stroke(argb(stroke, d.get("stroke-opacity"))).pen(pen(d));
         }
         blend(d, p);
         clipRef(el, p);
@@ -1047,18 +1045,13 @@ public final class OCDReader {
         }
         return (c.argb() & 0xFF000000) == 0 ? (0xFF000000 | c.argb()) : c.argb();
     }
-    private static int cap(Map<String, String> d) {
-        return switch (d.getOrDefault("stroke-linecap", "butt")) { case "round" -> 1; case "square" -> 2; default -> 0; };
-    }
-    private static int join(Map<String, String> d) {
-        return switch (d.getOrDefault("stroke-linejoin", "miter")) { case "round" -> 1; case "bevel" -> 2; default -> 0; };
-    }
-    private static double[] dash(String v, double k) {
-        if (v == null || v.isEmpty()) return null;
-        String[] p = v.split("[,\\s]+");
-        double[] out = new double[p.length];
-        for (int i = 0; i < p.length; i++) out[i] = Double.parseDouble(p[i]) * k;
-        return out;
+    /** The pen a paint class states — the inverse of {@code SvgWriter.strokeCss}. */
+    private static JxStroke pen(Map<String, String> d) {
+        double[] dash = null;
+        String v = d.get("stroke-dasharray");
+        if (v != null && !v.isEmpty()) dash = Arrays.stream(v.split("[,\\s]+")).mapToDouble(Double::parseDouble).toArray();
+        return new JxStroke(num(d.get("stroke-width"), 0), JxStroke.Cap.of(d.get("stroke-linecap")),
+                JxStroke.Join.of(d.get("stroke-linejoin")), num(d.get("stroke-miterlimit"), 10), dash, num(d.get("stroke-dashoffset"), 0));
     }
     private static double num(String v, double def) { return v == null || v.isEmpty() ? def : Double.parseDouble(v); }
     private static double dbl(String v, double def)  { try { return Double.parseDouble(v); } catch (Exception e) { return def; } }

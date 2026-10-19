@@ -421,7 +421,7 @@ public final class OCDRenderer {
         }
         if (p.isStroked()) {
             g.setColor(new Color(p.stroke(), true));
-            g.setStroke(stroke(p));
+            g.setStroke(p.pen().awt(1, 1e-3));
             g.draw(geo);
         }
     }
@@ -496,7 +496,7 @@ public final class OCDRenderer {
         boolean doFill   = t.paintsFill();
         Color  fillColor   = new Color(t.fill(), true);
         Color  strokeColor = doStroke ? new Color(t.stroke(), true) : null;
-        BasicStroke pen    = doStroke ? textPen(t, fs) : null;
+        BasicStroke pen    = doStroke ? t.pen().awt(1 / fs, 1e-4) : null;   // the outline is drawn in em: the pen too
         for (OCDText.Glyph gl : t.glyphs()) {
             OCDGlyph fg = font.glyph(gl.gid());
             if (fg == null || fg.outline() == null || fg.isSpace()) continue;
@@ -516,48 +516,6 @@ public final class OCDRenderer {
         if (n.hasBlend() && !"Normal".equals(n.blend())) return BlendComposite.getInstance(n.blend(), a);
         if (a < 1f) return AlphaComposite.getInstance(AlphaComposite.SRC_OVER, a);
         return null;
-    }
-
-    private static BasicStroke stroke(OCDPath p) {
-        float w = (float) Math.max(p.strokeWidth(), 1e-3);
-        float miter = (float) Math.max(p.miterLimit(), 1f);
-        float[] dash = validDash(p.dash());
-        return new BasicStroke(w, p.cap(), p.join(), miter, dash, (float) p.dashPhase());
-    }
-
-    /** Text stroke pen. The glyph outline is drawn in em space (after {@code g.scale(fs,fs)}), so the
-     *  page-space width and dash lengths are divided by {@code fs} to stay page-space — parity with paths. */
-    private static BasicStroke textPen(OCDText t, double fs) {
-        float inv   = (float) (1.0 / fs);
-        float w     = Math.max((float) t.strokeWidth() * inv, 1e-4f);
-        float miter = (float) Math.max(t.miterLimit(), 1f);
-        float[] dash = validDash(t.dash());
-        if (dash != null) for (int i = 0; i < dash.length; i++) dash[i] *= inv;
-        return new BasicStroke(w, t.cap(), t.join(), miter, dash, (float) (t.dashPhase() * inv));
-    }
-
-    /**
-     * The dash array as Java2D will accept it — with every entry clamped away from zero.
-     * BasicStroke rejects null-vs-empty and all-zero/negative dash arrays.
-     *
-     * <p>PDF says a ZERO-length dash with a round cap paints a DOT: {@code [0 6] 0 d} with
-     * {@code 1 J} is the standard way to draw a dotted rule, and press pages are full of them.
-     * Java2D draws nothing for a zero-length segment (and older JVMs crashed on it). PDFBox's own
-     * renderer clamps the same way and says so — PDFBOX-2373 / 2929 / 3204 / 3724 / 3813 — which is
-     * why the dots come out round in the PDFBox and Direct rasters and flat in ours. The MODEL keeps
-     * the source's zeros: they are correct there, and SVG honours them like PDF. Only this Java2D
-     * consumer needs the floor.
-     */
-    private static float[] validDash(double[] dash) {
-        if (dash == null || dash.length == 0) return null;
-        float[] f = new float[dash.length];
-        boolean positive = false;
-        for (int i = 0; i < dash.length; i++) {
-            if (dash[i] < 0) return null;
-            if (dash[i] > 0) positive = true;
-            f[i] = Math.max((float) dash[i], 0.062f);       // the dot a zero-length dash stands for
-        }
-        return positive ? f : null;
     }
 
     private static float clampAlpha(float a) { return a < 0 ? 0 : (a > 1 ? 1 : a); }

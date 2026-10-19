@@ -192,7 +192,7 @@ it with `node nimbus-jexter.cjs`. Everything else is the engine, all under
 
 | Package | Responsibility |
 |---|---|
-| `core` | The `Jx*` toolkit: `JxPath` (single path type), `JxTransform`/`JxRect`/`JxPoint`, `JxColor` (sRGB int argb), `JxStringer` (streaming JSON), `JxJson` (JSON parser), `JxMedia` (mp4/mp3 probe), `JxName`/`JxNum`/`JxText`, `JxZip`, `JxLog` (thin `System.Logger` facade). |
+| `core` | The `Jx*` toolkit: `JxPath` (single path type), `JxStroke` (the pen: width, cap, join, miter, dash — for paths and text alike), `JxTransform`/`JxRect`/`JxPoint`, `JxColor` (sRGB int argb), `JxStringer` (streaming JSON), `JxJson` (JSON parser), `JxMedia` (mp4/mp3 probe), `JxName`/`JxNum`/`JxText`, `JxZip`, `JxLog` (thin `System.Logger` facade). |
 | `ocd.model` | The model (27 classes). *Presentation:* `OCDNode` (sealed → `OCDText`/`OCDPath`/`OCDImage`/`OCDGroup`/`OCDMedia`/`OCDBreak`), container subtypes of `OCDGroup` (`OCDParagraph` — text block with `OCDBreak` line breaks, `OCDLayerContent` — bound to an `OCDLayer`, `OCDGraphic` — clustered vector drawing), `OCDMedia` (sealed → `OCDVideo`/`OCDAudio`), `OCDGradient` (linear/radial fill on `OCDPath`), `OCDFont`/`OCDGlyph`, `OCDClip`, `OCDLayer`, `OCDPage`, `OCDDocument`. *Annotations:* `OCDLink`, `OCDAnnotation` (review markup), `OCDFormField` (AcroForm widgets). *Logical:* `OCDMeta`, `OCDOutline`, `OCDStructNode` (a structure-tree node) + `OCDStructure` (a named, provenance-carrying tree; a document holds several). |
 | `ocd.io` | `OCDReader` — the OCD-EPUB reader (three tiers: skeleton, one page, full model; pages are self-contained, fonts parse from `pages/fonts.svg`), `OCDVocab` (shared serialization vocabulary). |
 | `ocd.render` | `OCDRenderer` (model → Java2D raster) + `BlendComposite`. |

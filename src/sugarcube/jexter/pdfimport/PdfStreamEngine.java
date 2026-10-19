@@ -42,6 +42,7 @@ import sugarcube.jexter.core.JxLog;
 import sugarcube.jexter.core.JxProgress;
 import sugarcube.jexter.core.JxPath;
 import sugarcube.jexter.core.JxRect;
+import sugarcube.jexter.core.JxStroke;
 import sugarcube.jexter.core.JxTransform;
 import sugarcube.jexter.ocd.model.OCDClip;
 import sugarcube.jexter.ocd.model.OCDDocument;
@@ -444,9 +445,8 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         OCDPath outline = strokeOutline();
         if (outline != null) emit(outline);
         else {
-            OCDPath n = new OCDPath(path).stroke(strokeArgb(), strokeWidth());
+            OCDPath n = new OCDPath(path).stroke(strokeArgb()).pen(pen());
             n.strokeCmyk(strokeCmyk());
-            applyStrokeStyle(n);
             emit(n);
         }
         applyPendingClip();
@@ -460,9 +460,8 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         OCDPath outline = strokeOutline();
         if (outline != null) { emit(fillPaint(new OCDPath(path))); emit(outline); }
         else {
-            OCDPath n = fillPaint(new OCDPath(path)).stroke(strokeArgb(), strokeWidth());
+            OCDPath n = fillPaint(new OCDPath(path)).stroke(strokeArgb()).pen(pen());
             n.strokeCmyk(strokeCmyk());
-            applyStrokeStyle(n);
             emit(n);
         }
         applyPendingClip();
@@ -493,20 +492,19 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         double disc = Math.sqrt(Math.max(0, p * p - 4 * det * det));
         double smax = Math.sqrt((p + disc) / 2), smin = Math.sqrt(Math.max(0, (p - disc) / 2));
         if (smin <= 1e-9 || smax / smin < 1.02) return null;          // isotropic enough, or degenerate
-        if (strokeWidth() < 0.05 || lw * smin < 0.05) return null;    // a hairline stays a hairline
+        if (transformWidth(lw) < 0.05 || lw * smin < 0.05) return null;   // a hairline stays a hairline
         try {
             java.awt.Shape local = ctm.createInverse().createTransformedShape(path);
-            float[] dash = null;
-            float phase = 0;
+            double[] dash = null;
             PDLineDashPattern dp = gs.getLineDashPattern();
             if (dp != null && dp.getDashArray() != null && dp.getDashArray().length > 0) {
-                float sum = 0;
-                boolean valid = true;
-                for (float v : dp.getDashArray()) { if (v < 0) valid = false; sum += v; }
-                if (valid && sum > 0) { dash = dp.getDashArray(); phase = Math.max(0, dp.getPhase()); }
+                float[] da = dp.getDashArray();
+                dash = new double[da.length];
+                for (int i = 0; i < da.length; i++) dash[i] = da[i];
             }
-            java.awt.BasicStroke pen = new java.awt.BasicStroke(lw, Math.clamp(gs.getLineCap(), 0, 2),
-                    Math.clamp(gs.getLineJoin(), 0, 2), Math.max(1f, gs.getMiterLimit()), dash, phase);
+            // the pen in USER space (untransformed width and dash): the CTM is applied to its outline after
+            java.awt.BasicStroke pen = new JxStroke(lw, JxStroke.Cap.of(gs.getLineCap()), JxStroke.Join.of(gs.getLineJoin()),
+                    gs.getMiterLimit(), dash, dp == null ? 0 : dp.getPhase()).awt(1, 0);
             JxPath outline = new JxPath(ctm.createTransformedShape(pen.createStrokedShape(local)));
             outline.setWindingRule(java.awt.geom.Path2D.WIND_NON_ZERO);
             OCDPath o = new OCDPath(outline).fill(strokeArgb());
@@ -834,7 +832,7 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         // only in stroke colour/width/style must split, else the run captures the first glyph's stroke for
         // all. In fill-only modes the stroke is unused, so it stays out of the key (no spurious split).
         String strokeSig = ((mode & 3) == 1 || (mode & 3) == 2)
-                ? "|" + strokeArgb() + ":" + strokeWidth() : "";
+                ? "|" + strokeArgb() + ":" + pen() : "";                // the whole pen: a dash alone splits too
         // Blend mode is run state too (the renderer composites text by node.blend, like paths). Non-Normal
         // only — Normal/unmapped is null, so the key is unchanged for the overwhelming fill+Normal case.
         String blend = blendName(getGraphicsState().getBlendMode());
@@ -891,9 +889,8 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         run = new OCDText(fontId, fs).fill(fill).renderMode(mode);
         run.fillCmyk(fillCmyk());
         if (run.hasStroke()) {
-            run.strokePaint(strokeArgb(), strokeWidth());
+            run.stroke(strokeArgb()).pen(pen());                    // the same pen a path gets
             run.strokeCmyk(strokeCmyk());
-            applyStrokeStyle(run);                                  // cap/join/miter/dash — parity with paths
         }
         run.transform(JxTransform.of(base));
         if (cid != null) run.clipId(cid);
@@ -1035,22 +1032,16 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
             && r.getMaxX() >= b.maxX() - 0.5 && r.getMaxY() >= b.maxY() - 0.5;
     }
 
-    /** PDF line width 0 means "the thinnest device line" (~1 device px). The SVG projection
-     *  cannot say that (width 0 paints nothing, the CSS default 1 over-inks), so the ONE import
-     *  convention maps it to 0.75 pt — one device pixel at 96 dpi — for every consumer alike. */
-    private double strokeWidth() {
-        double w = transformWidth(getGraphicsState().getLineWidth());
-        return w < 0.05 ? 0.75 : w;
-    }
-
-    private void applyStrokeStyle(OCDPath n) { LineStyle s = lineStyle(); n.lineStyle(s.cap(), s.join(), s.miter(), s.dash(), s.phase()); }
-    private void applyStrokeStyle(OCDText n) { LineStyle s = lineStyle(); n.lineStyle(s.cap(), s.join(), s.miter(), s.dash(), s.phase()); }
-
-    private record LineStyle(int cap, int join, double miter, double[] dash, double phase) {}
-
-    /** The current stroke style (cap/join/miter + CTM-scaled dash) — shared by the path and text appliers. */
-    private LineStyle lineStyle() {
+    /**
+     * The current pen: width, cap, join, miter and dash, the lengths through the CTM — one for paths and runs.
+     *
+     * <p>PDF line width 0 means "the thinnest device line" (~1 device px). The SVG projection cannot say that
+     * (width 0 paints nothing, the CSS default 1 over-inks), so the ONE import convention maps it to 0.75 pt —
+     * one device pixel at 96 dpi — for every consumer alike.
+     */
+    private JxStroke pen() {
         PDGraphicsState gs = getGraphicsState();
+        double w = transformWidth(gs.getLineWidth());
         double[] dash = null;
         double phase = 0;
         PDLineDashPattern d = gs.getLineDashPattern();
@@ -1060,7 +1051,8 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
             for (int i = 0; i < da.length; i++) dash[i] = transformWidth(da[i]);
             phase = transformWidth(d.getPhase());
         }
-        return new LineStyle(gs.getLineCap(), gs.getLineJoin(), gs.getMiterLimit(), dash, phase);
+        return new JxStroke(w < 0.05 ? 0.75 : w, JxStroke.Cap.of(gs.getLineCap()), JxStroke.Join.of(gs.getLineJoin()),
+                gs.getMiterLimit(), dash, phase);
     }
 
     private int fillArgb() {

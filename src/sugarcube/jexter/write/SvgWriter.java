@@ -9,6 +9,7 @@ import sugarcube.jexter.core.JxNum;
 import sugarcube.jexter.core.JxPath;
 import sugarcube.jexter.core.JxText;
 import sugarcube.jexter.core.JxRect;
+import sugarcube.jexter.core.JxStroke;
 import sugarcube.jexter.core.JxTransform;
 import sugarcube.jexter.ocd.model.OCDAnnotation;
 import sugarcube.jexter.ocd.model.OCDFormField;
@@ -159,6 +160,24 @@ public final class SvgWriter {
     /** A PDF blend-mode name as CSS spells it: {@code ColorDodge} → {@code color-dodge}. Lower-casing
      *  alone gave {@code colordodge}, which no browser knows — it dropped the declaration and painted
      *  the four two-word modes (ColorDodge, ColorBurn, HardLight, SoftLight) as Normal. */
+    /** The stroke declarations — the one place a pen becomes CSS, for paths, runs and the OCD-EPUB alike.
+     *  Lengths are divided by {@code k}: a run drawn through {@code <use>} at its font size states them in em. */
+    static void strokeCss(StringBuilder css, int argb, JxStroke pen, double k) {
+        css.append(";stroke:").append(rgb(argb));
+        if (pen.width() > 0) css.append(";stroke-width:").append(f(pen.width() / k));
+        if (pen.cap() != JxStroke.Cap.BUTT) css.append(";stroke-linecap:").append(pen.cap().keyword());
+        if (pen.join() != JxStroke.Join.MITER) css.append(";stroke-linejoin:").append(pen.join().keyword());
+        if (pen.miterLimit() > 0 && pen.miterLimit() != 10) css.append(";stroke-miterlimit:").append(f(pen.miterLimit()));
+        if (pen.hasDash()) {
+            css.append(";stroke-dasharray:");
+            double[] dash = pen.dash();
+            for (int i = 0; i < dash.length; i++) { if (i > 0) css.append(','); css.append(f(dash[i] / k)); }
+            if (pen.dashPhase() > 0) css.append(";stroke-dashoffset:").append(f(pen.dashPhase() / k));
+        }
+        float sa = new JxColor(argb).alpha();
+        if (sa < 1f) css.append(";stroke-opacity:").append(f(sa));
+    }
+
     static String cssBlend(String pdfName) {
         return pdfName.replaceAll("(?<=[a-z])(?=[A-Z])", "-").toLowerCase(Locale.US);
     }
@@ -212,23 +231,7 @@ public final class SvgWriter {
         } else {
             css.append("fill:none");
         }
-        if (stroked) {
-            css.append(";stroke:").append(rgb(t.stroke()));
-            if (t.strokeWidth() > 0) css.append(";stroke-width:").append(f(t.strokeWidth()));
-            if (t.cap() == 1) css.append(";stroke-linecap:round");
-            else if (t.cap() == 2) css.append(";stroke-linecap:square");
-            if (t.join() == 1) css.append(";stroke-linejoin:round");
-            else if (t.join() == 2) css.append(";stroke-linejoin:bevel");
-            else if (t.miterLimit() > 0 && t.miterLimit() != 10) css.append(";stroke-miterlimit:").append(f(t.miterLimit()));
-            if (t.hasDash()) {
-                css.append(";stroke-dasharray:");
-                double[] dash = t.dash();
-                for (int i = 0; i < dash.length; i++) { if (i > 0) css.append(','); css.append(f(dash[i])); }
-                if (t.dashPhase() > 0) css.append(";stroke-dashoffset:").append(f(t.dashPhase()));
-            }
-            float sa = new JxColor(t.stroke()).alpha();
-            if (sa < 1f) css.append(";stroke-opacity:").append(f(sa));
-        }
+        if (stroked) strokeCss(css, t.stroke(), t.pen(), 1);
         if (t.hasBlend() && !t.blend().equalsIgnoreCase("Normal"))
             css.append(";mix-blend-mode:").append(cssBlend(t.blend()));
         String cls = classFor(styles, css.toString());
@@ -301,23 +304,7 @@ public final class SvgWriter {
         } else {
             css.append("fill:none");
         }
-        if (p.isStroked()) {
-            css.append(";stroke:").append(rgb(p.stroke()));
-            if (p.strokeWidth() > 0) css.append(";stroke-width:").append(f(p.strokeWidth()));
-            if (p.cap() == 1) css.append(";stroke-linecap:round");
-            else if (p.cap() == 2) css.append(";stroke-linecap:square");
-            if (p.join() == 1) css.append(";stroke-linejoin:round");
-            else if (p.join() == 2) css.append(";stroke-linejoin:bevel");
-            else if (p.miterLimit() > 0 && p.miterLimit() != 10) css.append(";stroke-miterlimit:").append(f(p.miterLimit()));
-            if (p.hasDash()) {
-                css.append(";stroke-dasharray:");
-                double[] dash = p.dash();
-                for (int i = 0; i < dash.length; i++) { if (i > 0) css.append(','); css.append(f(dash[i])); }
-                if (p.dashPhase() > 0) css.append(";stroke-dashoffset:").append(f(p.dashPhase()));
-            }
-            float sa = new JxColor(p.stroke()).alpha();
-            if (sa < 1f) css.append(";stroke-opacity:").append(f(sa));
-        }
+        if (p.isStroked()) strokeCss(css, p.stroke(), p.pen(), 1);
         if (p.hasBlend() && !p.blend().equalsIgnoreCase("Normal"))
             css.append(";mix-blend-mode:").append(cssBlend(p.blend()));
 
