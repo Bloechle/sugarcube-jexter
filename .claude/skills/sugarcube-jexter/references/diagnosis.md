@@ -158,7 +158,7 @@ The q/Q stack then scopes it for free, and the following image's captured `clipI
 to the glyph outline. One fix in the shared base → every backend (Direct, inline
 `PdfRenderer`, SVG, HTML, EPUB) is correct and matches PDFBox. Reset the clip-dedup cache
 (`lastClipArea = null`) after the intersect, since the clip object is mutated in place.
-Corpus guard: `text_clip_image` (Tr 7 + image fill) in `generate_matrix.py`.
+Corpus guard: `text_clip_image` (Tr 7 + image fill) in `test/Fixtures.java`.
 
 ## A text block vanishes / only the first letter of each line renders
 

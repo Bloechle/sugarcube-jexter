@@ -13,15 +13,11 @@
 //   HOSTILE   broken and malicious variants of the container: refused with context, or read with a
 //             warning — never read in silence, never a leaked file, never an entity expansion.
 //
-//   node nimbus-jexter.cjs --run=test          the whole run, on any OS: compile, corpus, every gate
+//   node nimbus-jexter.cjs --run=test     the whole run, on any OS: compile src/ and test/, corpus, every gate
 //
-// By hand, from the repo root, the engine compiled into target/classes (`;` on Windows):
-//   SOURCE_DATE_EPOCH=1000000000 java -cp "target/classes:lib/*" test/Gates.java           the corpus
-//   SOURCE_DATE_EPOCH=1000000000 java -cp "target/classes:lib/*" test/Gates.java a.pdf …   these PDFs
-//
-// With no PDF named, the corpus is BUILT first into target/corpus by the generators in test/fixtures
-// (Python: test/fixtures/requirements.txt) — it is produced, so it is never committed. Only public
-// engine API is used, so single-file source mode runs this file as it is.
+// With no PDF named, the corpus is written first into target/corpus by Fixtures (PDFBox, nothing else);
+// it is produced, so it is never committed. Name PDFs to gate those instead:
+//   java -cp "target/test-classes:target/classes:lib/*" Gates a.pdf …   (SOURCE_DATE_EPOCH set; `;` on Windows)
 
 import sugarcube.jexter.core.JxTransform;
 import sugarcube.jexter.ocd.io.OCDReader;
@@ -55,8 +51,8 @@ public final class Gates {
             System.err.println("SOURCE_DATE_EPOCH is not set - run `node nimbus-jexter.cjs --run=test`, or set it (e.g. 1000000000)");
             System.exit(2);
         }
+        captureWarnings();                                     // before the corpus: PDFBox logs while writing it too
         if (args.length == 0) args = corpus();
-        captureWarnings();
         Path tmp = Files.createTempDirectory("gates");
         for (String a : args) {
             File pdf = new File(a);
@@ -83,45 +79,18 @@ public final class Gates {
 
     // ── the corpus ───────────────────────────────────────────────────────────────
 
-    private static final Path FIXTURES = Path.of("test", "fixtures"), CORPUS = Path.of("target", "corpus");
+    private static final Path CORPUS = Path.of("target", "corpus");
     private static final String WELCOME = "src/sugarcube/jexter/ui/pdf/web/welcome.pdf";
 
-    /** Builds target/corpus with the fixture generators; returns every PDF in it, plus the app's welcome page. */
+    /** Writes the fixtures into target/corpus; returns them, plus the app's welcome page (a real document). */
     private static String[] corpus() throws Exception {
-        if (!Files.isDirectory(FIXTURES)) throw new IllegalStateException("run from the repo root: no " + FIXTURES);
+        if (!Files.exists(Path.of(WELCOME))) throw new IllegalStateException("run from the repo root: no " + WELCOME);
         if (Files.exists(CORPUS)) try (var walk = Files.walk(CORPUS)) {
             for (Path p : walk.sorted(Comparator.reverseOrder()).toList()) Files.delete(p);
         }
-        Files.createDirectories(CORPUS);
-        String py = python();
-        fixture(py, "generate_matrix.py", "--all", "--out", CORPUS.toString());
-        fixture(py, "make_rich.py", CORPUS.resolve("rich.pdf").toString());
-        fixture(py, "make_tagged.py", CORPUS.resolve("tagged.pdf").toString());
-        List<String> pdfs = new ArrayList<>();
-        try (var ls = Files.list(CORPUS)) { ls.filter(p -> p.toString().endsWith(".pdf")).sorted().forEach(p -> pdfs.add(p.toString())); }
+        List<String> pdfs = new ArrayList<>(Fixtures.write(CORPUS).stream().map(Path::toString).toList());
         pdfs.add(WELCOME);
         return pdfs.toArray(String[]::new);
-    }
-
-    private static void fixture(String python, String script, String... args) throws Exception {
-        List<String> cmd = new ArrayList<>(List.of(python, FIXTURES.resolve(script).toString()));
-        cmd.addAll(List.of(args));
-        Process p = new ProcessBuilder(cmd).redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                .redirectError(ProcessBuilder.Redirect.INHERIT).start();
-        if (p.waitFor() != 0) throw new IllegalStateException(script + " failed - the corpus is incomplete, nothing was gated");
-    }
-
-    /** The first Python that answers. Windows has no python3 but a Store alias that pretends to be one. */
-    private static String python() throws Exception {
-        boolean win = System.getProperty("os.name").startsWith("Windows");
-        for (String py : win ? List.of("python", "py") : List.of("python3", "python")) {
-            try {
-                Process p = new ProcessBuilder(py, "--version").redirectErrorStream(true).start();
-                p.getInputStream().readAllBytes();
-                if (p.waitFor() == 0) return py;
-            } catch (java.io.IOException notOnPath) { /* next */ }
-        }
-        throw new IllegalStateException("no Python on the PATH - the fixture generators need one (test/fixtures/requirements.txt)");
     }
 
     // ── the runner ───────────────────────────────────────────────────────────────

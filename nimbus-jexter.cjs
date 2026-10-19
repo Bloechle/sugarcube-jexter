@@ -9,9 +9,9 @@
  * authority each (runAction):
  *
  *   02 BUILD (run on this machine — needs a JDK ≥ RELEASE for javac/jar; jpackage for the app-image)
- *     test     → compile src/ into SCRATCH_DIR/classes (the jar stage is left alone), then run the
- *                project's own test: TEST_MAIN, a Java source file run in single-file mode on those
- *                classes + lib/*.jar, from the project root, with SOURCE_DATE_EPOCH pinned (the
+ *     test     → compile src/ into SCRATCH_DIR/classes (the jar stage is left alone) and TEST_DIR/*.java
+ *                against it into SCRATCH_DIR/test-classes, both at the CI gate, then run TEST_MAIN (a
+ *                class in TEST_DIR) from the project root, with SOURCE_DATE_EPOCH pinned (the
  *                reproducible-builds clock) unless the shell already sets it. No TEST_MAIN → no test.
  *     jar      → compile (-Xlint:all -Werror, the CI gate) → stage resources → explode
  *                lib/*.jar → clean META-INF → pack the fat jar. Clears the previous
@@ -60,7 +60,7 @@ const cp = require('node:child_process');
 const DIR = __dirname;
 const HEADLESS = process.argv.includes('--serve');
 const RUN_ARG = (process.argv.find((a) => a.startsWith('--run=')) || '').slice(6); // headless one-shot action
-const VERSION = '1.9';   // 1.9 (2026-10-19): the `test` action — compile into SCRATCH_DIR/classes, run TEST_MAIN (a single-file Java source) with SOURCE_DATE_EPOCH pinned: one command for the project's functional gate on any OS, the one CI runs too; 1.8 (2026-10-15): the AI bundler is gone (the `context` action, KEEP_FILES, SKIP_FILES) — the repo is the hand-off, AGENTS.md and the skill in .claude/skills/ travel with every clone; 1.7 (2026-10-05): OUT_DIR defaults to _artifacts, the convention every deck shares (it holds the PRODUCTS, not "production"); 1.6 (2026-09-11): the deck wears the cloud deck's chrome - a hint line under every section header, ONE tooltip system (every title is rendered by the deck: keyboard-reachable, scroll-following, styled), a grouped config drawer, a focus ring on every control, and a copy that strips the console prefixes; the blue palette, the cube mark and the tooltip of nimbus-server.cjs (whose #tip font named --sans, a token that does not exist - the shorthand was invalid and the box fell back to the body font); named after its project, like nimbus-cloud.cjs. Engine, bundler and actions unchanged; 1.5 (2026-09-02): the header no longer names a JDK version — RELEASE is the project's; 1.4 (2026-09-02): audit — no project name in the tool, one glob compiler, one in/out authority for the bundle, launchers/keep/skip through cfg, OUT_DIR under the project; 1.3 (2026-09-02): build also zips the app-image as <APP_NAME>-<APP_VERSION>-<os>.zip — the distributable; 1.2 (2026-09-01): binary containers by extension (a PDF read as utf8 is corrupt); 1.1: neutral defaults, .env is the project, library jars, zip + overview.md
+const VERSION = '1.9';   // 1.9 (2026-10-19): the `test` action — compile src/ and TEST_DIR into SCRATCH_DIR, run TEST_MAIN with SOURCE_DATE_EPOCH pinned: one command for the project's functional gate on any OS, the one CI runs too; 1.8 (2026-10-15): the AI bundler is gone (the `context` action, KEEP_FILES, SKIP_FILES) — the repo is the hand-off, AGENTS.md and the skill in .claude/skills/ travel with every clone; 1.7 (2026-10-05): OUT_DIR defaults to _artifacts, the convention every deck shares (it holds the PRODUCTS, not "production"); 1.6 (2026-09-11): the deck wears the cloud deck's chrome - a hint line under every section header, ONE tooltip system (every title is rendered by the deck: keyboard-reachable, scroll-following, styled), a grouped config drawer, a focus ring on every control, and a copy that strips the console prefixes; the blue palette, the cube mark and the tooltip of nimbus-server.cjs (whose #tip font named --sans, a token that does not exist - the shorthand was invalid and the box fell back to the body font); named after its project, like nimbus-cloud.cjs. Engine, bundler and actions unchanged; 1.5 (2026-09-02): the header no longer names a JDK version — RELEASE is the project's; 1.4 (2026-09-02): audit — no project name in the tool, one glob compiler, one in/out authority for the bundle, launchers/keep/skip through cfg, OUT_DIR under the project; 1.3 (2026-09-02): build also zips the app-image as <APP_NAME>-<APP_VERSION>-<os>.zip — the distributable; 1.2 (2026-09-01): binary containers by extension (a PDF read as utf8 is corrupt); 1.1: neutral defaults, .env is the project, library jars, zip + overview.md
 // ── tiny .env loader (no dependency). Precedence: shell env > .env.local > .env ──
 // .env is the project's configuration and is tracked; .env.local is the machine's
 // (paths, a JDK, secrets) and is gitignored. Comments (#) and blank lines are fine.
@@ -99,7 +99,8 @@ const DEFAULTS = {
     OUT_DIR:       env('OUT_DIR', '_artifacts'),                 // where deliverables land (created if missing)
     JPACKAGE_TYPE: env('JPACKAGE_TYPE', 'app-image'),       // folder + native launcher, no extra tooling
     ICON_FILE:     env('ICON_FILE', ''),                    // explicit .ico/.icns; else <name>.ico / app.ico in OUT_DIR
-    TEST_MAIN:     env('TEST_MAIN', ''),                    // the project's test: a .java run in single-file mode ('' = none)
+    TEST_DIR:      env('TEST_DIR', 'test'),                 // the test sources, compiled against src/ for the `test` action
+    TEST_MAIN:     env('TEST_MAIN', ''),                    // the class the `test` action runs ('' = no test)
 };
 
 // Comma lists in .env (LAUNCHERS, JAR_PACKAGES): one splitter.
@@ -229,14 +230,15 @@ function prepare(c, send) {
     send('line', { text: `output  ${c.outDir}`, kind: 'info' });
 }
 
-/** Compile every src/**.java against lib/*.jar into the stage (or into {@code dest}). */
-async function compile(cfg, c, send, dest = c.stage) {
-    const sources = walkPackages(c, (fp) => fp.toLowerCase().endsWith('.java'));
+/** Compile every src/**.java (or {@code sources}) against lib/*.jar (+ {@code extraCp}) into the stage
+ *  (or {@code dest}). */
+async function compile(cfg, c, send, dest = c.stage, sources = walkPackages(c, (fp) => fp.toLowerCase().endsWith('.java')), extraCp = []) {
     if (!sources.length) throw new Error('no .java sources found');
     const argFile = path.join(c.scratch, 'sources.txt');
     fs.mkdirSync(c.scratch, { recursive: true });
     fs.writeFileSync(argFile, sources.map((s) => `"${s.replace(/\\/g, '/')}"`).join('\n'));
-    const code = await sh(c.javac, [...(c.libJars.length ? ['-cp', c.libJars.join(path.delimiter)] : []), '-d', dest,
+    const cpath = [...extraCp, ...c.libJars];
+    const code = await sh(c.javac, [...(cpath.length ? ['-cp', cpath.join(path.delimiter)] : []), '-d', dest,
             '--release', cfg.RELEASE, '-encoding', 'UTF-8', `-Xlint:${cfg.LINT}`, '-Werror', `@${argFile}`],   // the CI gate, verbatim: a warning is a defect
         { cwd: c.root, show: `javac --release ${cfg.RELEASE}  (${sources.length} sources)` }, send);
     fs.rmSync(argFile, { force: true });
@@ -367,12 +369,12 @@ async function doBuild(cfg, exe, send) {
 async function doTest(cfg, send) {
     if (!cfg.TEST_MAIN) throw new Error('no TEST_MAIN in .env — this project declares no test');
     const c = ctx(cfg);
-    const classes = path.join(c.scratch, 'classes');
-    rmrf(classes);
-    fs.mkdirSync(classes, { recursive: true });
+    const classes = path.join(c.scratch, 'classes'), tests = path.join(c.scratch, 'test-classes');
+    for (const d of [classes, tests]) { rmrf(d); fs.mkdirSync(d, { recursive: true }); }
     await compile(cfg, c, send, classes); guard();
+    await compile(cfg, c, send, tests, walk(path.join(c.root, cfg.TEST_DIR), (fp) => fp.endsWith('.java')), [classes]); guard();
     const env = Object.assign({}, process.env, { SOURCE_DATE_EPOCH: process.env.SOURCE_DATE_EPOCH || '1000000000' });
-    const code = await sh(jdkTool('java'), ['-cp', [classes, ...c.libJars].join(path.delimiter), cfg.TEST_MAIN],
+    const code = await sh(jdkTool('java'), ['-cp', [tests, classes, ...c.libJars].join(path.delimiter), cfg.TEST_MAIN],
         { cwd: c.root, env, show: `java ${cfg.TEST_MAIN}` }, send);
     if (code !== 0) throw new Error(`${cfg.TEST_MAIN} exited ${code}`);
     send('line', { text: 'test passed', kind: 'ok' });
@@ -753,7 +755,7 @@ a:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
            resources, the lib jars exploded in, and one fat jar. Both actions clear the previous
            deliverables first, the app-image included.</p>
         <div class="acts">
-          <button class="btn" id="b-test" title="Compile src/ into target/classes, then run the project's own test (TEST_MAIN in .env) with the reproducible clock pinned — the gate CI runs on every push. Touches neither the jar stage nor the deliverables."><svg class="ic"><use href="#i-check"/></svg>test</button>
+          <button class="btn" id="b-test" title="Compile src/ and test/ into target/, then run the project's own test (TEST_MAIN in .env) with the reproducible clock pinned — the gate CI runs on every push. Touches neither the jar stage nor the deliverables."><svg class="ic"><use href="#i-check"/></svg>test</button>
           <button class="btn" id="b-jar" title="Compile src/ against lib/*.jar, stage the resources, explode the lib jars, clean META-INF and pack the fat jar. Stops there — and DELETES the app-image left by the last build, so there is no .exe until the next one."><svg class="ic"><use href="#i-layers"/></svg>compile jar</button>
           <button class="btn go" id="b-build" title="The jar, then jpackage: one bundled runtime, one .exe per LAUNCHERS entry (plus a .cmd each, because the .exe are javaw and mute), then the whole app-image zipped as the distributable."><svg class="ic"><use href="#i-package"/></svg>build app</button>
         </div>

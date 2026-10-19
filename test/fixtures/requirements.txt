@@ -1,4 +1,0 @@
-reportlab
-pikepdf
-pypdf
-svglib

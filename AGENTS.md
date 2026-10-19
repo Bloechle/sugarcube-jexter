@@ -90,7 +90,7 @@ Skill < this card < the source: a disagreement is a signal — fix the skill in 
   `-sourcepath src` so vendored types still resolve) + `node --check` + link check + the **functional gates**.
   `mvn -q package` is an IDE convenience, not the build.
 - **Test** — `node nimbus-jexter.cjs --run=test` (what CI runs, any OS): compiles into `target/classes`, then
-  `test/Gates.java` builds the fixture corpus into `target/corpus` (`test/fixtures/`, Python: `requirements.txt`) and gates it — REPRO, DOCTAGS, STABLE, MODEL, TIERS,
+  `test/Gates.java` writes the fixture corpus into `target/corpus` (`test/Fixtures.java`, PDFBox only) and gates it — REPRO, DOCTAGS, STABLE, MODEL, TIERS,
   STRADDLE, CLIPS, HOSTILE, one JVM, ~20 s. A red STABLE names the container: `test/ContainerDiff.java` shows
   which member moved. A change is done when this is green; a new defect class gets its check here.
   JDK 21 is the gate, and the whole tree is ALSO clean under JDK 25 — which is what `nimbus --run=jar` uses on a

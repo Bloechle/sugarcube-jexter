@@ -33,8 +33,7 @@ jobs:
         run: |
           find src -name '*.java' > sources.txt
           javac --release 21 -encoding UTF-8 -Xlint:all -Werror -cp "lib/*" -d target/ci-classes @sources.txt
-          javac --release 21 -encoding UTF-8 -Xlint:all -Werror -cp "target/ci-classes:lib/*" -d target/ci-test test/*.java
-          echo "compiled $(wc -l < sources.txt) files + the gate"
+          echo "compiled $(wc -l < sources.txt) files"
 
       # javac sees a DANGLING doc comment; it cannot see a MISATTACHED one. A comment whose
       # declaration was removed silently re-attaches to whatever follows and then lies —
@@ -155,13 +154,6 @@ jobs:
       # The compile gates prove the code builds; this one proves it still WORKS: every target
       # reproducible, write(read(x)) == x in bytes and in the model, the read tiers agreeing, no
       # dangling clip, hostile containers refused or warned — over the whole fixture corpus.
-      - name: Set up Python (the fixture generators)
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
+      # Compiles test/ at the same -Werror gate, writes the fixture corpus (PDFBox only) and gates it.
       - name: Functional gates
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq fonts-dejavu-core fonts-ipafont-gothic > /dev/null
-          pip install --quiet -r test/fixtures/requirements.txt
-          node nimbus-jexter.cjs --run=test
+        run: node nimbus-jexter.cjs --run=test

@@ -61,7 +61,7 @@ command, do not replace the tool.**
 | raster the MODEL, from a PDF or from an `.ocd.epub` | `RenderOcd.java` · `pdfimport.PdfImporter` main (`<pdf> [page0] [out.png] [dpi]`) | §5c |
 | every functional gate (repro, byte + model round-trip, read tiers, straddle, clips, hostile) over the whole fixture corpus — what CI runs | `node nimbus-jexter.cjs --run=test` → `test/Gates.java` (in the repo, not here) | §5c |
 | which container member drifted, in context | `test/ContainerDiff.java` | §5c |
-| links, fields, annotations, layers, outline — before and after a trip | `Rich.java` + `test/fixtures/make_rich.py` | §5 |
+| links, fields, annotations, layers, outline — before and after a trip | `Rich.java` + the `rich` fixture (`test/Fixtures.java`) | §5 |
 | drive the real Prism in Chromium against the real engine | `scripts/bench/prism_bench.mjs` + the scenarios | §4 · bench/README |
 | a text/structure comparison against docling | the `docling` skill (`.claude/skills/docling/`, in this repo) | — |
 | a customer batch: source vs DELIVERED vs NEW, per reported page, two engines, + an all-pages "made worse" sweep | `scripts/batch_score.py` | §5c, press batch 2026-09-21 |
@@ -548,7 +548,7 @@ behind a `/api/convert` route (and `PdfNormalizer`) — it imports the PDF *with
 the failing **edge** names the stage:
 
 ```
-   GT ─┬─ DECLARED : synthetic matrix + manifest.json   (exact, per-feature truth)
+   GT ─┬─ DECLARED : the fixture corpus (test/Fixtures.java — each method states its truth)
        └─ DERIVED  : real PDF → PDFBox reference          (for arbitrary inputs)
                               │
    probe points ─────────────┼─────────────────────────────────────────────┐
@@ -566,16 +566,13 @@ the failing **edge** names the stage:
 
 ### 5a · Get / make the ground truth
 
-**Synthetic matrix** — one single-page PDF per feature, each isolating ONE trait,
-with declared truth in `manifest.json` (deterministic via reportlab `invariant=1`).
-28 features across fonts / text / vector / color / image / page / doc. Catalog +
-manifest schema in **`references/features.md`**.
+**Fixture corpus** — one PDF per feature, each isolating ONE trait, written by PDFBox
+(`test/Fixtures.java`): 28 features across fonts / text / vector / color / image / page / doc,
+plus `rich` and `tagged`. Catalog in **`references/features.md`**.
 
 ```bash
-python test/fixtures/generate_matrix.py --list                       # (from the repo root)
-python test/fixtures/generate_matrix.py --all --out out/synthetic     # whole matrix + manifest.json
-python test/fixtures/generate_matrix.py --feature color_cmyk --feature image_cmyk_jpeg   # targeted
-python test/fixtures/generate_matrix.py --category text --out out/text            # one category
+node nimbus-jexter.cjs --run=test     # (repo root) writes every fixture into target/corpus, then gates it
+# one fixture = one method in test/Fixtures.java, registered in FEATURES; a new trait is a new entry
 ```
 
 **Real-world corpus** — diagnostic PDFs from public GitHub corpora (pdf.js, etc.);
@@ -586,7 +583,7 @@ python scripts/fetch_corpus.py --curated --out out/corpus
 python scripts/fetch_corpus.py --source pdfjs --pick rotation.pdf cmykjpeg.pdf
 ```
 
-**The PDF/UA path has a fixture too — the gate runs it.** `python test/fixtures/make_tagged.py out.pdf` writes
+**The PDF/UA path has a fixture too — the gate runs it.** The `tagged` fixture (`test/Fixtures.java`) is
 a PDF with a real `StructTreeRoot`, a ParentTree and `MarkInfo/Marked`. Its
 point is the LAST element: **one `/P` holding TWO MCIDs**, a paragraph split over two
 lines. A builder that maps one element per block passes every easy tag and still splits
@@ -627,10 +624,6 @@ Backends (all working): `pdf` (poppler+pypdf — reference/GT-derivation),
 `scripts/OcdFacts.java`, needs `$PDFBOX_JAR:$JEXTER_CP`).
 
 ```bash
-# declared GT (synthetic) vs a stage
-python scripts/verify_pipeline.py --source out/synthetic/color_spot.pdf \
-    --manifest out/synthetic/manifest.json --gt-id color_spot --stage pdf
-
 # derive GT from the source PDF, check the EPUB projection (stage 3)
 python scripts/verify_pipeline.py --source book.pdf --gt-from-pdf --stage epub --candidate book.epub
 
@@ -803,7 +796,7 @@ gate touches them: a whole track can vanish with every other gate green.
 `scripts/Rich.java` compares those tracks across a round-trip. Feed it a document
 that HAS them; most corpus pages have none, and it will report a cheerful zero —
 **the synthetic matrix carries no fields, annotations or layers at all**, so run
-`python test/fixtures/make_rich.py rich.pdf` first (2 links · 2 fields with values ·
+`node nimbus-jexter.cjs --run=test` first and take `target/corpus/rich.pdf` (2 links · 2 fields with values ·
 2 annotations · 2 OCG layers, one on one off · a two-level outline). Measured on it:
 every track survives the OCD-EPUB round-trip intact, field values included.
 
@@ -2384,7 +2377,7 @@ is delivered as a file, never committed.
 ```
 references/
   jdk-sandbox.md      — rootless JDK extraction (why + how), dead ends
-  features.md         — the 28-feature synthetic catalog + manifest 'expected' schema
+  features.md         — the fixture corpus catalog (test/Fixtures.java)
   corpora.md          — real-PDF corpus sources (GitHub + manual) + the Fedlex outline-GT corpus
   ocd-facts.md        — facts JSON contract + OcdFacts accessor mapping (both stages)
   diagnosis.md        — symptom → cause map for the visual axis (WebKit + Java2D)
@@ -2414,9 +2407,9 @@ scripts/  — ground truth
 test/ (in the REPO, not this skill) — the functional gate CI runs
   Gates.java              — builds the corpus into target/corpus (no PDF named), then REPRO · DOCTAGS · STABLE · MODEL · TIERS · STRADDLE · CLIPS · HOSTILE
   ContainerDiff.java      — WHICH member diverged, shown in context (run after a red STABLE)
-  fixtures/               — generate_matrix.py (28 features + manifest.json), make_rich.py (links,
-                            fields with values, annotations, two OCG layers, a two-level outline),
-                            make_tagged.py (StructTreeRoot + MCIDs; one P holding TWO MCIDs)
+  Fixtures.java           — the corpus, PDFBox only: 28 single-trait features, `rich` (links, fields
+                            with values, annotations, two OCG layers, a two-level outline) and `tagged`
+                            (StructTreeRoot + MCIDs; one P holding TWO MCIDs)
 scripts/  — the surfaces no gate covers
   TextFid.java            — read-out vs PDFTextStripper: characters lost AND invented
   Rich.java               — links / fields / annotations / layers / outline across a round-trip
