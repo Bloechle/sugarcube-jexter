@@ -1,6 +1,6 @@
 // Pick the font from the document's own list, write, then select an EXISTING run and retype it —
 // and check one Ctrl+Z puts the old one back.
-import { serve, openPrism, watchToasts } from './prism_bench.mjs';
+import { serve, openPrism, watchToasts, bookBytes } from './prism_bench.mjs';
 import fs from 'node:fs';
 const FIX = process.env.BENCH_FIX || '/tmp/fix';   // make_bench_fixtures.py writes here
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
@@ -39,8 +39,7 @@ out.warned = (await toasts()).map(t => t.text.slice(0, 150)).pop();
 await page.keyboard.press('Control+z');
 await page.waitForTimeout(900);
 out.undone = await read();
-const b64 = await page.evaluate(() => { const u = new Uint8Array(window.prism.bookBytes()); let s=''; const C=8192;
-  for (let i=0;i<u.length;i+=C) s += String.fromCharCode(...u.subarray(i,i+C)); return btoa(s); });
-fs.writeFileSync(FIX + '/retype.ocd.epub', Buffer.from(b64, 'base64'));
+const bytes = await bookBytes(page);
+fs.writeFileSync(FIX + '/retype.ocd.epub', bytes);
 console.log(JSON.stringify({ ...out, errors }, null, 1));
 await browser.close(); srv.close(); process.exit(0);

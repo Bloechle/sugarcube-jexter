@@ -53,7 +53,7 @@
  * items are kept in PAGE space, what the engine reads.
  */
 import { unzipSync } from '/shared/vendor/fflate.js';
-import { SVG_NS } from '/shared/js/ocd.js';   // ONE spelling, ONE declaration: the grammar's
+import { SVG_NS, enc, dec, mediaType } from '/shared/js/ocd.js';   // ONE spelling, ONE declaration: the grammar's
 import { book } from '/shared/js/book.js';
 import { createGizmo, boxOf, setBox, outerBox, clampTo, normBox, svgPointOf } from './gizmo.js';
 import * as backend from './backend.js';
@@ -61,7 +61,6 @@ import * as backend from './backend.js';
 const P = window.prism;
 const MODE = 'redact';
 const MEMBER = 'OEBPS/ocd/redact.json';
-const enc = (s) => new TextEncoder().encode(s), dec = (b) => new TextDecoder().decode(b);
 
 const CSS = `
 svg .rd-layer { pointer-events:none; }
@@ -198,7 +197,7 @@ function draw(doc, idx) {
   });
 }
 function styleOn(doc) {
-  if (!doc.getElementById('rd-style')) { const s = doc.createElement('style'); s.id = 'rd-style'; s.setAttribute('data-ui', ''); s.textContent = CSS; doc.head.appendChild(s); }
+  book.frameCss(doc, 'rd-style', CSS);
   const svg = doc.querySelector('svg'); if (!svg) return;
   svg.classList.toggle('rd-zone-pick', st.pick === 'zone'); svg.classList.toggle('rd-block-pick', st.pick === 'block');
 }
@@ -479,9 +478,7 @@ function revealOn(doc, idx) {
   // also what makes the image case work without a rule of its own.
   if (boxes.size) rules.push(`${[...boxes].map(esc).join(', ')} { fill:none; stroke:${RV_INK}; stroke-width:1.4;
       stroke-dasharray:5 4; vector-effect:non-scaling-stroke; }`);
-  let s = doc.getElementById(RV_STYLE);
-  if (!s) { s = doc.createElement('style'); s.id = RV_STYLE; s.setAttribute('data-ui', ''); doc.head.appendChild(s); }
-  s.textContent = rules.join('\n');
+  book.frameCss(doc, RV_STYLE, rules.join('\n') || ' ');
   const g = layer(doc);
   if (g) { g.querySelectorAll('.rd-rv-mark').forEach(n => n.remove()); for (const r of marks) markRun(doc, r, g); }
   return found;
@@ -650,7 +647,7 @@ function wholePage() {
 }
 
 /* -- the engine: check, find, apply — all on the one route ------------------------------------- */
-const bytes = () => { const b = P.bookBytes?.(); if (!b) P.toast('Open a document first.', { tone: 'warn' }); return b; };
+const bytes = () => { const b = book.bytes(); if (!b) P.toast('Open a document first.', { tone: 'warn' }); return b; };
 const reason = (e) => { try { return JSON.parse(e.message).error || e.message; } catch { return e.message || String(e); } };
 
 /** The engine's refusals, said in the tool's own terms.
@@ -664,13 +661,13 @@ const reason = (e) => { try { return JSON.parse(e.message).error || e.message; }
  *  a different command. The page and the kind come from the engine's own answer. */
 function refusal(msg) {
   const m = /still recoverable:\s*\[(.*)\]/s.exec(msg);
-  if (!m) return [`Refused: ${msg}`, 'danger', 6000];
+  if (!m) return [`Refused: ${msg}`, { tone: 'danger', duration: 6000 }];
   const kinds = [...m[1].matchAll(/kind=(\w+)/g)].map(x => x[1].toLowerCase());
   const pages = [...new Set([...m[1].matchAll(/page=(\d+)/g)].map(x => x[1]))];
   const what = kinds.every(k => k === 'image_under_box') ? 'an image' : 'text';
   return [`Nothing was written: on page ${pages.join(', ')}, ${what} is still hidden by a box your zone only `
         + `PARTLY covers — the piece left over goes on hiding it. Cover the whole box, or press Repair, which `
-        + `turns that box into a repair zone of its own.`, 'warning', 9000];
+        + `turns that box into a repair zone of its own.`, { tone: 'warn', duration: 9000 }];
 }
 const parseFindings = async (art) => JSON.parse(dec(art.bytes)).findings || [];
 // Every one of these reshuffles the list, and `sel` is an index into it: an index kept across a
@@ -683,7 +680,7 @@ const parseFindings = async (art) => JSON.parse(dec(art.bytes)).findings || [];
  *  that queued work would make opening a tab an edit. */
 async function check(quiet = true) {
   if (st.report.busy) return;
-  const b = quiet ? P.bookBytes?.() : bytes();
+  const b = quiet ? book.bytes() : bytes();
   if (!b) return;
   st.report.busy = true; status();
   try {
@@ -760,7 +757,7 @@ async function apply() {
     const art = await backend.convert(b, 'patch', opts);
     for (const [path, data] of Object.entries(unzipSync(art.bytes))) {
       await book.put(path, data);
-      if (path.includes('/images/')) await book.declare(path, path.endsWith('.png') ? 'image/png' : 'image/jpeg');
+      if (path.includes('/images/')) await book.declare(path, mediaType(path));
     }
     st.items = []; st.sel = -1; refresh();
     pages.forEach(p => book.refreshPage(p - 1));
@@ -841,14 +838,14 @@ function status() {
       // The kind only when the row is showing the recovered TEXT — otherwise `label` already IS the
       // kind, and a row would state it twice.
       rows.push(`<li><a class="nav-link" data-f="${i}"><span class="rd-kind">p${x.page}</span>`
-              + `<span class="rd-text">${P.esc(label(x))}</span>`
-              + (x.text ? `<span class="px-sub">${P.esc(KIND[x.kind] || x.kind)}</span>` : '') + `</a></li>`);
+              + `<span class="rd-text">${$.esc(label(x))}</span>`
+              + (x.text ? `<span class="px-sub">${$.esc(KIND[x.kind] || x.kind)}</span>` : '') + `</a></li>`);
     });
   }
   if (n) {
     if (loose.length) rows.push('<li class="rd-group">To remove</li>');
     st.items.forEach((it, i) => rows.push(
-      `<li><a class="nav-link${i === st.sel ? ' sel' : ''}" data-i="${i}"><span class="rd-kind${isFinding(it) ? '' : ' rd-zone-kind'}">p${it.page}</span><span class="rd-text">${P.esc(label(it))}</span><span class="rd-del" title="Remove">×</span></a></li>`));
+      `<li><a class="nav-link${i === st.sel ? ' sel' : ''}" data-i="${i}"><span class="rd-kind${isFinding(it) ? '' : ' rd-zone-kind'}">p${it.page}</span><span class="rd-text">${$.esc(label(it))}</span><span class="rd-del" title="Remove">×</span></a></li>`));
   }
   list.innerHTML = rows.join('');
 }
@@ -989,7 +986,7 @@ P.on?.('close', () => {
 });
 window.addEventListener('keyup', e => { if (P.tool?.() === MODE && e.key === 'Shift') reHover(hover?.doc, false); });
 window.addEventListener('keydown', e => {
-  if (P.tool?.() !== MODE || e.target.matches?.('input, textarea')) return;
+  if (!P.keyFor(MODE, e)) return;
   if (e.key === 'Shift') { reHover(hover?.doc, true); return; }
   if (e.key === 'z' && (e.ctrlKey || e.metaKey)) { undo(); e.preventDefault(); }
   else if (e.key === 'Escape' && st.sel >= 0) select(-1);

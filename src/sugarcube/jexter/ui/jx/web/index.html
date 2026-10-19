@@ -17,17 +17,7 @@
        canonical Sugarcube blue (#33699f) as the single accent. Token-driven → dark mode
        follows for free. App-specific styling only. */
     :root{ --jx-glow:10%; }
-    /* header — soft glass, gradient wordmark, bordered subtitle pill */
-    .jx-head{ display:flex; align-items:center; gap:.6rem; flex:0 0 auto; padding:.5rem .9rem;
-      background:linear-gradient(180deg, transparent 30%, color-mix(in srgb, var(--qry-accent) 7%, transparent)), var(--qry-glass);
-      -webkit-backdrop-filter:var(--jx-blur); backdrop-filter:var(--jx-blur);
-      border-bottom:1px solid color-mix(in srgb, var(--qry-text) 10%, transparent);
-      box-shadow:0 6px 20px -16px rgba(0,0,0,.35); }
-    .jx-head .sp{ flex:1; }
-    /* One icon opens the menu in all three tools — the title bar already names the app, and the
-       mark belongs on the about card and the favicon, not repeated in every chrome. */
-    .jx-menu-btn{ display:inline-flex; align-items:center; justify-content:center; padding:.22rem .4rem; }
-    .jx-menu-btn .qry-icon{ width:1.1rem; height:1.1rem; }
+    .jx-head{ padding:.5rem .9rem; }   /* the glass header itself: /shared/sugarcube.css */
     .jx-icon-btn{ appearance:none; border:1px solid var(--qry-line); background:var(--qry-glass); color:var(--qry-text);
       width:2rem; height:2rem; border-radius:var(--qry-radius-sm); cursor:pointer; display:grid; place-items:center; transition:background .15s,border-color .15s,color .15s; }
     .jx-icon-btn:hover{ background:var(--qry-tint); border-color:color-mix(in srgb,var(--jx-brand) 35%,var(--qry-line)); color:var(--jx-brand); }
@@ -381,7 +371,7 @@
 
 <script type="module">
   import '/shared/js/icons.js';                          // the apps' icon set (icons.add): registered before boot() draws
-  import { boot, theme, toast, makeDropZone, makeDialog, makeMenu, makeEvents, format, copy } from '/shared/vendor/qry/qry-app.js';
+  import { boot, theme, toast, makeDropZone, makeDialog, makeMenu, makeEvents, format, copy, saveFile, openFile, download } from '/shared/vendor/qry/qry-app.js';
 
 
   const FSA = ('showOpenFilePicker' in window);   // File System Access API (Chromium → the window WebApp opens)
@@ -484,29 +474,25 @@
               : (f.status==='error' ? `<button type="button" class="qry-btn sm" data-retry="${f.id}">Retry</button>` : '');
       const sub = f.msg ? f.msg : (f.dir ? `from folder “${f.dir.name}”` : format.bytes(f.file.size));
       return `<div class="jx-row ${f.status}"><i class="ic" data-icon="file-text"></i>
-      <span class="meta"><div class="nm">${escapeHtml(f.file.name)}</div><div class="sub">${escapeHtml(sub)}</div></span>
+      <span class="meta"><div class="nm">${$.esc(f.file.name)}</div><div class="sub">${$.esc(sub)}</div></span>
       ${badge}${open}${action}<button class="jx-x" data-del="${f.id}" title="Remove"><i data-icon="x"></i></button></div>`;
     }).join('');
     $('#area').html(`<div class="jx-list">${rows}</div>`);
   }
-  function escapeHtml(s){ return String(s==null?'':s).split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;'); }
 
   // ── pick files / folder (FS Access API, graceful fallback) ──
   async function chooseFiles(){
-    if (FSA){
-      try {
-        const hs = await window.showOpenFilePicker({ multiple:true, types:[{ description:'PDF files', accept:{ 'application/pdf':['.pdf'] } }] });
-        for (const h of hs){ addOne(await h.getFile(), null); }
-        render();
-      } catch {}
-    } else $('#file').click();
+    const picked = await openFile({ accept: '.pdf', multiple: true });
+    if (!picked) return;
+    for (const { file } of picked) addOne(file, null);
+    render();
   }
   async function chooseFolder(){
     if (FSA && window.showDirectoryPicker){
       try {
         const dir = await window.showDirectoryPicker({ mode:'readwrite' });
         for await (const ent of dir.values()){
-          if (ent.kind==='file' && /\.pdf$/i.test(ent.name) && !/-normalized\.pdf$/i.test(ent.name)) addOne(await ent.getFile(), dir);
+          if (ent.kind==='file' && /\.pdf$/i.test(ent.name) && !isOutputName(ent.name)) addOne(await ent.getFile(), dir);
         }
         render();
       } catch {}
@@ -697,22 +683,18 @@
   }
 
   // ── saving loose files ──
-  // Per-file Save → native "Save as…" chooser (pick name + location); plain download as fallback.
+  // Per-file Save → the system's "Save as…" (pick name + location), else a download.
   async function saveOne(f){
     if (!f.blob) return;
-    if (FSA && window.showSaveFilePicker){
-      try {
-        const h = await window.showSaveFilePicker({ suggestedName:outName(f.file.name), types:[{ description:'PDF', accept:{ 'application/pdf':['.pdf'] } }] });
-        const w = await h.createWritable(); await w.write(f.blob); await w.close();
-        f.saved = true; f.msg = `saved as ${h.name} ✓`; render(); toast('Saved', { tone: 'ok', duration: 1500 });
-      } catch (e){ if (e && e.name === 'AbortError') return; downloadOne(f); }   // cancelled → nothing; real error → fall back
-    } else downloadOne(f);
+    const r = await saveFile(f.blob, outName(f.file.name), { type: 'application/pdf' });
+    if (!r) return;                                                   // cancelled
+    f.saved = true; f.msg = r.how === 'native' ? `saved as ${r.name} ✓` : 'downloaded ✓'; render();
+    toast('Saved', { tone: 'ok', duration: 1500 });
   }
   function downloadOne(f){
     if (!f.blob) return;
-    const u = URL.createObjectURL(f.blob), a = document.createElement('a');
-    a.href = u; a.download = outName(f.file.name); document.body.appendChild(a); a.click(); a.remove();
-    f.saved = true; setTimeout(() => URL.revokeObjectURL(u), 4000); render();
+    download(f.blob, outName(f.file.name), { type: 'application/pdf' });
+    f.saved = true; render();
   }
   // open the normalized PDF in a new tab to read it
   function openOne(f){
@@ -841,9 +823,9 @@ java -cp sugarcube-jexter.jar sugarcube.jexter.ui.jx.Jexter --hotfolder ./inbox 
     $('#cfg-outdir').text(outDir ? `“${outDir.name}”` : 'none chosen yet');
     $('#cfg-mode-help').text(MODE_HELP[cfg.mode] || '');
     $('#cfg-suffix-warn').attr('hidden', cfg.suffix ? '' : null);
-    const end = `<b>‹name›${escapeHtml(cfg.suffix || '')}.pdf</b>`;
+    const end = `<b>‹name›${$.esc(cfg.suffix || '')}.pdf</b>`;
     $('#dest-text').html(cfg.mode === 'folder'
-        ? (outDir ? `Saved as ${end} in <b>“${escapeHtml(outDir.name)}”</b>` : `Saved as ${end} in a folder — <b>none chosen yet</b>`)
+        ? (outDir ? `Saved as ${end} in <b>“${$.esc(outDir.name)}”</b>` : `Saved as ${end} in a folder — <b>none chosen yet</b>`)
       : cfg.mode === 'manual' ? `Saved as ${end} where you choose, with Save / Save all`
       : `Saved as ${end} next to each original`);
   }

@@ -29,7 +29,7 @@
 // 600-page book is exactly where an unbounded Map stops being a cache and becomes a leak.
 
 import { book } from './book.js';
-import { pageSvg } from './ocd.js';
+import { pageSvg, mediaType, dec } from './ocd.js';
 
 const CAP = 240;                                   // pictures kept; ~a few KB each
 // Keyed by member path AND the geometry it was drawn with. Keying on the path alone let a picture
@@ -39,9 +39,7 @@ const CAP = 240;                                   // pictures kept; ~a few KB e
 // has to state what the picture IS, not merely which page it is of.
 const cache = new Map();                           // path|WxH@rot/width → Promise<blob url>   (insertion order = LRU)
 const keyOf = (path, g) => `${path}|${g.w}x${g.h}@${g.rot || 0}/${g.width}`;
-const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
 const MAX_INLINE = 8 * 1024 * 1024;                // an image bigger than this is skipped, not base64'd
-const dec = (b) => new TextDecoder().decode(b);
 
 let glyphs = null;                                 // id → "<path …/>", built once per book
 let glyphSource = null;                            // the fonts.svg bytes it was built from
@@ -85,7 +83,7 @@ async function images(xhtml) {
         if (out[name]) continue;
         const bytes = book.get(book.member('images/' + name));
         if (!bytes || bytes.length > MAX_INLINE) continue;
-        const mime = MIME[(name.split('.').pop() || '').toLowerCase()] || 'image/png';
+        const mime = mediaType(name);
         out[name] = await new Promise((res, rej) => {
             const r = new FileReader();
             r.onload = () => res(r.result);

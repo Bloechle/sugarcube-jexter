@@ -1,5 +1,5 @@
 // The affordance, driven like a reader would: type the text, add a font file, click Place, click the page.
-import { serve, openPrism, watchToasts } from './prism_bench.mjs';
+import { serve, openPrism, watchToasts, bookBytes } from './prism_bench.mjs';
 import fs from 'node:fs';
 const FIX = process.env.BENCH_FIX || '/tmp/fix';   // make_bench_fixtures.py writes here
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
@@ -38,8 +38,7 @@ out.written = await page.evaluate(() => {
   return t ? { u: t.getAttribute('data-text'), fs: t.getAttribute('data-size'), f: t.getAttribute('data-font'),
                uses: t.querySelectorAll('use').length, handles: d.querySelectorAll('[data-gz]').length } : null;
 });
-const b64 = await page.evaluate(() => { const u = new Uint8Array(window.prism.bookBytes()); let s=''; const C=8192;
-  for (let i=0;i<u.length;i+=C) s += String.fromCharCode(...u.subarray(i,i+C)); return btoa(s); });
-fs.writeFileSync(FIX + '/ui.ocd.epub', Buffer.from(b64, 'base64'));
+const bytes = await bookBytes(page);
+fs.writeFileSync(FIX + '/ui.ocd.epub', bytes);
 console.log(JSON.stringify({ ...out, errors }, null, 1));
 await browser.close(); srv.close(); process.exit(0);

@@ -1,6 +1,6 @@
 // The heaviest branch of Augment: a dialog with five fields, four keyframe sets, per-element stagger.
 // Does it record, and does it bake into the delivered EPUB — as CSS, since no JS may ship?
-import { serve, openPrism, drag } from './prism_bench.mjs';
+import { serve, openPrism, drag, bookBytes } from './prism_bench.mjs';
 import fs from 'node:fs';
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
 const { browser, page, errors } = await openPrism({ dev: true, book: '/dossier.ocd.epub', viewport: { width: 1500, height: 950 } });
@@ -24,8 +24,7 @@ const rec = await page.evaluate(() => {
            els: k ? (aug[k][0].els || []).length : 0,
            onPage: d.querySelectorAll('[data-px-anim]').length };
 });
-const b64 = await page.evaluate(() => { const u = new Uint8Array(window.prism.bookBytes()); let s=''; const C=8192;
-  for (let i=0;i<u.length;i+=C) s += String.fromCharCode(...u.subarray(i,i+C)); return btoa(s); });
-fs.writeFileSync(`${process.env.BENCH_FIX || '/tmp/fix'}/anim.ocd.epub`, Buffer.from(b64, 'base64'));
+const bytes = await bookBytes(page);
+fs.writeFileSync(`${process.env.BENCH_FIX || '/tmp/fix'}/anim.ocd.epub`, bytes);
 console.log(JSON.stringify({ dlg, rec, errors }, null, 1));
 await browser.close(); srv.close(); process.exit(0);

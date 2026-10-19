@@ -19,7 +19,7 @@ await page.waitForTimeout(1200);
 
 const client = await page.evaluate(async () => {
   const { book } = await import('/shared/js/book.js');
-  const f = book.page(0).doc.fonts[0];
+  const f = book.fonts()[0];
   return { safe: f.safe, ascent: f.ascent, descent: f.descent, cap: f.cap, xh: f.xh, space: f.space };
 });
 

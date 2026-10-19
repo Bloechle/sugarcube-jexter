@@ -1,6 +1,6 @@
 // Augment has never been driven past a click this session. Its model is a SIDECAR (prism/augment.json)
 // baked at export — so the test is: draw one, does it persist, and does it survive an export?
-import { serve, openPrism, drag } from './prism_bench.mjs';
+import { serve, openPrism, drag, bookBytes } from './prism_bench.mjs';
 import fs from 'node:fs';
 const FIX = process.env.BENCH_FIX || '/tmp/fix';   // make_bench_fixtures.py writes here
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
@@ -35,8 +35,7 @@ out.afterDraw = await page.evaluate(() => {
            aug: JSON.stringify(window.prism.state.aug || {}).slice(0, 160),
            onPage: d.querySelectorAll('[data-aug], .aug, [data-ui]').length };
 });
-const b64 = await page.evaluate(() => { const u = new Uint8Array(window.prism.bookBytes()); let s=''; const C=8192;
-  for (let i=0;i<u.length;i+=C) s += String.fromCharCode(...u.subarray(i,i+C)); return btoa(s); });
-fs.writeFileSync(`${FIX}/aug.ocd.epub`, Buffer.from(b64, 'base64'));
+const bytes = await bookBytes(page);
+fs.writeFileSync(`${FIX}/aug.ocd.epub`, bytes);
 console.log(JSON.stringify({ ...out, errors }, null, 1));
 await browser.close(); srv.close(); process.exit(0);

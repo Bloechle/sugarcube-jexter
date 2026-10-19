@@ -5,7 +5,7 @@ const srv = serve(); await new Promise(d => srv.listen(8110, d));
 const report = [];
 for (const withBook of [false, true]) {
   const { browser, page, errors } = await openPrism({ dev: true, book: withBook ? '/hidden.ocd.epub' : '/hidden.ocd.epub', viewport: { width: 1500, height: 950 } });
-  if (!withBook) { await page.evaluate(() => window.prism.closeBook()); await page.waitForTimeout(600); }
+  if (!withBook) { await page.evaluate(() => document.getElementById('m-close').click()); await page.waitForTimeout(600); }
   const tools = await page.evaluate(() => [...document.querySelectorAll('.px-tooltab')].map(b => b.getAttribute('data-tool')));
   for (const t of tools) {
     await page.evaluate(x => window.prism.setTool(x), t); await page.waitForTimeout(500);

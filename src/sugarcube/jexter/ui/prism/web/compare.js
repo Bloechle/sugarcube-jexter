@@ -18,6 +18,7 @@
  */
 import { book } from '/shared/js/book.js';
 import * as backend from './backend.js';
+import { dec } from '/shared/js/ocd.js';
 
 const P = window.prism;
 const TOOL = 'compare';
@@ -26,13 +27,13 @@ const st = { on: false, other: '', a: null, b: null, hunks: [], sel: -1, busy: f
 
 /* -- getting the two sides ---------------------------------------------------------------------- */
 
-const text = async (bytes) => new TextDecoder().decode((await backend.convert(bytes, 'md')).bytes);
+const text = async (bytes) => dec((await backend.convert(bytes, 'md')).bytes);
 
 /** The open document is one side; the file you pick is the other. Both go through the SAME projection,
  *  which is the whole point: comparing this engine's output with another tool's extraction would
  *  measure the two extractors, not the two documents. */
 async function against(file) {
-  const mine = P.bookBytes?.();
+  const mine = book.bytes();
   if (!mine) { P.toast('Open a document first.', { tone: 'warn' }); return; }
   st.busy = true; st.other = file.name; ribbon(); drawer();
   try {
@@ -216,11 +217,11 @@ function drawer() {
     // used to emit `au-group`, the Audit pane's, and was styled only for as long as that class existed:
     // a borrowed class is a dependency on another tool nobody states. (Found when Audit was merged into
     // Redact and its class was renamed: this list went bare, and `cmp-group` had been dead all along.)
-    if (h.section !== sec) { sec = h.section; rows.push(`<li class="cmp-group">${esc(sec || 'Document')}</li>`); }
+    if (h.section !== sec) { sec = h.section; rows.push(`<li class="cmp-group">${$.esc(sec || 'Document')}</li>`); }
     rows.push(`<li><a class="nav-link${i === st.sel ? ' active' : ''}" data-cmp="${i}">`
-      + (st.ctx && h.context ? `<span class="cmp-ctx">…${esc(h.context)}</span>` : '')
-      + (h.removed ? `<span class="cmp-del">${esc(h.removed)}</span>` : '')
-      + (h.added ? `<span class="cmp-add">${esc(h.added)}</span>` : '')
+      + (st.ctx && h.context ? `<span class="cmp-ctx">…${$.esc(h.context)}</span>` : '')
+      + (h.removed ? `<span class="cmp-del">${$.esc(h.removed)}</span>` : '')
+      + (h.added ? `<span class="cmp-add">${$.esc(h.added)}</span>` : '')
       + `</a></li>`);
   });
   list.innerHTML = rows.join('');
@@ -228,7 +229,6 @@ function drawer() {
     a.addEventListener('click', () => select(+a.getAttribute('data-cmp'))));
 }
 
-const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /* -- the tool ----------------------------------------------------------------------------------- */
 

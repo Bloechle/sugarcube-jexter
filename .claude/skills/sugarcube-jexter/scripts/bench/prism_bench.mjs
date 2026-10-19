@@ -142,6 +142,17 @@ export const ribbon = (page, tool, label) => page.evaluate(([t, l]) => {
   b.click();
 }, [tool, label]);
 
+/** The open book as the container it would be written as (`book.bytes()`), back in Node as a Buffer. */
+export async function bookBytes(page) {
+  const b64 = await page.evaluate(async () => {
+    const u = (await import('/shared/js/book.js')).book.bytes();
+    let s = ''; const C = 8192;
+    for (let i = 0; i < u.length; i += C) s += String.fromCharCode(...u.subarray(i, i + C));
+    return btoa(s);
+  });
+  return Buffer.from(b64, 'base64');
+}
+
 /** Every qry toast as it appears — they are TRANSIENT, so a later look finds them gone. Install it before
  *  the action; it returns a reader of { text, tone } (qry fills a toast's text a frame later, so the
  *  nodes are kept and read at call time). Watches the whole document: in an open modal, toasts live there. */

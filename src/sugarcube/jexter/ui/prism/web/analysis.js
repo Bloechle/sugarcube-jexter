@@ -7,7 +7,7 @@
 // Split out of the engine seam (then `jexter.js`, now `engine.js`) on 2026-09-07: the file registering this tool was also Prism's engine seam,
 // and a newcomer looking for either found both. The seam is `engine.js`, and everything this file needs
 // from it is imported by name.
-import { jx, engine, bookBytes, pageIndexOf, activeStructure } from './engine.js';
+import { jx, engine, pageIndexOf, activeStructure } from './engine.js';
 import { SVG_NS, inReadingOrder, readingRuns } from '/shared/js/ocd.js';  // the overlay namespace, and the one reading-order authority
 import * as backend from './backend.js';
 import { confirm } from '/shared/vendor/qry/qry-app.js';
@@ -28,16 +28,7 @@ const SEL_FILL = 'rgba(59,130,246,.28)';
 // (SVG2 pointer-events:bounding-box — Chromium-native; on ink it still works everywhere).
 const AN_CSS = 'g[data-ocd="run"], g[data-ocd="media"] { pointer-events: bounding-box; }'
     + ' svg[data-ocd="page"] * { cursor: crosshair; }';
-function setAnalysisCss(doc, on) {
-    try {
-        let st = doc.getElementById('jx-an-css');
-        if (on && !st) {
-            st = doc.createElementNS('http://www.w3.org/1999/xhtml', 'style');
-            st.id = 'jx-an-css'; st.textContent = AN_CSS;
-            (doc.head || doc.documentElement).appendChild(st);
-        } else if (!on && st) st.remove();
-    } catch { }
-}
+const setAnalysisCss = (doc, on) => book.frameCss(doc, 'jx-an-css', on && AN_CSS);
 const eachFrameDoc = book.eachFrame;               // the seam's iterator — one authority
 
 /* -- Overlays (Prism's Display bounds / Display flow), drawn INSIDE the page --
@@ -97,7 +88,7 @@ function drawOverlays(doc, idx) {
     if (!an.bounds && !an.flow && !an.stage) return;
     const flip = isFlipped(w);
     const g = doc.createElementNS(SVG_NS, 'g');
-    g.setAttribute('data-px-ov', '1'); g.setAttribute('pointer-events', 'none');
+    g.setAttribute('data-px-ov', '1'); g.setAttribute('data-ui', ''); g.setAttribute('pointer-events', 'none');
     const hmap = headingMap(idx);
     // Reading order, not the DOM's — this overlay's whole subject IS the reading order ("Draw the
     // reading order"), so taking the blocks as they were PAINTED would draw the arrows of a page the
@@ -153,7 +144,7 @@ async function ensureStages() {
     if (stagesData || stagesLoading || !engine) return;
     stagesLoading = true;
     const busy = P.toast('Computing pipeline stages…', { duration: 0 });
-    try { stagesData = await backend.stages(bookBytes()); }
+    try { stagesData = await backend.stages(book.bytes()); }
     catch { stagesData = null; }
     busy.close();
     stagesLoading = false;
@@ -199,7 +190,7 @@ function buildTree(idx) {
             const r = document.createElement('div'); r.className = 'nt-row'; r.setAttribute('data-nid', id);
             r.style.paddingLeft = (4 + depth * 12) + 'px';
             r.innerHTML = (kids.length ? '<span class="nt-caret">\u203a</span>' : '<span class="nt-dot"></span>')
-                + `<span class="nt-lbl">${P.esc(label)}</span><span class="nt-id">${P.esc(id)}</span>`;
+                + `<span class="nt-lbl">${$.esc(label)}</span><span class="nt-id">${$.esc(id)}</span>`;
             r.addEventListener('click', e => {
                 if (kids.length && e.target.classList.contains('nt-caret')) { item.classList.toggle('collapsed'); return; }
                 selectInPage(idx, id);
@@ -269,7 +260,7 @@ function renderInspect(el, idx) {
     const ocd = el.getAttribute('data-ocd') || '';
     const kind = KIND[ocd] || (el.tagName === 'path' ? 'path' : el.tagName === 'image' ? 'image' : el.tagName.toLowerCase());
     const rows = [];
-    const kv = (k, v) => { if (v !== '' && v != null) rows.push(`<div class="nd-k">${P.esc(k)}</div><div class="nd-v">${P.esc(String(v))}</div>`); };
+    const kv = (k, v) => { if (v !== '' && v != null) rows.push(`<div class="nd-k">${$.esc(k)}</div><div class="nd-v">${$.esc(String(v))}</div>`); };
     kv('id', id || '\u2014');
     kv('page', 'p' + (idx + 1));
     let bb = null; try { bb = el.getBBox(); } catch {}
@@ -293,8 +284,8 @@ function renderInspect(el, idx) {
     let text = '';
     if (ocd === 'run') text = runText(idx, id);
     else if (ocd === 'paragraph') text = readingRuns(el).map(t => runText(idx, t.id)).join(' ').trim();
-    host.innerHTML = `<div class="nd-type">${P.esc(kind)}</div><div class="nd-rows">${rows.join('')}</div>`
-        + (text ? `<div class="nd-text">${P.esc(text)}</div>` : '');
+    host.innerHTML = `<div class="nd-type">${$.esc(kind)}</div><div class="nd-rows">${rows.join('')}</div>`
+        + (text ? `<div class="nd-text">${$.esc(text)}</div>` : '');
 }
 
 // experimental: hidden unless dev mode is on (Ctrl/Cmd+Shift+D) — see registerTool in prism.js.
@@ -357,7 +348,7 @@ P.on('page', (idx) => { if (P.tool?.() === 'analysis') buildTree(idx); });
 
 async function reanalyze() {
     if (!engine) { P.toast('No conversion engine here.', { tone: 'warn' }); return; }
-    const bytes = bookBytes();
+    const bytes = book.bytes();
     if (!bytes) { P.toast('Open a document first.', { tone: 'warn' }); return; }
     if (Object.values(P.state.aug?.pages || {}).some(l => l.length)
         && !await confirm('Re-analyzing rebuilds the book — your live edits will be dropped. Continue?')) return;

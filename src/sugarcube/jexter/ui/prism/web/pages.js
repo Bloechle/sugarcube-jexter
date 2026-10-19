@@ -17,14 +17,13 @@
  * no-ops. One function, apply(), covers both cases; every verb goes through it.
  */
 import { book } from '/shared/js/book.js';
-import { pageShell, SVG_NS } from '/shared/js/ocd.js';
+import { pageShell, SVG_NS, enc, dec } from '/shared/js/ocd.js';
 import { shots } from '/shared/js/shot.js';
 import { createGizmo, boxOf, setBox, outerBox, clampTo, normBox, svgPointOf } from './gizmo.js';
 import * as backend from './backend.js';
 
 const P = window.prism;
 const TOOL = 'pages';
-const enc = (s) => new TextEncoder().encode(s), dec = (b) => new TextDecoder().decode(b);
 
 const CSS = `
 svg.pg-crop-pick { cursor:crosshair; }
@@ -72,7 +71,7 @@ const n4 = (v) => String(Math.round(v * 1e4) / 1e4);
 
 /** Clamp a window to the media frame and refuse a degenerate one — a crop a user cannot undo by
  *  dragging again is worse than no crop. */
-// NOT the numeric clamp the rest of the client calls `clamp(v, lo, hi)`: this one takes a WINDOW and a
+// NOT the numeric clamp the rest of the client calls `$.clamp(v, lo, hi)`: this one takes a WINDOW and a
 // FRAME and answers a window or null. One name for two contracts is a reader's trap, and the tell is
 // that its arguments do not even have the same arity.
 function clampWindow(win, f) {
@@ -153,7 +152,7 @@ async function turn(delta) {
 function done(msg) {
     if (book.isOpen()) renderTable();
     refresh();
-    P.toast?.(msg, 'success');
+    P.toast?.(msg, { tone: 'ok' });
 }
 
 /* -- the crop: a RECTANGLE you can go on adjusting -------------------------------------------------
@@ -276,9 +275,9 @@ function clearRect(doc, idx) {
 function proposeCrop() {
     if (st.view !== 'page') setView('page');         // a crop needs a page in front of you
     const idx = idxNow(), doc = book.frameDoc(idx), svg = doc?.querySelector('svg[data-ocd="page"]');
-    if (!svg) { P.toast?.('Open a page first.', 'warning'); return; }
+    if (!svg) { P.toast?.('Open a page first.', { tone: 'warn' }); return; }
     if (!cropped(svg) && !cropRect(doc)) {
-        P.toast?.('Drag a rectangle on the page to crop it.', 'neutral');
+        P.toast?.('Drag a rectangle on the page to crop it.');
         readout(idx); ribbon(); return;
     }
     const r = ensureRect(doc, window_(svg));
@@ -291,7 +290,7 @@ function proposeCrop() {
 async function applyCrop() {
     const idx = idxNow(), doc = book.frameDoc(idx), svg = doc?.querySelector('svg[data-ocd="page"]');
     const r = svg && cropRect(doc);
-    if (!r) { P.toast?.('Draw a rectangle on the page first.', 'warning'); return; }
+    if (!r) { P.toast?.('Draw a rectangle on the page first.', { tone: 'warn' }); return; }
     const box = bake(r, svg);
     clearRect(doc, idx);
     await crop(box, idx);
@@ -313,10 +312,7 @@ function setView(v) {
 }
 
 function styleOn(doc) {
-    if (!doc.getElementById('pg-style')) {
-        const s = doc.createElement('style'); s.id = 'pg-style'; s.setAttribute('data-ui', '');
-        s.textContent = CSS; doc.head.appendChild(s);
-    }
+    book.frameCss(doc, 'pg-style', CSS);
     doc.querySelector('svg[data-ocd="page"]')?.classList.toggle('pg-crop-pick', st.on && st.view === 'page');
 }
 
@@ -441,17 +437,17 @@ const reverse = () => setPlan([...planned()].reverse());
 const spec = () => planned().map(v => v === null ? '+' : String(v + 1)).join(',');
 
 async function applyPlan() {
-  if (!dirty()) { P.toast?.('Nothing to apply — the order has not changed.', 'neutral'); return; }
-  const bytes = P.bookBytes?.();
-  if (!bytes) { P.toast?.('Open a document first.', 'warning'); return; }
-  P.toast?.('Reorganising…', 'primary');
+  if (!dirty()) { P.toast?.('Nothing to apply — the order has not changed.'); return; }
+  const bytes = book.bytes();
+  if (!bytes) { P.toast?.('Open a document first.', { tone: 'warn' }); return; }
+  P.toast?.('Reorganising…');
   try {
     const art = await backend.convert(bytes, 'ocd', { pages: spec() });
     st.plan = null; st.sel.clear();
     await book.open(art.bytes, P.state.name);                    // the canonical rebuild: rails, pager, nav
-    P.toast?.('Pages reorganised — the outline, the links and the structure followed.', 'success');
+    P.toast?.('Pages reorganised — the outline, the links and the structure followed.', { tone: 'ok' });
   } catch (e) {
-    P.toast?.(`Refused: ${e.message || e}`, 'danger');
+    P.toast?.(`Refused: ${e.message || e}`, { tone: 'danger' });
   }
 }
 
@@ -558,7 +554,6 @@ function paintSel() {
 function bindTable(host) {
   if (host.__pgTable) return;                       // one binding for the host; the tiles are delegated
   host.__pgTable = true;
-  const posOf = (e) => { const t = e.target.closest('.px-tile'); return t ? +t.getAttribute('data-pos') : -1; };
 
   // ONE gesture, decided at pointerUP: under the drag threshold it was a selection, past it a move.
   // Splitting the two across `click` and a captured pointer sequence is what broke selection — with

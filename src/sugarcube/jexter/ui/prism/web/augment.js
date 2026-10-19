@@ -10,14 +10,11 @@
 
 import { book } from '/shared/js/book.js';
 import { ask, prompt, labels } from '/shared/vendor/qry/qry-app.js';
-import { SVG_NS } from '/shared/js/ocd.js';   // ONE spelling, ONE declaration: the grammar's
+import { SVG_NS, enc, dec, mediaType } from '/shared/js/ocd.js';   // ONE spelling, ONE declaration: the grammar's
 
 const P = window.prism;
 const state = P.state;
-const { toast, esc, goTo } = P;
-const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-const enc = s => new TextEncoder().encode(s);
-const dec = b => new TextDecoder().decode(b);
+const { toast, goTo } = P;
 const pageZip = book.pagePath;                     // the seam's derivation — one authority
 const frameDoc = book.frameDoc;
 const eachLoadedFrame = (cb) => book.eachFrame((doc, idx) => cb(idx, doc));
@@ -27,11 +24,6 @@ let dirty = false;   // augmentations changed since the last export
 let editTool = 'media';   // what a drawn zone creates: 'media' | 'link' | 'reveal-fade' | 'anim'
 
 const XHTML_NS = 'http://www.w3.org/1999/xhtml';
-const MEDIA_TYPE = {
-  mp4: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg', m4v: 'video/mp4',
-  mp3: 'audio/mpeg', m4a: 'audio/mp4', oga: 'audio/ogg', wav: 'audio/wav',
-  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
-};
 let pendingZone = null;   // { idx, rect } awaiting a media pick
 
 const augZip = () => `${state.opfDir}prism/augment.json`;
@@ -136,7 +128,7 @@ function bindEditor(f, idx) {
     p0 = toUser(e.clientX, e.clientY);
     box = doc.createElementNS(SVG_NS, 'rect');
     box.setAttribute('fill', 'rgba(51,105,159,.18)'); box.setAttribute('stroke', '#33699f');
-    box.setAttribute('stroke-width', '1.5'); box.setAttribute('stroke-dasharray', '6 4'); box.setAttribute('data-px-edit', '1');
+    box.setAttribute('stroke-width', '1.5'); box.setAttribute('stroke-dasharray', '6 4'); box.setAttribute('data-px-edit', '1'); box.setAttribute('data-ui', '');
     svg.appendChild(box);
   });
   doc.addEventListener('mousemove', e => {
@@ -173,7 +165,7 @@ function onMediaPicked(file) {
 // Add a media file to the book, record an augmentation entry, render it.
 async function addAugment(idx, rect, file) {
   const ext = file.name.split('.').pop().toLowerCase();
-  const mime = MEDIA_TYPE[ext] || 'application/octet-stream';
+  const mime = mediaType('x.' + ext);
   const kind = mime.startsWith('image/') ? 'image' : mime.startsWith('audio/') ? 'audio' : 'video';
   const name = await (kind === 'image' ? book.addImage : book.addMedia)(new Uint8Array(await file.arrayBuffer()), ext);
   const mediaZip = `${state.opfDir}${kind === 'image' ? 'images' : 'media'}/${name}`;
@@ -193,8 +185,8 @@ function duplicateAug(idx, id) {
   const copy = JSON.parse(JSON.stringify(src));
   copy.id = newAugId();
   copy.created = new Date().toISOString();
-  copy.zone.x = clamp(copy.zone.x + 3, 0, 100 - copy.zone.w);
-  copy.zone.y = clamp(copy.zone.y + 3, 0, 100 - copy.zone.h);
+  copy.zone.x = $.clamp(copy.zone.x + 3, 0, 100 - copy.zone.w);
+  copy.zone.y = $.clamp(copy.zone.y + 3, 0, 100 - copy.zone.h);
   commitAug(idx, copy, 'Duplicated.');
 }
 
@@ -354,7 +346,7 @@ function renderEditList() {
   info?.text(list.length ? `${list.length} on this page` : 'None on this page — drag a zone.');
   list.forEach((e, i) => {
     const li = $.create('li');
-    const row = $.create('a', { class: 'nav-link edit-row', html: `<i data-icon="${TYPE_ICON[e.type] || 'square'}"></i><span class="er-lbl">${esc(augRowLabel(e))}</span>` });
+    const row = $.create('a', { class: 'nav-link edit-row', html: `<i data-icon="${TYPE_ICON[e.type] || 'square'}"></i><span class="er-lbl">${$.esc(augRowLabel(e))}</span>` });
     row.on('click', () => { goTo(state.current); flashAug(state.current, e.id); });
     const acts = $.create('span', { class: 'er-acts' });
     mkBtn(acts, 'chevron-up', 'Send backward', () => reorderAug(state.current, i, -1));
@@ -414,11 +406,7 @@ function buildMedia(doc, entry, fill) {
 }
 
 // Inject a small edit stylesheet into a frame (transient — never exported).
-function ensureEditStyle(doc) {
-  if (doc.getElementById('px-edit-style')) return;
-  const st = doc.createElementNS(XHTML_NS, 'style');
-  st.setAttribute('id', 'px-edit-style');
-  st.textContent = '.px-aug{outline:2px solid #33699f;outline-offset:-1px}'
+const EDIT_CSS = '.px-aug{outline:2px solid #33699f;outline-offset:-1px}'
     + '.px-aug-shield{position:absolute;inset:0;cursor:move;background:rgba(51,105,159,.05)}'
     + '.px-aug-resize{position:absolute;right:-7px;bottom:-7px;width:14px;height:14px;border-radius:3px;'
     + 'background:#33699f;border:2px solid #fff;cursor:nwse-resize;box-shadow:0 1px 4px rgba(0,0,0,.45)}'
@@ -427,10 +415,9 @@ function ensureEditStyle(doc) {
     + 'border-radius:6px 6px 6px 0;cursor:text;white-space:nowrap;max-width:220px;overflow:hidden;'
     + 'text-overflow:ellipsis;box-shadow:0 2px 6px rgba(0,0,0,.4)}'
     + '.px-prev{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;'
-    + 'font:600 clamp(11px,3vw,18px)/1.2 system-ui,sans-serif;color:#33699f;background:rgba(51,105,159,.10);'
+    + 'font:600 $.clamp(11px,3vw,18px)/1.2 system-ui,sans-serif;color:#33699f;background:rgba(51,105,159,.10);'
     + 'border:1px dashed #33699f;border-radius:6px}';
-  (doc.querySelector('head') || doc.documentElement).appendChild(st);
-}
+const ensureEditStyle = (doc) => book.frameCss(doc, 'px-edit-style', EDIT_CSS);
 
 // Reveal-on-tap: a CSS checkbox toggles a cover panel — portable, no scripting.
 // fill=true → just the cover (edit preview); else → the interactive label.
@@ -459,7 +446,7 @@ function buildReveal(doc, entry, fill) {
 const linkLabel = entry => entry.kind === 'url' ? entry.to : `p.${(entry.to | 0) + 1}`;
 function linkHref(srcZip, entry) {
   if (entry.kind === 'url') return entry.to;
-  return relPath(srcZip, pageZip(clamp(entry.to | 0, 0, state.pages.length - 1)));
+  return relPath(srcZip, pageZip($.clamp(entry.to | 0, 0, state.pages.length - 1)));
 }
 function buildLink(doc, srcZip, entry, fill) {
   if (fill) {
@@ -485,7 +472,7 @@ function ensureAugCss(doc) {
   st.setAttribute('id', 'px-aug-style');
   st.textContent = '.px-reveal{display:block;cursor:pointer}'
     + '.px-reveal-cover{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;'
-    + 'text-align:center;padding:.4em;box-sizing:border-box;font:600 clamp(11px,3.2vw,20px)/1.2 system-ui,sans-serif;'
+    + 'text-align:center;padding:.4em;box-sizing:border-box;font:600 $.clamp(11px,3.2vw,20px)/1.2 system-ui,sans-serif;'
     + 'color:#fff;background:#33699f;border-radius:6px;transition:opacity .45s ease,transform .45s ease}'
     + '.px-reveal input:checked ~ .px-reveal-cover{opacity:0;pointer-events:none}'
     + '.px-link{display:block;cursor:pointer}'
@@ -557,7 +544,7 @@ function renderAug(idx, doc) {
       const el = buildAugEl(doc, srcZip, entry, false);
       el.setAttribute('data-px-aug', entry.id);
       if (entry.type === 'link' && entry.kind === 'page')   // in-reader jump, not an iframe navigation
-        el.addEventListener('click', e => { e.preventDefault(); goTo(clamp(entry.to | 0, 0, state.pages.length - 1)); });
+        el.addEventListener('click', e => { e.preventDefault(); goTo($.clamp(entry.to | 0, 0, state.pages.length - 1)); });
       body.appendChild(el);
       return;
     }
@@ -601,11 +588,11 @@ function bindHandles(idx, wrap, entry, shield, handle) {
     const move = ev => {
       const dxp = (ev.clientX - sx) / W * 100, dyp = (ev.clientY - sy) / H * 100;
       if (mode === 'move') {
-        entry.zone.x = +clamp(z0.x + dxp, 0, 100 - z0.w).toFixed(3);
-        entry.zone.y = +clamp(z0.y + dyp, 0, 100 - z0.h).toFixed(3);
+        entry.zone.x = +$.clamp(z0.x + dxp, 0, 100 - z0.w).toFixed(3);
+        entry.zone.y = +$.clamp(z0.y + dyp, 0, 100 - z0.h).toFixed(3);
       } else {
-        entry.zone.w = +clamp(z0.w + dxp, 3, 100 - z0.x).toFixed(3);
-        entry.zone.h = +clamp(z0.h + dyp, 3, 100 - z0.y).toFixed(3);
+        entry.zone.w = +$.clamp(z0.w + dxp, 3, 100 - z0.x).toFixed(3);
+        entry.zone.h = +$.clamp(z0.h + dyp, 3, 100 - z0.y).toFixed(3);
       }
       applyZone(wrap, entry.zone);
     };
@@ -688,6 +675,7 @@ P.on('book', () => loadAug());                     // read prism/augment.json (r
 P.on('frame', (f, idx) => bindEditor(f, idx));
 P.on('page', () => { if (state.aug) renderEditList(); });
 P.on('close', () => { undoStack.length = 0; dirty = false; pendingZone = null; editing = false; });
+P.on('export', (to) => { if (to === 'ocd') dirty = false; });   // only the OCD-EPUB carries the augmentations
 
 $('#media-input').on('change', async e => {
   const file = e.target.files[0];
@@ -696,7 +684,7 @@ $('#media-input').on('change', async e => {
 });
 $.opt('#m-undo')?.on('click', () => undo());       // the tool's menu entry + shortcut
 document.addEventListener('keydown', e => {       // the tool's shortcut: undo an augmentation
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && state.id) { e.preventDefault(); undo(); }
+  if (P.keyFor('augment', e) && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && state.id) { e.preventDefault(); undo(); }
 });
 window.addEventListener('beforeunload', e => {   // unexported edits would be lost with the tab
   if (dirty && Object.values(state.aug?.pages || {}).some(l => l.length)) e.preventDefault();

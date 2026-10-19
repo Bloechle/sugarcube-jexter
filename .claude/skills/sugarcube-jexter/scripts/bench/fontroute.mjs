@@ -1,6 +1,6 @@
 // The whole chain, from the browser: a font file → /api/font → the container's library → a run that
 // uses it → the engine → a PDF. Nothing here knows a second grammar.
-import { serve, openPrism } from './prism_bench.mjs';
+import { serve, openPrism, bookBytes } from './prism_bench.mjs';
 import fs from 'node:fs';
 const FIX = process.env.BENCH_FIX || '/tmp/fix';   // make_bench_fixtures.py writes here
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
@@ -22,8 +22,7 @@ const out = await page.evaluate(async (b64) => {
            uses: run.run.querySelectorAll('use').length, dataB: run.run.getAttribute('data-blanks') || '—',
            libFonts: [...new TextDecoder().decode(window.prism.state.files[Object.keys(window.prism.state.files).find(k => k.endsWith('pages/fonts.svg'))]).matchAll(/<g id="(f\d+)" data-font="([^"]*)"/g)].map(m => m[1] + ':' + m[2]) };
 }, ttf);
-const b64 = await page.evaluate(() => { const u = new Uint8Array(window.prism.bookBytes()); let s=''; const C=8192;
-  for (let i=0;i<u.length;i+=C) s += String.fromCharCode(...u.subarray(i,i+C)); return btoa(s); });
-fs.writeFileSync(FIX + '/route.ocd.epub', Buffer.from(b64, 'base64'));
+const bytes = await bookBytes(page);
+fs.writeFileSync(FIX + '/route.ocd.epub', bytes);
 console.log(JSON.stringify({ ...out, errors }, null, 1));
 await browser.close(); srv.close(); process.exit(0);

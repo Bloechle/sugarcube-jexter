@@ -9,7 +9,7 @@
 // It now closes the loop: author, persist, post the container to the engine, and compare the text the
 // engine reads back against what was typed. A scenario that only reports attributes measures the
 // client's opinion of itself.
-import { serve, openPrism } from './prism_bench.mjs';
+import { serve, openPrism, bookBytes } from './prism_bench.mjs';
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 const JAVA = process.env.JAVA_BIN || '/opt/jdk21/usr/lib/jvm/java-21-openjdk-amd64/bin/java';
@@ -23,7 +23,7 @@ await page.waitForTimeout(1200);
 const wrote = await page.evaluate(async (text) => {
   const { book } = await import('/shared/js/book.js');
   const p = book.page(0);
-  const font = p.doc.fonts[0]?.safe || p.doc.fonts[0]?.name;
+  const font = book.fonts()[0]?.safe || book.fonts()[0]?.name;
   const r = p.text({ text, x: 60, y: 300, size: 22, font });
   await book.persist(0, true);
   const run = r.run;
@@ -33,9 +33,8 @@ const wrote = await page.evaluate(async (text) => {
            deadU: run.getAttribute('data-u'), deadB: run.getAttribute('data-b') };
 }, TEXT);
 
-const b64 = await page.evaluate(() => { const u = new Uint8Array(window.prism.bookBytes()); let s=''; const C=8192;
-  for (let i=0;i<u.length;i+=C) s += String.fromCharCode(...u.subarray(i,i+C)); return btoa(s); });
-fs.writeFileSync(FIX + '/authored.ocd.epub', Buffer.from(b64, 'base64'));
+const bytes = await bookBytes(page);
+fs.writeFileSync(FIX + '/authored.ocd.epub', bytes);
 
 // THE LOOP: read the container with the engine and write it back out. `to=ocd` is the probe, not
 // `to=md` — md and doctags project the LOGICAL tree, and nothing references an authored run, so they

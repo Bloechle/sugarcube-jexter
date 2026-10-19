@@ -1,43 +1,25 @@
-// prism.js — the Prism chassis (100% client), verbatim from the PRISM reader core.
+// prism.js — the Prism chassis (100% client): the reader every tool builds on.
 //
-// Prism = this chassis + engine.js (the engine seam). The chassis stays generic — it
-// reads ANY fixed-layout EPUB off the original tree via the Service Worker; engine.js
-// plugs in through window.prism.hooks when the book is an OCD-EPUB (ocd/ members)
-// or when a local engine (/api/convert) is present: PDF import, member-based search
-// text, id-addressed highlights, TTS over the text layer, structure rail, exports.
+// It reads ANY fixed-layout EPUB through a Service Worker (prism-sw.js) that serves the unzipped book
+// under a virtual /epub/<id>/ scope, so the reader and every page frame fetch ordinary URLs — one render
+// path, no asset rewriting. The book never leaves the browser unless a tool posts it to the engine.
 //
-// The book never leaves the browser. A Service Worker (prism-sw.js) serves the
-// unzipped EPUB under a virtual /epub/<id>/ scope, so the reader and every page
-// iframe just fetch normal URLs — one render path, no asset rewriting.
-//
-//   initSW     — register + take control (needs https or localhost).
-//   openEpub   — read file -> async fflate unzip (vendored) -> hand map to SW -> load.
-//   loadEpub   — META-INF/container.xml -> OPF -> spine (order) + nav (labels/TOC).
-//   prefetch   — one pass per page: viewBox (layout) + text (search).
-//   rails      — Pages (live thumbnails) · Contents (TOC) · Search.
-//   modes      — scroll · single page · two-page spread (persisted).
-//   zoom       — anchored (buttons/keys, ctrl+wheel, pinch).
-//   gestures   — swipe to turn (paged), pinch to zoom.
-//   augment    — edit as DATA: a sidecar (prism/augment.json) holds entries
-//                (zones in % of the page): media (video/audio/image),
-//                reveal-on-tap (CSS-only spoiler), link hotspots (page jump /
-//                URL), and anim (staggered CSS entrance on the SVG content of
-//                a zone; the selection is compiled at edit time into {t, i}
-//                indices so bake needs no layout). Rendered as a transient
-//                overlay; drag to add/move/resize, note tab to caption,
-//                dbl-click removes, Ctrl/Cmd+Z undoes.
-//   export     — bake the model into clean page copies (portable) + ship the
-//                sidecar, so the .epub is portable AND re-editable in PRISM.
-//   console    — F2 log panel capturing console.* + errors.
+//   open      file → fflate unzip → the worker → container.xml → OPF → spine + nav
+//   stage     a card per page, its frame mounted on demand (a window of FRAME_WINDOW around the reader)
+//   rail      Pages (pictures, shot.js) · Contents (nav) · Search (search.js)
+//   layout    scroll · single page · two-page spread (persisted) · zoom anchored under the pointer
+//   seam      window.prism: state, events (events.js), the tool registry (tools.js), the verbs below,
+//             and the providers the engine answers (hooks: openSource · highlight · ttsNodes)
+//   console   F2 (console.js)
 import '/shared/js/icons.js';                          // the apps' icon set (icons.add): registered before boot() draws
-import { boot, theme, toast, makeDropZone, makeDialog, makeMenu, copy } from '/shared/vendor/qry/qry-app.js';
+import { boot, theme, toast, makeDropZone, makeDialog, makeMenu, makeSplitter } from '/shared/vendor/qry/qry-app.js';
 import { unzip } from '/shared/vendor/fflate.js';
 import { ocdRefusal } from '/shared/js/ocd.js';
+import { on, emit } from './events.js';
+import { registerTool, setTool, ribbon, keyFor, currentTool, devMode, setDevMode } from './tools.js';
+import { logLine, toggleLog, installLogCapture, wireConsole } from './console.js';
+import { wireSearch, clearSearch, clearAllHl, markRect, fold } from './search.js';
 
-// The chassis takes NO static /shared import: `book.js` reads `window.prism` at module scope, so the
-// seam has to exist first — every /shared module is pulled in `main()`. One namespace string is not a
-// reason to make an exception to that; the spelling matches the grammar's so both read alike.
-const SVG_NS = 'http://www.w3.org/2000/svg';
 // The chassis draws thumbnails, so it speaks the two shared authorities: `book` for "which member is
 // page i", `shots` for "a small picture of it". They are imported DYNAMICALLY, in main(), and that is
 // load-bearing: `book.js` captures `window.prism` at module scope, and a static import here would put
@@ -56,27 +38,13 @@ let seq = 0;
 
 window.prism = { state, hooks: {}, on };        // the tool seam: state · providers · events
 // EVENTS (multicast, chassis-emitted): 'tool'(id) · 'book'(state) · 'close'() ·
-// 'page'(idx) · 'frame'(iframe, idx). Subscribe with P.on(evt, cb) → off().
+// 'page'(idx) · 'frame'(iframe, idx) · 'mode'(layout) · 'export'(target) — the last one raised by
+// whoever exports, through P.exported(to). Subscribe with P.on(evt, cb) → off().
 // PROVIDERS (singular, hooks.*): openSource · highlight · ttsNodes — one implementation
 // answers the chassis (engine.js owns them today).
-// THE escaping rule, exported as P.esc. Quotes included: a value that is safe in text is not safe in an
-// attribute, and three modules had each rewritten a stricter copy because this one was not. One rule, the
-// strict one — escaping a quote in text content costs nothing.
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
 // The window title with no book: the same string index.html carries, so closing a document returns the
 // window to exactly what opening the app showed — one authority, declared ABOVE the code that reads it.
 const TITLE = 'PRISM — the OCD document workbench';
-
-const subs = new Map();                          // event → Set<cb>
-function on(evt, cb) {
-  if (!subs.has(evt)) subs.set(evt, new Set());
-  subs.get(evt).add(cb);
-  return () => subs.get(evt).delete(cb);
-}
-function emit(evt, ...args) {
-  for (const cb of subs.get(evt) || []) { try { cb(...args); } catch (e) { console.error(e); } }
-}
 
 // Footer status line (jexter-style): one place sets it; its <i data-icon> draws itself (qry's icons.watch, which boot() starts).
 function setStatus(html) {
@@ -101,272 +69,15 @@ function setUnit(u) {
   unit = (u in UNIT || u === 'px') ? u : 'pt';
   localStorage.setItem('prism_unit', unit);
 }
-window.prism.getUnit = () => unit;
 window.prism.toUnit = (v) => unit === 'px' ? Math.round(v * state.zoom) + ' px'
   : (v * (UNIT[unit] || UNIT.pt)[0]).toFixed((UNIT[unit] || UNIT.pt)[1]) + ' ' + unit;
 
-// ── TOOLS ──────────────────────────────────────────────────────────────────
-//
-// A TOOL is what the reader is doing to the document: home, edit, analysis, reveal, redact. Not a
-// "mode" — that word is the layout (scroll · spread · flip), and two unrelated notions under one name
-// is what the old `appMode` prefix was papering over.
-//
-// A tool is declarative: { id, label, icon, title?, experimental?, onEnter?(), onLeave?() }
-// and it owns THREE surfaces, all keyed on the same thing so none can disagree:
-//
-//   the tab      .px-tooltab[data-tool=id]      rendered from this registry
-//   the ribbon   #ribbon [data-ribbon=id]      its second row, filled by the module via P.ribbon(id)
-//   the drawer   #<id>-drawer                  the right pane, opened by CSS on body.tool-<id>
-//
-// ONE authority sets all three: setTool. It toggles body.tool-<id>; every pane, ribbon slot and
-// accent keys off that class, so adding a tool needs no chassis change — register it, ask for its
-// ribbon slot, name its drawer, and the layout follows.
-//
-// `experimental: true` hides the tab and NOTHING else: the module is loaded, registered and wired,
-// and setTool(id) still works. Shipping an unfinished tool is deleting one flag. Dev mode reveals
-// them — Ctrl/Cmd+Shift+D, or ?dev=1 for a link — and the choice is remembered.
-const tools = [];
-let tool = 'home';
-
-const DEV_KEY = 'prism.dev';
-function devMode() {
-  try {
-    const q = new URLSearchParams(location.search);
-    if (q.has('dev') || location.hash === '#dev') { localStorage.setItem(DEV_KEY, '1'); return true; }
-    return localStorage.getItem(DEV_KEY) === '1';
-  } catch { return false; }
-}
-
-function setDevMode(on) {
-  try { on ? localStorage.setItem(DEV_KEY, '1') : localStorage.removeItem(DEV_KEY); } catch {}
-  if (!on && toolOf(tool)?.experimental) setTool('home');   // never strand the reader on a hidden tab
-  renderTabs();
-}
-
-const toolOf = id => tools.find(t => t.id === id);
-/** What the tab bar shows: everything in dev mode, the finished ones otherwise. */
-const visibleTools = () => devMode() ? tools : tools.filter(t => !t.experimental);
-
-function registerTool(t) {
-  tools.push(t);
-  renderTabs();
-  // The tool that is ALREADY current gets its onEnter too — otherwise the first tab registered, which is
-  // the one showing at startup, never declares its ribbon (setTool only fires the hook on a change).
-  // Deferred by a microtask so the hook runs after this module finishes evaluating, and can reach
-  // helpers declared further down.
-  if ($.opt(`#${t.id}-drawer`)) drawer(t.id);      // its head comes from this declaration, not from markup
-  if (t.id === tool) queueMicrotask(() => t.onEnter?.());
-}
-
-function renderTabs() {
-  const host = $.opt('.px-tooltabs'); if (!host) return;
-  host.cls((devMode() ? '+' : '-') + 'px-dev');   // the bar states the mode; the amber tabs are what SHOWS it
-  host.innerHTML = visibleTools().map(t =>
-    `<button class="px-tooltab${t.id === tool ? ' active' : ''}${t.experimental ? ' px-wip' : ''}" data-tool="${t.id}"
-             title="${esc(t.title || t.label)}${t.experimental ? ' — in development' : ''}"><i data-icon="${t.icon}"></i><span>${esc(t.label)}</span></button>`).join('');
-  $.all('.px-tooltab').forEach(b => b.on('click', () => setTool(b.attr('data-tool'))));
-}
-
-function setTool(id) {
-  let next = toolOf(id) || tools[0];                        // unknown → the first tab (home)
-  if (next.experimental && !devMode()) next = tools[0];     // hidden tab asked for outside dev mode
-  const prev = toolOf(tool);
-  if (prev && prev !== next) prev.onLeave?.();
-  if (prev) $('body').cls('-tool-' + prev.id);
-  tool = next.id;
-  $('body').cls('+tool-' + next.id);
-  $.all('.px-tooltab').forEach(b => b.cls((b.attr('data-tool') === tool ? '+' : '-') + 'active'));
-  // The tool's three surfaces, marked from one place: its ribbon slot and its drawer follow its tab.
-  $.all('#ribbon [data-ribbon]').forEach(el => el.cls((el.attr('data-ribbon') === tool ? '+' : '-') + 'active'));
-  $.all('.px-pane-slot').forEach(el => el.cls((el.id === tool + '-drawer' ? '+' : '-') + 'active'));
-  $('body').cls(($.opt(`#${tool}-drawer`) ? '+' : '-') + 'has-drawer');   // no slot, no pane, no toggle
-  paneHead();
-  // A tool activated AFTER pages are loaded has never seen them: the `frame` event fired before it
-  // asked. Replay it for what is mounted, so entering a tool is enough to make it work on the page in
-  // front of you. Handlers are expected to be idempotent — they mark their own document.
-  if (prev !== next) {
-    $.all('.prism-frame').forEach(f => {
-      const idx = +f.closest('.prism-page')?.getAttribute('data-index');
-      if (idx >= 0 && f.contentDocument?.querySelector('svg')) emit('frame', f, idx);
-    });
-    next.onEnter?.();
-  }
-  emit('tool', tool);
-}
-
-/** A tool's SLOT in the right pane, symmetric with its ribbon slot: `P.drawer(id)` returns it, creating
- *  it if the markup does not carry one. The pane itself — its width, its head, its scrolling, its fold
- *  — belongs to the chassis and is stated once; a module only fills its slot, and never learns that the
- *  five other tools share the column with it. */
-function drawer(id) {
-  const body = $.opt('#pane-right .px-pane-body'); if (!body) return null;
-  let slot = $.opt(`#${id}-drawer`);
-  if (!slot) {
-    slot = $.create('section', { class: 'px-pane-slot' }).attr('id', `${id}-drawer`);
-    slot.mount(body);
-  }
-  if (id === tool) { slot.cls('+active'); paneHead(); }
-  return slot;
-}
-
-/** The pane's head, rendered FROM THE REGISTRY — the icon and label the active tool already declared.
- *  Hand-written shells used to repeat them once per tool, which is one chance to drift per tool. */
-function paneHead() {
-  const head = $.opt('#pane-right .px-pane-head'); if (!head) return;
-  const t = toolOf(tool);
-  head.innerHTML = `<i data-icon="${esc(t?.icon || 'panel-right')}"></i> ${esc(t?.drawer || t?.label || tool)}`;
-}
-
-/** One item of a ribbon group that is a CONTROL rather than a command — a search box, a colour, a
- *  number, a select. Its VALUE comes from the declaration, so the tool's state is the one authority
- *  and re-declaring can never revert what the reader typed or picked: the bug the hand-appended
- *  version had, where every re-render silently put the colour back to black and emptied the field.
- *  `on(value)` fires on change (add `live` for every keystroke, `enter` for the Enter key).
- *
- *  It is built on the COMMAND's rhythm — the control where a button's icon goes, its caption where the
- *  button's label goes — so a row reads as one line of things to touch and one line of names. A bare
- *  swatch wedged between two-line buttons is the shape that looks wrong, and it looks wrong because it
- *  is a different grammar in the same sentence. */
-function control(c) {
-  const title = c.title || c.label || '';
-  const box = $.create('label', { class: 'px-rb-field' });
-  const ctl = $.create('div', { class: 'px-rb-ctl' });
-  // No `switch` kind, deliberately: a BOOLEAN is a command that stays lit (`active`), which the ribbon
-  // already says everywhere — the pick modes, the page scope, Reveal. Two ways of stating one thing is
-  // one of them drifting, and a switch is also the heaviest object in a row of line icons.
-  // A SELECT is the one control whose value set comes from the document — the fonts a container
-  // carries, a layer, a page range. `options` is re-read on every declaration like everything else
-  // here, so a tool refreshes the list by declaring again rather than by poking the DOM.
-  if (c.field === 'select') {
-    const sel = $.create('select');
-    sel.setAttribute('title', title); sel.setAttribute('aria-label', title);
-    for (const o of c.options || []) {
-      const value = typeof o === 'string' ? o : o.value, label = typeof o === 'string' ? o : o.label;
-      const e = document.createElement('option');
-      e.value = value; e.textContent = label;
-      if (String(value) === String(c.value)) e.selected = true;
-      sel.appendChild(e);
-    }
-    sel.addEventListener('change', () => c.on?.(sel.value));
-    sel.mount(ctl); ctl.mount(box);
-    if (c.label) $.create('span', { class: 'px-rb-cap', text: c.label }).mount(box);
-    box.setAttribute('title', title);
-    return box;
-  }
-  const input = $.create('input');
-  input.type = c.field;                                   // search · color · number · text
-  input.value = c.value == null ? '' : String(c.value);
-  // A WIDE control (a text box) is 1.9rem tall where a small one is 1.15rem — the icon's height — so it
-  // fills the box the caption would otherwise share, and a caption under it makes the control taller
-  // than a command and THE WHOLE ROW grows to fit: measured 84 px against 72 on Forms, which is a
-  // visible jolt of the stage when you switch to that tool. prism.css states the rule ("small controls
-  // are captioned, wide ones speak for themselves"); stating it is not enforcing it. So the chassis
-  // enforces it here, and does not lose the name: a wide control WEARS its label, as its placeholder.
-  const wide = c.field === 'search' || c.field === 'text';
-  if (c.placeholder != null) input.placeholder = c.placeholder;
-  else if (wide && c.label)  input.placeholder = c.label;
-  for (const k of ['min', 'max', 'step']) if (c[k] != null) input.setAttribute(k, String(c[k]));
-  if (c.list?.length) {                                   // suggestions, so a regex field is not a blank wall
-    const dl = $.create('datalist');
-    dl.id = `px-rb-list-${++listSeq}`;
-    for (const v of c.list) { const o = document.createElement('option'); o.value = v; dl.appendChild(o); }
-    input.setAttribute('list', dl.id);
-    box.appendChild(dl);
-  }
-  input.addEventListener('change', () => c.on?.(input.value));
-  if (c.live)  input.addEventListener('input', () => c.on?.(input.value));
-  if (c.enter) input.addEventListener('keydown', e => { if (e.key === 'Enter') c.enter(input.value); });
-  input.setAttribute('title', title);
-  input.setAttribute('aria-label', title);
-  input.mount(ctl);
-  if (c.unit) { const u = document.createElement('span'); u.className = 'px-rb-unit'; u.textContent = c.unit; ctl.appendChild(u); }
-  ctl.mount(box);
-  // The caption is the control's own name and goes UNDER it, like every command's label — never inside
-  // the control as well: two names for one thing is one of them going stale. A wide control has already
-  // taken its name inside (above), which is the only place it fits.
-  if (c.label && !wide) $.create('span', { class: 'px-rb-cap', text: c.label }).mount(box);
-  box.setAttribute('title', title);
-  return box;
-}
-let listSeq = 0;
-
-/** A tool's ribbon slot, created on first ask, and optionally filled from a DECLARATION:
- *
- *    P.ribbon('redact', [
- *      { group: 'Pick',  items: [{ icon: 'square-dashed', label: 'Zone', on: () => …, active: true }] },
- *   *      { group: 'Mark',  items: [{ field: 'color', label: 'Box', value: st.fill, on: v => … }] },
- *      { group: 'Apply', items: [{ icon: 'eraser', label: 'Apply', title: '…', on: … }] },
- *    ], 'Drag on the page to add a zone · click one to select it');
- *
- * The chassis owns the markup so every tool's ribbon looks the same and no module positions anything —
- * commands AND the controls that configure them, which used to be appended by hand and lost their
- * values on every re-render. Commands carry `active` for a toggle and `disabled`; both are read again
- * on every render, so a module refreshes by declaring again rather than by poking the DOM. The third
- * argument is the help line a tool whose interaction is implicit owes the reader. The slot is still
- * returned, for whatever the grammar does not cover. */
-function ribbon(id, groups, help) {
-  const host = $.opt('#ribbon'); if (!host) return null;
-  let slot = host.querySelector(`[data-ribbon="${id}"]`);
-  if (!slot) {
-    slot = $.create('div', { class: 'px-ribbon-slot' }).attr('data-ribbon', id);
-    slot.mount(host);
-    if (id === tool) slot.cls('+active');
-  }
-  if (!groups) return slot;
-
-  const focused = slot.contains(document.activeElement) ? document.activeElement.title : null;
-  // `selectionStart` THROWS on a number or colour input (InvalidStateError), so it is asked for
-  // behind a guard rather than tested by type — the list of types that answer is the browser's, not ours.
-  let caret = null;
-  if (focused) try { caret = document.activeElement.selectionStart; } catch { }
-  slot.empty();
-  for (const g of groups) {
-    const box = $.create('div', { class: 'px-rb-group' });
-    const row = $.create('div', { class: 'px-rb-row' });
-    for (const c of g.items || []) {
-      if (c.field) { control(c).mount(row); continue; }
-      const b = $.create('button', {
-        class: 'px-rb-btn' + (c.active ? ' active' : ''),
-        title: c.title || c.label,
-        onclick: () => c.on?.(),
-      });
-      if (c.disabled) b.setAttribute('disabled', '');
-      $.create('i').attr('data-icon', c.icon || 'square').mount(b);
-      $.create('span', { text: c.label }).mount(b);
-      b.mount(row);
-    }
-    row.mount(box);
-    if (g.group) $.create('span', { class: 'px-rb-lbl', text: g.group }).mount(box);
-    box.mount(slot);
-  }
-  // The help line shrinks before any command does and can end up ellipsised or gone entirely, so the
-  // sentence stays reachable on the element itself.
-  if (help) $.create('span', { class: 'px-rb-help', text: help }).attr('title', help).mount(slot);
-  // Re-declaring rebuilds the row, which would drop keyboard focus mid-interaction: put it back on the
-  // command that had it. Titles are unique within a ribbon, and they are what a screen reader announces.
-  // A field also keeps the caret — restoring focus and sending the cursor to 0 is its own small defect.
-  const back = focused && slot.querySelector(`[title="${CSS.escape(focused)}"]`);
-  if (back) {
-    back.focus();
-    if (caret != null && back.setSelectionRange) try { back.setSelectionRange(caret, caret); } catch { }
-  }
-  return slot;
-}
-
-// Home declares NO ribbon, deliberately. Layout and zoom live in the footer, where they belong: reading
-// returns to them constantly and they cost no height there. Search and contents are the rail's. Putting
-// them in a ribbon too would mean two controls for one action, two "active" states to keep in step, and
-// a permanent band of chrome for a tool whose whole job is to get out of the way. The row collapses —
-// that is what the collapse is for.
-registerTool({ id: 'home', label: 'Home', icon: 'book-open', title: 'Home — read the document' });
-
 window.prism.ribbon = ribbon;
-window.prism.drawer = drawer;
+window.prism.keyFor = keyFor;
+window.prism.exported = (to) => emit('export', to);   // the book left the machine, as `to`
 window.prism.registerTool = registerTool;
-window.prism.devMode = devMode;
-window.prism.setDevMode = setDevMode;
 window.prism.setTool = setTool;
-window.prism.tool = () => tool;
+window.prism.tool = currentTool;
 
 boot({ title: 'Prism', theme: { persist: 'prism:theme' }, ready: main });
 
@@ -394,6 +105,10 @@ async function initSW() {
   if (!('serviceWorker' in navigator))
     throw new Error('Service Worker unavailable — serve over https or localhost (not file://).');
   await navigator.serviceWorker.register('./prism-sw.js');
+  // The worker has no window and a console few people open: what it says lands in F2, beside the rest.
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data?.type === 'log') logLine(e.data.level || 'info', e.data.msg, 'worker');
+  });
   await navigator.serviceWorker.ready;
   if (!navigator.serviceWorker.controller)
     await new Promise(res => {
@@ -619,9 +334,7 @@ function clearSurfaces() {
   $.opt('#epub-stage')?.empty();
   $.opt('#page-list')?.empty();
   $.opt('#toc-list')?.empty();
-  $.opt('#search-results')?.empty();
-  $.opt('#search-info')?.text('');
-  $.opt('#search-input')?.val('');
+  clearSearch();
   shots?.clear();                                // the cached pictures are of the document leaving
   state.pages = []; state.toc = []; state.current = -1;
 }
@@ -639,7 +352,7 @@ function buildRails() {
   sizeThumbs();
   observeThumbs();
   renderToc(state.toc, $('#toc-list').empty());
-  $('#search-results').empty(); $('#search-info').text(''); $('#search-input').val('');
+  clearSearch();
 }
 
 // Thumbnails fill the rail: their scale follows the panel width, so dragging the
@@ -936,7 +649,7 @@ function bindFrameInput(f, idx) {
 /* -- Navigation | current | layout --------------------------------- */
 
 function goTo(idx) {
-  idx = clamp(idx, 0, state.pages.length - 1);
+  idx = $.clamp(idx, 0, state.pages.length - 1);
   setCurrent(idx);
   if (state.mode === 'scroll') {
     loadFrame(idx);
@@ -980,11 +693,11 @@ function setCurrent(idx) {
 
 function setMode(mode) {
   state.mode = mode;
-  queueMicrotask(() => toolOf(tool)?.onEnter?.());   // a ribbon shows state: re-declare it when state moves
   localStorage.setItem('prism_mode', mode);
   $.all('.px-segbtn').forEach(b => b.cls((b.attr('data-mode') === mode ? '+' : '-') + 'active'));
   $('#epub-scroll').attr('data-mode', mode);
   applyMode();
+  emit('mode', mode);                                  // a tool whose ribbon shows the layout listens; onEnter is for entering
 }
 
 function applyMode() {
@@ -1015,7 +728,7 @@ function showPaged() {
 // line of small print was still too small to tell a misread O from a 0.
 const ZOOM_MIN = 0.4, ZOOM_MAX = 5;
 function setZoom(z) {
-  state.zoom = clamp(z, ZOOM_MIN, ZOOM_MAX);
+  state.zoom = $.clamp(z, ZOOM_MIN, ZOOM_MAX);
   $('#epub-scroll').style.setProperty('--zoom', state.zoom);
   $('#zoom-info').text(Math.round(state.zoom * 100) + '%');
 }
@@ -1087,86 +800,6 @@ function attachTouch(target, toParent) {
   }, { passive: true });
 }
 
-/* -- Search (accent- and case-folded) ------------------------------- */
-
-function runSearch() {
-  const q = $('#search-input').val().trim();
-  const out = $('#search-results').empty(), info = $('#search-info');
-  clearAllHl();                                          // drop marks from a previous query
-  if (!q) { info.text(''); return; }
-  const nq = fold(q);
-  let hits = 0;
-  state.pages.forEach((pg, idx) => {
-    if (!pg.text || !fold(pg.text).includes(nq)) return;
-    hits++;
-    const li = $.create('li');
-    $.create('a', { class: 'nav-link', html: `<b>p.${pg.label}</b><span class="hit">${snippet(pg.text, q)}</span>`, onclick: () => gotoMatch(idx, q) }).mount(li);
-    li.mount(out);
-  });
-  info.text(hits ? `${hits} page${hits > 1 ? 's' : ''} matched` : 'No results');
-}
-
-/* -- In-page highlight: talk to the same-origin page frame directly -- */
-
-
-const clearHl = doc => doc && doc.querySelectorAll('[data-px-hl]').forEach(n => n.remove());
-const clearAllHl = () => $.all('.prism-frame').forEach(f => clearHl(f.contentDocument));
-
-// A translucent <rect> behind an SVG element (text can't hold a <mark>); the
-// rect copies the element's transform so it lands exactly on the glyphs.
-// Flat, marker-style rectangle. The pad is expressed in PAGE units: a v2 run's
-// local space is em-scaled (the font size lives in its matrix), so the pad is
-// divided by the local scale — same optical margin at every font size.
-//
-// `box` is the element's OCCUPIED box in its parent's space, for what has no ink: an inkless run (an OCR
-// layer) measures 0 × 0 by getBBox, and a highlight drawn from that is a point. The rect then sits in the
-// parent's space, untransformed — the box already went through the element's matrix.
-function markRect(doc, el, attr, fill, box) {
-  let bb; try { bb = el.getBBox(); } catch { bb = null; }
-  if ((!bb || (!bb.width && !bb.height)) && box) {
-    const r = doc.createElementNS(SVG_NS, 'rect');
-    r.setAttribute('x', box.x); r.setAttribute('y', box.y);
-    r.setAttribute('width', box.width); r.setAttribute('height', box.height);
-    r.setAttribute('fill', fill); r.setAttribute('pointer-events', 'none'); r.setAttribute(attr, '1');
-    el.parentNode.insertBefore(r, el);
-    return;
-  }
-  if (!bb) return;
-  let k = 1;
-  const m = /matrix\(([^)]+)\)/.exec(el.getAttribute('transform') || '');
-  if (m) {
-    const [a, b, c, d] = m[1].trim().split(/[\s,]+/).map(Number);
-    const det = Math.abs(a * d - b * c);
-    if (det > 0) k = Math.sqrt(det);
-  }
-  const pad = 0.8 / k;
-  const r = doc.createElementNS(SVG_NS, 'rect');
-  r.setAttribute('x', bb.x - pad); r.setAttribute('y', bb.y - pad);
-  r.setAttribute('width', bb.width + 2 * pad); r.setAttribute('height', bb.height + 2 * pad);
-  r.setAttribute('fill', fill);
-  r.setAttribute('pointer-events', 'none'); r.setAttribute(attr, '1');
-  const tr = el.getAttribute('transform'); if (tr) r.setAttribute('transform', tr);
-  el.parentNode.insertBefore(r, el);   // before the element → rendered behind it
-}
-
-// Highlight every <text> run whose folded content contains the query.
-// Returns the first matched <text>, for centring.
-function highlightDoc(doc, q, idx) {
-  clearHl(doc);
-  const svg = doc && doc.querySelector('svg');
-  if (!svg || !q) return null;
-  const hook = window.prism.hooks.highlight;              // jexter: member runs by id
-  if (hook) { const el = hook(doc, q, idx); if (el !== undefined) return el; }
-  const nq = fold(q);
-  let first = null;
-  svg.querySelectorAll('text').forEach(t => {
-    if (!fold(t.textContent).includes(nq)) return;
-    markRect(doc, t, 'data-px-hl', 'rgba(51,105,159,.32)');
-    if (!first) first = t;
-  });
-  return first;
-}
-
 // Run cb with the frame's live document, once its page is rendered.
 // Frames are made on demand, so mounting is ASYNCHRONOUS (loadFrame awaits worker control): the frame
 // does not exist on the line after the call. Await it, or every caller silently gets nothing — which is
@@ -1205,78 +838,10 @@ function centreOn(idx, el) {
   s.scrollTop  += c.y - (sr.top  + sr.height / 2);
 }
 
-// Jump to a search hit: show its page, highlight the matches, centre on the first.
-function gotoMatch(idx, q) {
-  idx = clamp(idx, 0, state.pages.length - 1);
-  clearAllHl();
-  setCurrent(idx);
-  if (state.mode !== 'scroll') showPaged();
-  whenFrameReady(idx, doc => {
-    const first = highlightDoc(doc, q, idx);
-    if (first) centreOn(idx, first);
-    else if (state.mode === 'scroll') $.opt(`#page-${idx}`)?.scrollIntoView({ block: 'start' });
-  });
-}
-
-function snippet(txt, q) {
-  const at = fold(txt).indexOf(fold(q));
-  if (at < 0) return '';
-  const from = Math.max(0, at - 30), to = Math.min(txt.length, at + q.length + 40);
-  return `${from > 0 ? '…' : ''}${esc(txt.slice(from, at))}<mark>${esc(txt.slice(at, at + q.length))}</mark>${esc(txt.slice(at + q.length, to))}${to < txt.length ? '…' : ''}`;
-}
-
 /* -- Read aloud ------------------------------------------------------ */
 // Lives in tts.js: a feature nothing else uses is a module, not chassis. It needed no new API to leave —
 // goTo, centreOn, markRect and whenFrameReady were already on the seam. The chassis only silences it,
 // through the seam like anyone else — a bridging const here would be one more declaration to order.
-
-/* -- Augment: a data model of edits, rendered as an overlay ---------- */
-//
-// One authority per concern: augmentations live as DATA in a sidecar
-// (prism/augment.json), keyed by page, zones in % of the page. At read time we
-// render them as a transient overlay in the same-origin frame (originals stay
-// pristine); at export we bake clean HTML into page copies AND ship the sidecar,
-// so an exported EPUB is portable *and* can be re-opened and re-edited in PRISM.
-
-
-const enc = s => new TextEncoder().encode(s);
-const dec = b => new TextDecoder().decode(b);
-const zipOf = absUrl => decodeURIComponent(absUrl.slice(state.root.length));   // /epub/id/PATH -> PATH
-const pageZip = idx => zipOf(state.pages[idx].href);
-const frameDoc = idx => { try { return $.opt(`#page-${idx} .prism-frame`)?.contentDocument || null; } catch { return null; } };
-
-// Re-zip the book into a valid EPUB: mimetype first + stored, augmentations
-// baked into page copies (originals stay pristine), sidecar shipped for re-edit.
-/* -- Saving: one native path for every export --------------------------------
-   pickSave opens the Chromium save dialog (File System Access API) UP FRONT —
-   while the click's transient activation is still valid — suggesting the
-   original file name with the new extension. saveAs then writes to the picked
-   handle, or falls back to a plain anchor download (Firefox/Safari). */
-
-async function pickSave(name) {
-  if (!window.showSaveFilePicker) return null;                     // fallback: anchor download
-  const ext = name.slice(name.lastIndexOf('.'));
-  try {
-    return await window.showSaveFilePicker({
-      suggestedName: name,
-      types: [{ description: ext.slice(1).toUpperCase() + ' file',
-                accept: { 'application/octet-stream': [ext] } }],
-    });
-  } catch (e) { return e && e.name === 'AbortError' ? 'aborted' : null; }
-}
-
-async function saveAs(blob, name, handle) {
-  if (handle === 'aborted') return false;
-  if (handle) {
-    const w = await handle.createWritable();
-    await w.write(blob); await w.close();
-    return true;
-  }
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = name; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  return true;
-}
 
 /** The opened file's base name (source extensions stripped) + a new extension. */
 function exportName(ext) {
@@ -1285,53 +850,20 @@ function exportName(ext) {
 
 /* -- Chrome wiring -------------------------------------------------- */
 
-// Draggable splitters — Prism's pattern: pointer-capture drag sets a CSS var, persisted per side.
-// ONE drag, three uses: the rail, the contextual pane, the console.
-//
-// `panel()` is asked at pointerdown, never named here. The right one used to resolve to a hardcoded
-// augment-or-analysis pair, written before Pages, Redact and Forms existed: on any other tool it
-// measured a pane 0 wide, the drag started from zero and the pane snapped to its floor. The CSS rule
-// for these panes says it plainly — adding a tool means naming its drawer, not editing a file — and
-// this function had kept the list the CSS had already given up. The pane that is OPEN is the pane
-// that resizes.
+// The three splitters — the rail, the contextual pane, the console — are qry's: one drag, the size kept
+// per side. Each measures from the edge its pane is flush with: the rail and the pane from the sides of the
+// body row, the console (fixed to the window's bottom) from the bottom of the window.
 function wireSplitters() {
-  const root = document.documentElement;
-  const saved = (k) => localStorage.getItem(k);
-  if (saved('prism_leftw'))  root.style.setProperty('--px-rail-w',   saved('prism_leftw'));
-  if (saved('prism_rightw')) root.style.setProperty('--px-drawer-w', saved('prism_rightw'));
-  if (saved('prism_logh'))   root.style.setProperty('--px-log-h',    saved('prism_logh'));
-  // `grow` says whether moving the pointer AWAY from the handle's own side makes the pane bigger:
-  // true for the rail (it grows rightwards), false for the right pane and for the console, which
-  // both grow towards the pointer's origin.
-  const wire = (el, cssVar, lsKey, axis, grow, lo, hi, panel) => {
-    if (!el) return;
-    const vert = axis === 'y';
-    el.addEventListener('pointerdown', e => {
-      const box = panel();
-      if (!box) return;                       // nothing open on this side: no drag rather than a bad one
-      e.preventDefault();
-      const start = vert ? e.clientY : e.clientX;
-      const r = box.getBoundingClientRect();
-      const startW = vert ? r.height : r.width;
-      el.setPointerCapture(e.pointerId);
-      el.classList.add('dragging'); document.body.classList.add(vert ? 'row-resizing' : 'col-resizing');
-      const move = ev => { const d = (vert ? ev.clientY : ev.clientX) - start;
-        const top = typeof hi === 'function' ? hi() : hi;
-        root.style.setProperty(cssVar, clamp(grow ? startW + d : startW - d, lo, top) + 'px'); };
-      const up = () => { el.classList.remove('dragging'); document.body.classList.remove('col-resizing', 'row-resizing');
-        localStorage.setItem(lsKey, getComputedStyle(root).getPropertyValue(cssVar).trim());
-        el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); };
-      el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
-    });
-  };
-  wire($.opt('#split-left'),  '--px-rail-w',   'prism_leftw',  'x', true,  170, 480, () => $.opt('#rail'));
-  wire($.opt('#split-right'), '--px-drawer-w', 'prism_rightw', 'x', false, 210, 560, () => $.opt('#pane-right'));
-  wire($.opt('#split-log'),   '--px-log-h',    'prism_logh',   'y', false, 140,
-       () => Math.round(window.innerHeight * 0.88), () => $.opt('#log-console'));
+  const body = $.opt('.px-body'); if (!body) return;
+  makeSplitter('#split-left',  { container: body, prop: '--px-rail-w',   min: 170, max: 480, persist: 'prism:rail-w' });
+  makeSplitter('#split-right', { container: body, prop: '--px-drawer-w', from: 'end', min: 210, max: 560, persist: 'prism:drawer-w' });
+  makeSplitter('#split-log',   { container: document.documentElement, prop: '--px-log-h', axis: 'y', from: 'end',
+                                 min: 140, max: () => Math.round(window.innerHeight * 0.88), persist: 'prism:log-h' });
 }
 
 function wireChrome() {
   wireSplitters();
+  wireConsole();
   $('#toggle-rail').on('click', () => $('body').cls('~rail-collapsed'));
   // The tool panel folds the same way, from the corner it lives in. Purely visual: the tool stays
   // active, its ribbon stays, only the pane is out of the way — so nothing has to be re-selected.
@@ -1355,16 +887,6 @@ function wireChrome() {
   // belonged to is gone; the leftover binding warned on every boot and, had the element come back,
   // would have toggled without updating the icon — two authorities for one control.)
   $('#m-about').on('click', () => dialog('about-dialog').open());
-
-  // Console (footer + head controls + level filter)
-  $('#log-close').on('click', () => toggleLog(false));
-  $('#log-title').on('click', () => toggleLog(false));
-  $('#log-clear').on('click', clearLog);
-  $('#log-copy').on('click', copyLog);
-  $.all('.log-f').forEach(b => b.on('click', () => {
-    $.all('.log-f').forEach(x => x.cls('-active')); b.cls('+active');
-    $('#log-console').attr('data-filter', b.attr('data-lvl'));
-  }));
 
   $('#file-input').on('change', async e => {
     const file = e.target.files[0];
@@ -1413,8 +935,7 @@ function wireChrome() {
   $('#fit-width-btn').on('click', () => fitZoom('width'));
   $('#fit-page-btn').on('click', () => fitZoom('page'));
 
-  $('#search-btn').on('click', runSearch);
-  $('#search-input').on('keydown', e => { if (e.key === 'Enter') runSearch(); });
+  wireSearch({ state, hooks: window.prism.hooks, setCurrent, showPaged, whenFrameReady, centreOn });
 
 
   // Shortcuts must survive the focus being INSIDE a page. A frame is a separate document with its own
@@ -1447,52 +968,8 @@ function wireChrome() {
   }, { passive: false });
 }
 
-/* -- Log console (F2): capture console.* + errors ------------------- */
-
-const LOG_MAX = 2000;
-
-function logLine(level, msg, src = 'client') {
-  const body = $.opt('#log-body'); if (!body) return;
-  const atBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 8;
-  const row = $.create('div', { class: `log-row lv-${level}` });
-  row.innerHTML = `<span class="log-lv">${esc(level)}</span><span class="log-src">${esc(src)}</span><span class="log-msg">${esc(msg)}</span>`;
-  body.appendChild(row);
-  while (body.childElementCount > LOG_MAX) body.firstChild.remove();
-  if (atBottom) body.scrollTop = body.scrollHeight;
-}
-
-function toggleLog(force) {
-  const c = $.opt('#log-console'); if (!c) return;
-  const open = force === undefined ? !c.classList.contains('open') : force;
-  c.cls(open ? '+open' : '-open');
-}
-
-function clearLog() { $.opt('#log-body')?.empty(); }
-
-function copyLog() {
-  const body = $.opt('#log-body'); if (!body) return;
-  const rows = [...body.querySelectorAll('.log-row')].filter(r => r.offsetParent !== null);
-  const text = rows.map(r => `${r.querySelector('.log-lv').textContent} ${r.querySelector('.log-msg').textContent}`.trim()).join('\n');
-  if (!text) { toast('Console is empty', { tone: 'warn' }); return; }
-  copy(text); toast(`Copied ${rows.length} line${rows.length === 1 ? '' : 's'}`, { tone: 'ok' });
-}
-
-const _fmt = a => { try { return typeof a === 'string' ? a : a instanceof Error ? a.message : JSON.stringify(a); } catch { return String(a); } };
-
-function installLogCapture() {
-  const map = { log: 'info', info: 'info', warn: 'warn', error: 'error', debug: 'debug' };
-  for (const m of Object.keys(map)) {
-    const orig = console[m] ? console[m].bind(console) : () => {};
-    console[m] = (...a) => { orig(...a); try { logLine(map[m], a.map(_fmt).join(' ')); } catch {} };
-  }
-  window.addEventListener('error', e => { try { logLine('error', (e.message || 'error') + (e.filename ? ` @ ${fileOf(e.filename)}:${e.lineno}` : '')); } catch {} });
-  window.addEventListener('unhandledrejection', e => { try { logLine('error', 'unhandled: ' + (e.reason?.message || e.reason || '')); } catch {} });
-}
-
 /* -- Helpers -------------------------------------------------------- */
 
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const fold = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const fileOf = h => (h || '').split('/').pop().split('#')[0];
 const text1 = (doc, sel) => { const el = doc.querySelector(sel); return el ? el.textContent.trim() : ''; };
 
@@ -1509,5 +986,5 @@ async function fetchXml(url) {
 }
 
 /* -- The jexter seam: the chassis API engine.js builds on ----------- */
-Object.assign(window.prism, { openEpub, closeBook, goTo, whenFrameReady, markRect, setPageBox, frameToClient,
-  clearAllHl, centreOn, fold, esc, toast, pickSave, saveAs, exportName, logLine, putMember });
+Object.assign(window.prism, { openEpub, goTo, whenFrameReady, markRect, setPageBox, frameToClient,
+  clearAllHl, centreOn, fold, toast, exportName, logLine, putMember });

@@ -1,5 +1,5 @@
 // Augment's Reveal (a tap-to-lift cover), which records a ZONE only — nothing to do with selectEls.
-import { serve, openPrism, drag } from './prism_bench.mjs';
+import { serve, openPrism, drag, bookBytes } from './prism_bench.mjs';
 import fs from 'node:fs';
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
 const { browser, page, errors } = await openPrism({ dev: true, book: '/dossier.ocd.epub', viewport: { width: 1500, height: 950 } });
@@ -27,8 +27,7 @@ const member = await page.evaluate(() => {
   return { reveal: (t.match(/px-reveal/g) || []).length, ui: (t.match(/data-ui/g) || []).length,
            runs: (t.match(/data-ocd="run"/g) || []).length };
 });
-const b64 = await page.evaluate(() => { const u = new Uint8Array(window.prism.bookBytes()); let s=''; const C=8192;
-  for (let i=0;i<u.length;i+=C) s += String.fromCharCode(...u.subarray(i,i+C)); return btoa(s); });
-fs.writeFileSync('/tmp/fix/rev.ocd.epub', Buffer.from(b64, 'base64'));
+const bytes = await bookBytes(page);
+fs.writeFileSync('/tmp/fix/rev.ocd.epub', bytes);
 console.log(JSON.stringify({ rec, member, errors }, null, 1));
 await browser.close(); srv.close(); process.exit(0);

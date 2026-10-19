@@ -16,38 +16,32 @@
 //                     any frame, any view, any reload and any export sees the data.
 //
 //   PERSISTENCE       book.persist(idx) projects the live DOM back into the page
-//                     member (data-ui chrome stripped, head/shell spliced verbatim),
-//                     debounced; book.flush() runs what is pending. Only pages a
-//                     tool actually edited are ever rewritten — untouched members
-//                     stay byte-verbatim from the original container.
+//                     member (data-ui chrome stripped), debounced; book.flush() runs
+//                     what is pending. Only pages a tool actually edited are ever
+//                     rewritten — untouched members stay byte-verbatim.
 //
-//   CHROME CONTRACT   anything a tool injects for itself carries data-ui (+ data-z
+//   CHROME CONTRACT   anything a tool injects into a page carries data-ui (+ data-z
 //                     "under|over"): it renders live in page space and NEVER reaches
-//                     the container — persist() strips it, ocd.js build() strips it.
+//                     the container — persist() strips it. A tool's stylesheet goes
+//                     through book.frameCss, which states that once.
 //
-// The epub file itself is a transport format: unzipped on open, re-zipped on
-// export — in between, the document lives as members + displayed DOM only.
+// The epub file itself is a transport format: unzipped on open, re-zipped by
+// book.bytes() — in between, the document lives as members + displayed DOM only.
 //
 //   import { book } from '/shared/js/book.js';
 //   book.onFrame((idx) => { const page = book.page(idx); … });       // decorate
 //   const name = await book.addImage(bytes, 'png');                  // resource
-//   page.image({ name, …, into: page.layer('my-layer', 'Label') });  // model edit
 //   book.persist(idx);                                               // project
 
-import { OcdPage, pageShell, pageFile, parseFonts, OCD_VERSION } from './ocd.js';
+import { OcdPage, parseFonts, enc, dec, mediaType } from './ocd.js';
 import { zipSync } from '../vendor/fflate.js';
 
 const P = window.prism;
-const enc = (s) => new TextEncoder().encode(s);
-const dec = (b) => new TextDecoder().decode(b);
 
 /* ── identity & paths ────────────────────────────────────────────────────── */
 
 /** True when a book is open. */
 const isOpen = () => !!P.state.files;
-
-/** True when the open book is an OCD-EPUB (carries the ocd/ members). */
-const isOcd = () => !!P.state.files?.[member('ocd/meta.json')];
 
 /** OPF-relative → zip path ('images/x.png' → 'OEBPS/images/x.png'). */
 const member = (rel) => P.state.opfDir + rel;
@@ -84,10 +78,6 @@ const opf = (transform) => put(P.state.opfPath, enc(transform(dec(P.state.files[
 
 /* ── resources ───────────────────────────────────────────────────────────── */
 
-const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
-               mp3: 'audio/mpeg', m4a: 'audio/mp4', oga: 'audio/ogg', wav: 'audio/wav',
-               mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg' };
-
 /** Idempotently DECLARE a member in the OPF manifest — THE one manifest-add
  *  authority (resources, sidecars, anything). `path` is the zip path; the href is
  *  derived relative to the OPF folder. Declaring twice is a no-op. */
@@ -108,78 +98,26 @@ async function addResource(dir, prefix, bytes, ext) {
     const name = `${prefix}${n}.${ext}`;
     await Promise.all([
         put(member(`${dir}/` + name), bytes),
-        declare(member(`${dir}/` + name), MIME[ext] || 'application/octet-stream'),
+        declare(member(`${dir}/` + name), mediaType(name)),
     ]);
     return name;
 }
 const addImage = (bytes, ext) => addResource('images', 'img-c', bytes, ext);
 const addMedia = (bytes, ext) => addResource('media', 'med-c', bytes, ext);
 
-/** Drop a resource a tool introduced (img-c* / med-c*): member + manifest item
- *  (matched by href — robust to any declarer's id scheme). */
-function removeResource(name) {
-    const m = /^(img-c|med-c)\d+\./.exec(name || '');
-    if (!m) return Promise.resolve();
-    const rel = (m[1] === 'img-c' ? 'images/' : 'media/') + name;
-    delete P.state.files[member(rel)];
-    return opf(s => s.replace(new RegExp(`\\s*<item [^>]*href="${rel.replace(/\./g, '\\.')}"[^>]*/>`), ''));
-}
-
-/** OCDLayer registry entry in ocd/meta.json — idempotent. */
-const registerLayer = (id, name) => json('ocd/meta.json', m => {
-    if ((m.layers || []).some(l => l.id === id)) return false;
-    m.layers = [...(m.layers || []), { id, name: name || id, visible: true, order: (m.layers || []).length }];
-});
-
-/** Append a blank page to the open document (v1: at the end — no renumbering).
- *  Four member patches (page, OPF manifest+spine, nav toc+page-list, NCX), then the
- *  canonical reload: re-zip → openEpub — rails, pager and nav rebuild themselves. */
-async function addPage() {
-    const files = P.state.files;
-    const n = P.state.pages.length + 1;
-    const last = P.state.pages[P.state.pages.length - 1];
-    const W = last?.w || 595.28, H = last?.h || 841.89;
-    let k = n; while (files[member(`pages/${pageFile(k)}.xhtml`)]) k++;
-    const pf = pageFile(k);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" `
-        + `viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" data-ocd="page" data-version="${OCD_VERSION}" data-mediabox="0 0 ${W} ${H}"></svg>`;
-    await put(member(`pages/${pf}.xhtml`), enc(pageShell(svg, W, H, n)));
-    await opf(s => s
-        .replace('</manifest>', `<item id="page-a${k}" href="pages/${pf}.xhtml" media-type="application/xhtml+xml" properties="svg"/>\n</manifest>`)
-        .replace('</spine>', `<itemref idref="page-a${k}"/>\n</spine>`));
-    const navPath = Object.keys(files).find(p => /nav\.xhtml$/.test(p));
-    if (navPath) {
-        let nav = dec(files[navPath]);
-        const li = (label) => `<li><a href="pages/${pf}.xhtml">${label}</a></li>`;
-        nav = nav.replace(/(epub:type="toc"[\s\S]*?)<\/ol>/, `$1${li('Page ' + n)}\n</ol>`)
-                 .replace(/(epub:type="page-list"[\s\S]*?)<\/ol>/, `$1${li(n)}\n</ol>`);
-        await put(navPath, enc(nav));
-    }
-    const ncxPath = Object.keys(files).find(p => /toc\.ncx$/.test(p));
-    if (ncxPath) await put(ncxPath, enc(dec(files[ncxPath]).replace('</navMap>',
-        `<navPoint id="np-a${k}" playOrder="${n}"><navLabel><text>Page ${n}</text></navLabel><content src="pages/${pf}.xhtml"/></navPoint>\n</navMap>`)));
-    await reload();                                // the canonical rebuild
-    P.goTo(n - 1);
-    return n - 1;
-}
-
-/* ── lifecycle: open / close / reload — the document's front door ────────── */
+/* ── lifecycle: the document's front door ────────────────────────────────── */
 
 /** Open a container (ArrayBuffer|Uint8Array) as THE document — the canonical
  *  path: SW load, rails, nav, pager, events. */
 const open = (buffer, name) => P.openEpub(buffer.buffer || buffer, name);
 
-/** Close the document (frames, rails, state — everything). */
-const close = () => P.closeBook();
-
-/** Re-open the CURRENT members as a fresh container — the canonical rebuild
- *  after any structural change (page added/removed, spine reshaped): rails,
- *  pager, nav and spine reconstruct themselves through the open path. */
-function reload() {
-    const files = P.state.files;
-    const out = { mimetype: [files['mimetype'], { level: 0 }] };
+/** The open book as a container (Uint8Array), the members as they stand — what an export, a re-open and
+ *  every engine call post. The mimetype first and STORED (OCF); null when no book is open. */
+function bytes() {
+    const files = P.state.files; if (!files) return null;
+    const out = { mimetype: [files['mimetype'] || enc('application/epub+zip'), { level: 0 }] };
     for (const [p, v] of Object.entries(files)) if (p !== 'mimetype') out[p] = v;
-    return P.openEpub(zipSync(out).buffer, P.state.name);
+    return zipSync(out);
 }
 
 /* ── pages: the displayed DOM, adopted ───────────────────────────────────── */
@@ -203,7 +141,7 @@ function page(idx) {
     const svg = doc?.querySelector('svg[data-ocd="page"]');
     if (!svg) return null;
     let p = adopted.get(idx);
-    if (!p || p.svg !== svg) { p = OcdPage.adopt(svg); p.doc.fonts = fonts(); adopted.set(idx, p); }
+    if (!p || p.svg !== svg) { p = OcdPage.adopt(svg, fonts()); adopted.set(idx, p); }
     return p;
 }
 
@@ -216,7 +154,7 @@ P.on?.('close', () => { fontCache = null; });
 function fonts() {
     if (fontCache) return fontCache;
     const raw = get(member('pages/fonts.svg'));
-    fontCache = raw ? parseFonts(new TextDecoder().decode(raw)) : [];
+    fontCache = raw ? parseFonts(dec(raw)) : [];
     return fontCache;
 }
 
@@ -239,14 +177,18 @@ function eachFrame(cb) {
     });
 }
 
-/** Every loaded SVG-OCD page: cb(idx, page). */
-function eachPage(cb) {
-    document.querySelectorAll('.prism-page .prism-frame').forEach(f => {
-        const idx = +f.closest('.prism-page')?.getAttribute('data-index');
-        if (!Number.isFinite(idx)) return;
-        const p = page(idx);
-        if (p) cb(idx, p);
-    });
+/** A tool's stylesheet in a page frame: set to `css` (made once, under `id`), or removed when `css` is
+ *  falsy. Chrome by contract — it carries data-ui, whatever the tool remembers to say. */
+function frameCss(doc, id, css) {
+    if (!doc) return;
+    let s = doc.getElementById(id);
+    if (!css) { s?.remove(); return; }
+    if (!s) {
+        s = doc.createElementNS('http://www.w3.org/1999/xhtml', 'style');
+        s.id = id; s.setAttribute('data-ui', '');
+        (doc.head || doc.documentElement).appendChild(s);
+    }
+    if (s.textContent !== css) s.textContent = css;
 }
 
 /* ── frame events: MULTI-CAST (the chassis hook is single-slot) ──────────── */
@@ -261,7 +203,7 @@ const onFrame = (cb) => P.on('frame', (f, idx) => cb(idx));
  *  taken; the engine mints the block under whatever it is asked for. */
 function freeAlias() {
     const raw = get(member('pages/fonts.svg'));
-    const taken = new Set([...(raw ? new TextDecoder().decode(raw) : '').matchAll(/<g id="(f\d+)"/g)].map(m => m[1]));
+    const taken = new Set([...(raw ? dec(raw) : '').matchAll(/<g id="(f\d+)"/g)].map(m => m[1]));
     for (let i = 0; ; i++) if (!taken.has('f' + i)) return 'f' + i;
 }
 
@@ -273,7 +215,7 @@ function freeAlias() {
  *  does. The parsed cache is dropped, since the library it described has changed. */
 async function addFont(oneFontSvg) {
     const path = member('pages/fonts.svg');
-    const lib = new TextDecoder().decode(get(path) || new Uint8Array());
+    const lib = dec(get(path) || new Uint8Array());
     const g = /<g id="f\d+"[\s\S]*<\/g>/.exec(oneFontSvg);
     if (!g) throw new Error('not a font block');
     if (!lib.includes('</defs>')) throw new Error('this container carries no pages/fonts.svg');
@@ -290,13 +232,8 @@ const pending = new Map();                         // idx → flushable persist
 /** Project the live page DOM into its member, committed to both truths. Debounced 300 ms; `now` runs
  *  it synchronously.
  *
- *  The projection itself is `OcdPage.xhtml()` — ocd.js is the grammar authority and there may be only
- *  ONE serializer. This function used to re-implement it (clone, strip `[data-ui]`, wrap in
- *  `pageShell`) and so it silently lacked the rest of the contract: blob image urls back to
- *  `../images/name`, and glyph refs back from the page-local `#fN-gid` to the SHARED `fonts.svg#fN-gid`.
- *  Measured: a run authored with `OcdPage.text()` persisted with `href="#f0-1"` pointing at defs that
- *  the same pass had just stripped — the text was saved, complete and unpaintable, and the engine
- *  read a run with no glyphs. Two serializers for one contract is one of them missing a clause. */
+ *  The projection is `OcdPage.xhtml()` and nothing else: ocd.js is the grammar authority, and a second
+ *  serializer is one that misses a clause (glyph refs back to the shared `fonts.svg#`, chrome stripped). */
 function persist(idx, now = false) {
     clearTimeout(pending.get(idx)?.t);
     const run = () => {
@@ -313,23 +250,14 @@ function flush() {
     pending.clear();
 }
 
-/* ── (the rail's thumbnails used to be refreshed from here) ──────────────
- *
- * This module used to mark a thumbnail dirty on every write and poll a 1.5 s interval to reload its
- * iframe. Two things were wrong with it: the document authority reached into `#page-list`, which is
- * the reader's chrome and none of its business, and it POLLED for a change that `onChange` already
- * announces. The rail subscribes to onChange itself now, and a thumbnail is a picture (`shot.js`), so
- * refreshing one is drawing it again rather than navigating a document.
- */
-
 /* ── the seam ────────────────────────────────────────────────────────────── */
 
 export const book = {
     freeAlias, addFont,
-    isOpen, isOcd, member, pagePath,
-    open, close, reload,
-    get, put, onChange, json, opf,
-    addImage, addMedia, removeResource, declare, registerLayer,
-    page, eachPage, eachFrame, frameDoc, onFrame, addPage, refreshPage, fonts,
+    isOpen, member, pagePath,
+    open, bytes,
+    get, put, onChange, json,
+    addImage, addMedia, declare,
+    page, eachFrame, frameDoc, frameCss, onFrame, refreshPage, fonts,
     persist, flush,
 };

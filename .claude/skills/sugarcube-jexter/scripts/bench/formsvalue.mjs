@@ -3,7 +3,7 @@
 // in must be a row like any other.
 import { serve, openPrism } from './prism_bench.mjs';
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
-const { browser, page, errors } = await openPrism({ book: process.env.BENCH_BOOK || '/sample.ocd.epub', dev: true });
+const { browser, page, errors } = await openPrism({ book: process.env.BENCH_BOOK || '/rich.ocd.epub', dev: true });
 await page.evaluate(() => window.prism.setTool('forms'));
 await page.waitForTimeout(900);
 const field = (n) => page.evaluate((n) => {

@@ -44,6 +44,18 @@ body.jx-app {
         var(--qry-bg);
 }
 
+/* ── the glass header of the Inspector and Jexter (Prism's is flat by design: the page is its only lit
+   object). One icon opens the menu in every tool — the title bar already names the app, and the mark
+   belongs on the about card and the favicon, not repeated in every chrome. ── */
+.jx-head { display: flex; align-items: center; gap: .6rem; flex: 0 0 auto; padding: .5rem .7rem;
+    background: linear-gradient(180deg, transparent 30%, color-mix(in srgb, var(--qry-accent) 8%, transparent)), var(--qry-glass);
+    -webkit-backdrop-filter: var(--jx-blur); backdrop-filter: var(--jx-blur);
+    border-bottom: 1px solid color-mix(in srgb, var(--qry-text) 11%, transparent);
+    box-shadow: 0 5px 18px -13px rgba(18, 42, 92, .45); }
+.jx-head .sp { flex: 1; }
+.jx-menu-btn { display: inline-flex; align-items: center; justify-content: center; padding: .25rem .45rem; }
+.jx-menu-btn .qry-icon { width: 1.1rem; height: 1.1rem; }
+
 /* ── icons: qry's <svg class="qry-icon"> inside the <i data-icon> that asked for it (the set: js/icons.js).
    The <i> is only the placeholder (qry-ui.css: `display: contents` — the drawn <svg> is THE box, a flex row
    lays it out alone). 1.15em on the text's baseline by default (qry's 1.25em, -.25em is not this look);

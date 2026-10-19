@@ -23,13 +23,6 @@ body { background: var(--qry-bg, #18181b); color: var(--qry-text, #e4e4e7);
 .cmp.diff img { mix-blend-mode: difference; }
 .canvas.compare.diff, .cmp.diff { background: #000; }
 
-/* renderPageSVG emits the page layers with inline fills (paths, text, images render correctly), but
-   draws link/field annotations as bare <rect> with NO fill — which the SVG default would paint solid
-   black over the page. They are an inspector overlay, not page content, so hide them for a faithful
-   render. (Jexter Lab instead tints them faintly via its own stage.css.) */
-.vec svg .layer-annots { display: none; }
-.vec svg .sel-box { fill: none; }
-
 .stage-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: .6rem; color: var(--qry-text-muted, #a1a1aa); pointer-events: none; }
 .stage:not(.empty) .stage-empty { display: none; }

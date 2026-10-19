@@ -13,11 +13,10 @@
  *   GET  /api/tree?root=doc → [node…]         GET /api/content?page · /api/stream?obj · /api/render?obj · /api/text?page
  */
 import '/shared/js/icons.js';                          // the apps' icon set (icons.add): registered before boot() draws
-import { boot, theme, toast, makeTabs, makeMenu, makeDialog, infoRow as makeRow, makeTable, makeEvents } from '/shared/vendor/qry/qry-app.js';
-import { loadOcd, esc } from '/shared/js/ocd.js';   // the OCD-EPUB carries the fonts (pages/fonts.svg, the single representation)
+import { boot, theme, toast, saveFile, makeTabs, makeSplitter, makeDropZone, makeMenu, makeDialog, infoRow as makeRow, makeTable, makeEvents } from '/shared/vendor/qry/qry-app.js';
+import { loadOcd } from '/shared/js/ocd.js';   // the OCD-EPUB carries the fonts (pages/fonts.svg, the single representation)
 
 const R = Math.round;
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const J = (p, opt) => fetch(p, opt).then(r => r.json());
 
 
@@ -241,15 +240,11 @@ async function savePageImage() {
     const base = (docMeta.name || 'document').replace(/\.[^.]+$/, '');
     const url = `/api/page?i=${cur}&dpi=300${renderSrc ? '&src=' + encodeURIComponent(renderSrc) : ''}`;
     const filename = `${base}-p${cur + 1}.png`;
-    if (window.showSaveFilePicker) {
-        let handle;
-        try { handle = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: 'PNG image', accept: { 'image/png': ['.png'] } }] }); }
-        catch (e) { if (e && e.name === 'AbortError') return; }
-        if (handle) { status(`Saving ${filename}\u2026`, true); try { const res = await fetch(url); const w = await handle.createWritable(); await w.write(await res.blob()); await w.close(); status(`Saved ${filename}`); } catch { status('Save failed'); toast('Save failed', { tone: 'danger' }); } return; }
-    }
     status(`Saving ${filename}\u2026`, true);
-    try { const res = await fetch(url); const u = URL.createObjectURL(await res.blob()); const a = document.createElement('a'); a.href = u; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); status(`Saved ${filename}`); }
-    catch { status('Save failed'); toast('Save failed', { tone: 'danger' }); }
+    try {
+        const saved = await saveFile(async () => (await fetch(url)).blob(), filename, { type: 'image/png' });
+        status(saved ? `Saved ${filename}` : 'Save cancelled');
+    } catch { status('Save failed'); toast('Save failed', { tone: 'danger' }); }
 }
 
 // ── render-source switch (footer) ─────────────────────────────────────────────
@@ -282,25 +277,13 @@ function setCmpMode(mode) {
 }
 function updateCmpSlider() { const s = $.opt('#cmp-slider'); if (s) s.style.display = (cmp.on && cmp.mode !== 'diff') ? '' : 'none'; }
 
-// ── splitter (drag the left pages width) ──────────────────────────────────────
+// ── splitter (the pages column) and the whole-window drop: qry's ───────────────
 function wireSplitter() {
-    const split = $.opt('#split'), appEl = $.opt('#app'); if (!split || !appEl) return;
-    let dragging = false;
-    const onMove = e => { if (!dragging) return; const r = appEl.getBoundingClientRect(); let w = e.clientX - r.left; w = Math.max(150, Math.min(Math.min(420, window.innerWidth * 0.5), w)); appEl.style.setProperty('--jx-left-w', w + 'px'); };
-    split.on('pointerdown', e => { dragging = true; e.preventDefault(); document.body.classList.add('col-resizing'); split.cls('+dragging'); });
-    window.on('pointermove', onMove);
-    window.on('pointerup', () => { if (dragging) { dragging = false; document.body.classList.remove('col-resizing'); split.cls('-dragging'); stageApi()?.relayout(); } });
+    if (!$.opt('#split')) return;
+    makeSplitter('#split', { container: '#app', prop: '--jx-left-w', min: 150, max: () => Math.min(420, window.innerWidth * 0.5),
+                             onEnd: () => stageApi()?.relayout() });
 }
-
-// ── whole-window drop ───────────────────────────────────────────────────────────
-function wireDrop() {
-    const zone = $('#dropzone'); let depth = 0;
-    const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
-    window.on('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); if (depth++ === 0) zone.cls('+show'); });
-    window.on('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
-    window.on('dragleave', e => { if (!hasFiles(e)) return; if (--depth <= 0) { depth = 0; zone.cls('-show'); } });
-    window.on('drop', e => { if (!hasFiles(e)) return; e.preventDefault(); depth = 0; zone.cls('-show'); const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (f) openFile(f); });
-}
+const wireDrop = () => makeDropZone(document.body, { overlay: '#dropzone', multiple: false, onFiles: ([f]) => openFile(f) });
 
 // ── default document: open the bundled welcome.pdf ─────────────────────────────
 async function openWelcome() {
@@ -348,22 +331,16 @@ function drawFonts(doc) {
         const badges = $.create('div', { class: 'font-badges' });
         badges.add($.create('span', { class: 'fb', text: `${glyphs.length} glyph${glyphs.length === 1 ? '' : 's'}` }));
         badges.add($.create('span', { class: 'fb ' + (f.embedded ? 'on' : 'off'), text: f.embedded ? 'embedded' : 'not embedded' }));
-        badges.add($.create('span', { class: 'fb ' + (f.nativeReady ? 'on' : 'off'), text: f.nativeReady ? 'TTF \u00B7 selectable' : 'outlines only' }));
         head.add(badges);
         card.add(head);
-
-        if (f.nativeReady) {                                  // native specimen: the font's OWN chars, in its @font-face
-            const chars = [...new Set(glyphs.map(g => g.u).filter(u => u && u.trim()))].slice(0, 80).join('');
-            if (chars) { const sp = $.create('div', { class: 'font-specimen' }); sp.html(`<span style="font-family:'${esc(f.css)}',sans-serif">${esc(chars)}</span>`); card.add(sp); }
-        }
 
         const grid = $.create('div', { class: 'glyph-grid' });   // glyph specimen grid from the outline paths
         let html = '';
         for (const g of drawable.slice(0, GLYPH_CAP)) {
-            const lbl = g.u && g.u.trim() ? esc(g.u) : ('\u00B7' + g.gid);
+            const lbl = g.u && g.u.trim() ? $.esc(g.u) : ('\u00B7' + g.gid);
             const cp = g.u && g.u.codePointAt(0) ? 'U+' + g.u.codePointAt(0).toString(16).toUpperCase().padStart(4, '0') : '';
             const tip = `gid ${g.gid}${cp ? ' \u00B7 ' + cp : ''}${g.adv != null ? ' \u00B7 adv ' + (+g.adv).toFixed(3) : ''}`;
-            html += `<div class="glyph-cell" title="${esc(tip)}"><svg class="glyph-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet"><g transform="scale(1,-1)"><path d="${g.d}"/></g></svg><span class="glyph-lbl">${lbl}</span></div>`;
+            html += `<div class="glyph-cell" title="${$.esc(tip)}"><svg class="glyph-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet"><g transform="scale(1,-1)"><path d="${g.d}"/></g></svg><span class="glyph-lbl">${lbl}</span></div>`;
         }
         grid.html(html); card.add(grid);
         if (drawable.length > GLYPH_CAP) card.add($.create('div', { class: 'glyph-more', text: `\u2026 and ${drawable.length - GLYPH_CAP} more glyphs (showing first ${GLYPH_CAP}).` }));
@@ -457,13 +434,7 @@ function lbOpen() { return document.getElementById('lightbox').classList.contain
 async function downloadImage(im) {
     const base = (docMeta && docMeta.name || 'document').replace(/\.[^.]+$/, '');
     const url = `/api/render?obj=${im.obj}&v=${docVersion}`, filename = `${base}-img${im.obj}.png`;
-    if (window.showSaveFilePicker) {
-        let handle;
-        try { handle = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: 'PNG image', accept: { 'image/png': ['.png'] } }] }); }
-        catch (e) { if (e && e.name === 'AbortError') return; }
-        if (handle) { try { const res = await fetch(url); const w = await handle.createWritable(); await w.write(await res.blob()); await w.close(); } catch { toast('Download failed', { tone: 'danger' }); } return; }
-    }
-    try { const res = await fetch(url); const u = URL.createObjectURL(await res.blob()); const a = document.createElement('a'); a.href = u; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); }
+    try { await saveFile(async () => (await fetch(url)).blob(), filename, { type: 'image/png' }); }
     catch { toast('Download failed', { tone: 'danger' }); }
 }
 
@@ -474,8 +445,7 @@ function syncThemeIcon() { $('#btn-theme').html(`<i data-icon="${theme.isDark() 
 window.shell = {
     onStageReady() { stageApi()?.setTheme(theme.isDark()); if (docMeta) applyPageToStage(); },
     onZoom(pct) { $('#zoom-pct').text(pct + '%'); },
-    onPageReady() { /* the page is shown in the stage */ },
-    veil(on) { $('#dropzone').cls(on ? '+show' : '-show'); },
+    veil(on) { $('#dropzone').cls('is-visible', on); },   // a drag over the stage frame: the same overlay
     openDropped(file) { openFile(file); },
 };
 

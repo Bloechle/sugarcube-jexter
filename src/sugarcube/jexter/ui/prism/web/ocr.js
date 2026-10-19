@@ -14,7 +14,7 @@
 //
 // Rules to recognize field values (a plate, a chassis number) will build on the same reading: the
 // model below — paragraphs → lines → words, each with its box — is what they will match against.
-import { SVG_NS, inReadingOrder, readingRuns, runBox } from '/shared/js/ocd.js';
+import { SVG_NS, inReadingOrder, readingRuns, runBox, dec } from '/shared/js/ocd.js';
 import { book } from '/shared/js/book.js';
 
 const P = window.prism;
@@ -99,7 +99,7 @@ function readPage(doc) {
 function recognitions() {
     try {
         const raw = book.get(book.member('ocd/meta.json'));
-        const m = raw ? JSON.parse(new TextDecoder().decode(raw)) : {};
+        const m = raw ? JSON.parse(dec(raw)) : {};
         return (m.layers || []).filter(l => l.ocr?.engine);
     } catch { return []; }
 }
@@ -110,18 +110,8 @@ const pageText = (rd) => rd.paras.map(p => p.lines.map(l => l.words.map(w => w.t
 
 const CSS = '[data-px-ocr] .w { cursor: pointer; } [data-px-ocr] .w:hover { fill: rgba(217,119,6,.18); }'
           + ' [data-px-ocr] .l { cursor: pointer; }';
-function setCss(doc, on) {
-    let s = doc.getElementById('px-ocr-css');
-    const css = CSS + (st.image ? '' : ' svg[data-ocd="page"] image { opacity: 0; }');
-    if (on) {
-        if (!s) {
-            s = doc.createElementNS('http://www.w3.org/1999/xhtml', 'style');
-            s.id = 'px-ocr-css'; s.setAttribute('data-ui', '1');
-            (doc.head || doc.documentElement).appendChild(s);
-        }
-        s.textContent = css;
-    } else s?.remove();
-}
+const setCss = (doc, on) => book.frameCss(doc, 'px-ocr-css',
+    on && CSS + (st.image ? '' : ' svg[data-ocd="page"] image { opacity: 0; }'));
 
 function clean(doc) {
     doc.querySelectorAll('[data-px-ocr]').forEach(n => n.remove());
@@ -245,8 +235,8 @@ function drawer() {
         rows.push(`<li class="ocr-group">Paragraph ${pi + 1}</li>`);
         p.lines.forEach((l, li) => {
             const on = st.sel?.idx === idx && st.sel.kind === 'line' && st.sel.key === l.key;
-            rows.push(`<li><a class="nav-link${on ? ' active' : ''}" data-line="${P.esc(l.key)}">`
-                + `<b>L${li + 1}</b><span class="hit">${P.esc(l.words.map(w => w.text).join(' '))}</span>`
+            rows.push(`<li><a class="nav-link${on ? ' active' : ''}" data-line="${$.esc(l.key)}">`
+                + `<b>L${li + 1}</b><span class="hit">${$.esc(l.words.map(w => w.text).join(' '))}</span>`
                 + `<span class="px-sub">${l.words.some(doubtful) ? '\u26a0 ' : ''}${l.words.length}</span></a></li>`);
         });
     });
@@ -263,9 +253,9 @@ function detail(rd, idx) {
     const box = (b) => `${u(b.x)}, ${u(b.y)} · ${u(b.width)} × ${u(b.height)}`;
     for (const [pi, p] of rd.paras.entries()) for (const [li, l] of p.lines.entries()) {
         if (s.kind === 'line' && l.key === s.key)
-            return `<b>Line ${li + 1}</b> of paragraph ${pi + 1} · ${l.words.length} words<br>${P.esc(box(l.box))}`;
+            return `<b>Line ${li + 1}</b> of paragraph ${pi + 1} · ${l.words.length} words<br>${$.esc(box(l.box))}`;
         for (const w of l.words) if (s.kind === 'word' && w.id === s.key)
-            return `<b>${P.esc(w.text)}</b> · ${P.esc(w.id)} · line ${li + 1} of paragraph ${pi + 1}<br>${P.esc(box(w.box))}`
+            return `<b>${$.esc(w.text)}</b> · ${$.esc(w.id)} · line ${li + 1} of paragraph ${pi + 1}<br>${$.esc(box(w.box))}`
                  + ` · ${w.text.length} chars`
                  + (w.conf != null ? ` · confidence ${w.conf.toFixed(3)}${doubtful(w) ? ' \u26a0' : ''}` : '');
     }

@@ -96,9 +96,10 @@ function ttsMark(doc, spans, at, idx) {
   P.markRect(doc, span.el, 'data-px-tts', 'rgba(116,183,62,.30)');
   const f = $.opt(`#page-${idx} .prism-frame`), s = $('#epub-scroll');
   if (!f) return;
-  const er = span.el.getBoundingClientRect(), fr = f.getBoundingClientRect(), sr = s.getBoundingClientRect();
-  const top = fr.top + er.top * P.state.zoom, bot = fr.top + (er.top + er.height) * P.state.zoom;
-  if (top < sr.top + 24 || bot > sr.bottom - 24) P.centreOn(idx, span.el);
+  // Through the frame's own transform (P.frameToClient), never `top * zoom`: a turned page is not only scaled.
+  const er = span.el.getBoundingClientRect(), sr = s.getBoundingClientRect();
+  const top = P.frameToClient(f, er.left, er.top).y, bot = P.frameToClient(f, er.right, er.bottom).y;
+  if (Math.min(top, bot) < sr.top + 24 || Math.max(top, bot) > sr.bottom - 24) P.centreOn(idx, span.el);
 }
 
 // The footer button owns the toggle; closing a book must silence it.

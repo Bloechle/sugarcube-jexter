@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 
 const srv = serve();
 await new Promise(d => srv.listen(+(process.env.BENCH_PORT || 8110), d));
-const { browser, page, errors } = await openPrism({});
+const { browser, page, errors } = await openPrism({ book: process.env.BENCH_BOOK || '/rich.ocd.epub' });
 await page.waitForTimeout(1200);
 await page.evaluate(() => window.prism.setTool("forms"));
 await page.waitForTimeout(900);
@@ -15,16 +15,12 @@ const at = (n) => page.evaluate((n) => {
   return { x: p.x, y: p.y };
 }, n);
 
-const texts = [
-  "Devant la porte, samedi 14h",
-  "Et si la porte etait restee ouverte ?",
-  "Anxiete 80% - je dois verifier",
-  "Je retourne verifier trois fois",
-  "Soulagement court, puis le doute revient",
-];
+const texts = ["First answer", "Second answer, a little longer", "Third: 80 %", "Fourth", "Fifth and last"];
+const boxes = await page.evaluate(() =>
+  document.querySelector('.prism-page[data-index="0"] .prism-frame').contentDocument.querySelectorAll(".fm-box").length);
 
 let focused = null;
-for (let n = 0; n < 5; n++) {
+for (let n = 0; n < Math.min(texts.length, boxes); n++) {
   const p = await at(n);
   await page.mouse.click(p.x, p.y);
   await page.waitForTimeout(320);
@@ -48,7 +44,7 @@ const ribbonValue = await page.evaluate(() => document.querySelector('#ribbon [d
 const uiLeft = await page.evaluate(async () => { const m = await import("/shared/js/book.js"); await m.book.persist(0, true);
   const t = new TextDecoder().decode(m.book.get(m.book.pagePath(0)));
   return { foreignObject: (t.match(/foreignObject/g) || []).length, dataUi: (t.match(/data-ui/g) || []).length, runs: (t.match(/data-ocd="run"/g) || []).length }; });
-console.log(JSON.stringify({ focusedAfterFirstClick: focused, ribbonValue, uiLeft, errors }, null, 1));
+console.log(JSON.stringify({ boxes, focusedAfterFirstClick: focused, ribbonValue, uiLeft, errors }, null, 1));
 await browser.close();
 srv.close();
 process.exit(0);

@@ -13,9 +13,8 @@ await page.waitForTimeout(300);
 await drag(page, await at(60, 300), await at(400, 380));
 await page.waitForTimeout(1200);
 const before = await page.evaluate(() => Object.values(window.prism.state.aug?.pages || {}).reduce((n, l) => n + l.length, 0));
-// `P.pickSave` opens a NATIVE file picker: headless it throws and exportAs returns before anything
-// under test runs. Stub the chassis plumbing, not the thing being measured.
-await page.evaluate(() => { window.prism.pickSave = async () => 'stub'; window.prism.saveAs = async () => {}; });
+// The export saves through qry's saveFile: headless, the native picker is refused at once and the file
+// falls back to a download — nothing to stub.
 const clicked = await page.evaluate(() => {
   const b = document.querySelector('#export-dialog .export-opt[data-to="ocd"]');
   b.hidden = false; b.removeAttribute('hidden');

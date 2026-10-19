@@ -10,7 +10,7 @@ for (const book of ['/sample.ocd.epub', '/hidden.ocd.epub']) {
                   return (/<dc:title[^>]*>([^<]*)</.exec(opf) || [])[1] || '';
                 }) };
   // and what closing gives back
-  await page.evaluate(() => window.prism.closeBook());
+  await page.evaluate(() => document.getElementById('m-close').click());
   await page.waitForTimeout(500);
   out[book].afterClose = await page.title();
   out[book].errors = errors;

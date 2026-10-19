@@ -1,8 +1,7 @@
 // stage.js — PDF Inspector render stage, inside the isolated iframe (page render + zoom).
 //
-// Mirrors the Jexter Lab stage so the two tools share ONE zoom model and the SAME vector path:
-//   • OCD-backed sources (OCD, OCD↺) render as SVG — resolution-independent, crisp at any zoom,
-//     no blur-up — exactly like Jexter Lab renders its OCD model.
+//   • OCD-backed sources (OCD, OCD↺) render as SVG — the stored page, resolution-independent, crisp at
+//     any zoom, no blur-up.
 //   • Rasterizer sources (PDFBox, Direct) stay PNG with blur-up (DPI re-fetch on zoom settle), since
 //     they have no vector form.
 // The page is sized in CSS (width = pageWidthPt × zoom); Ctrl + wheel zooms toward the pointer; +/-/0
@@ -18,7 +17,6 @@ const call  = (m, ...a) => { const s = shell(); if (s && typeof s[m] === 'functi
 import { loadOcd, pageViewport } from '/shared/js/ocd.js';
 
 const MAX_DPI = 600, THUMB_DPI = 24, DPI_STEP = 24;
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 const state = { page: null, zoom: 1, compare: { on: false, mode: 'diff', value: 0.5 } };  // page = { i, w, h, version, src, vector, vw, vh }
 const ocd = { doc: null, key: null };           // cached OCD model, keyed by `${src}@${version}`
@@ -38,7 +36,7 @@ function renderDpi() {                           // raster only: DPI from the on
     const w = dims().w;
     const cssW = (canvasEl()?.clientWidth) || (w * state.zoom);
     const need = cssW * (window.devicePixelRatio || 1) * 72 / w;
-    return clamp(Math.ceil(need / DPI_STEP) * DPI_STEP, 72, MAX_DPI);
+    return $.clamp(Math.ceil(need / DPI_STEP) * DPI_STEP, 72, MAX_DPI);
 }
 function pageUrl(dpi, src) {                      // src defaults to the page's source; pass 'pdfbox'/'ocd' to override (compare)
     const p = state.page; if (!p) return '';
@@ -126,14 +124,14 @@ function applyZoom() { resize(); repaintSoon(); }   // raster re-fetches crisp o
 function fit() {
     const p = state.page, s = stageEl(); if (!p || !s) return;
     const w = (s.clientWidth || 800) - 40;
-    state.zoom = clamp(w / dims().w, 0.1, 3);
+    state.zoom = $.clamp(w / dims().w, 0.1, 3);
     resize();
     s.scrollTop = 0; s.scrollLeft = 0;
 }
 // Set zoom, optionally keeping a content point (px,py) under the cursor (cx,cy) — "zoom toward pointer".
 function setZoom(z, toward) {
     const s = stageEl(); const old = state.zoom;
-    state.zoom = clamp(z, 0.1, 8);
+    state.zoom = $.clamp(z, 0.1, 8);
     applyZoom();
     if (s && toward) { const k = state.zoom / old; s.scrollLeft = toward.px * k - toward.cx; s.scrollTop = toward.py * k - toward.cy; }
 }
@@ -167,14 +165,11 @@ function wire() {
 // ── public API (called directly by the parent, same-origin) ──────────────────
 window.stage = {
     // Show a page. { i, w, h, version, src, vector } — w/h in points; vector → render the OCD model as SVG.
-    setPage(p) { state.page = { ...p }; stageEl()?.classList.remove('empty'); paint(true); call('onPageReady', p.i); },
+    setPage(p) { state.page = { ...p }; stageEl()?.classList.remove('empty'); paint(true); },
     // Switch the rasterizer / vector source and re-render the current page in place (keeping the zoom).
     setSource(src, vector) { if (state.page) { state.page.src = src || null; state.page.vector = !!vector; state.page.vw = state.page.vh = null; paint(false); } },
-    pageUrl(dpi) { return pageUrl(dpi); },        // the chrome uses this for "Save page image"
     fit,
-    setZoom(z) { setZoom(z); },
     zoomBy(f) { setZoom(state.zoom * f); },
-    zoomStep(d) { setZoom(state.zoom + d); },
     relayout() { if (state.page) resize(); },     // chrome nudge after a layout change
     setTheme(dark) { const h = document.documentElement; h.classList.toggle('dark', !!dark); h.setAttribute('data-theme', dark ? 'dark' : 'light'); },
 
@@ -185,13 +180,8 @@ window.stage = {
         else { canvasEl()?.classList.remove('compare'); pageBEl()?.removeAttribute('src'); paint(true); }   // restore the normal source
     },
     setCompareMode(mode) { state.compare.mode = mode; applyCompareStyle(); },
-    setCompareValue(v) { state.compare.value = clamp(+v || 0, 0, 1); applyCompareStyle(); },
+    setCompareValue(v) { state.compare.value = $.clamp(+v || 0, 0, 1); applyCompareStyle(); },
 
-    clear() {
-        state.page = null; ocd.doc = null; ocd.key = null; state.compare.on = false;
-        canvasEl()?.classList.remove('compare'); pageBEl()?.removeAttribute('src');
-        stageEl()?.classList.add('empty'); imgEl()?.removeAttribute('src'); const v = vecEl(); if (v) v.innerHTML = '';
-    },
 };
 
 wire();

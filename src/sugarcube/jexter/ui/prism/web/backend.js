@@ -30,7 +30,7 @@ async function artifact(path, { method = 'POST', body, onStep } = {}) {
 // fetch() cannot see its own request body go out; XHR can, on both sides — `upload.onprogress` for the
 // bytes leaving and `onprogress` for the bytes coming back — and it does so over plain HTTP/1.1, which
 // streamed fetch request bodies do not. Falls back to fetch when there is nothing to watch (an empty
-// body — convertUrl, convertPath) or when XHR is unavailable.
+// body) or when XHR is unavailable.
 function send(url, method, body, step) {
     const size = body ? (body.byteLength ?? body.size ?? 0) : 0;
     if (!size || typeof XMLHttpRequest === 'undefined') return fetch(url, { method, body }).then(res => ({ res, streamed: false }));
@@ -86,14 +86,6 @@ export const aliveUrl = '/api/alive';
 export const convert = (src, to = 'ocd', opts = {}, onStep) =>
     artifact('/api/convert' + qs(to, opts), { body: src, onStep });
 
-// Fetch a source by URL server-side (no browser CORS), then convert.
-export const convertUrl = (url, to = 'ocd', opts = {}) =>
-    artifact('/api/convert' + qs(to, { ...opts, url }), { body: new Uint8Array() });
-
-// Re-open a file straight off local disk (desktop only — the engine reads the path).
-export const convertPath = (path, to = 'ocd', opts = {}) =>
-    artifact('/api/convert' + qs(to, { ...opts, path }), { body: new Uint8Array() });
-
 // Analysis pipeline stages (per page, page-space boxes) for the renderer's analysis layer. Rides the one
 // engine route with to=stages; src is the .ocd blob (or PDF bytes). null when unavailable (older engine).
 export const stages = async (src) => {
@@ -102,16 +94,14 @@ export const stages = async (src) => {
 };
 
 export const options = async () => (await fetch('/api/options')).json();
-export const targets = async () => (await (await fetch('/api/targets')).json()).targets;
 export const health  = async () => (await fetch('/api/health')).text();
 
-// AI (desktop only): bind/unbind a model, and stop an in-flight refine.
-export const ai = {
-    config: (cfg) => fetch('/api/ai/config', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg),
-    }).then((r) => r.json()),
-    // Interrupt a running refine; the page-windowed pass stops at the next page and keeps a partial structure.
-    stop: () => fetch('/api/ai/stop', { method: 'POST' }).then((r) => r.json()),
+// A font file (TTF/OTF bytes) → the container's own font block (a one-font fonts.svg) for `chars`, under
+// the alias `id` — what book.addFont merges.
+export const font = async (bytes, chars, id) => {
+    const r = await fetch(API + '/api/font' + '?' + new URLSearchParams({ chars, id }), { method: 'POST', body: bytes });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+    return r.text();
 };
 
 // The front opens an EventSource on this for the F2 console.

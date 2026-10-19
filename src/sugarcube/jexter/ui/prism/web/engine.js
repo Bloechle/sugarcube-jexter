@@ -11,17 +11,14 @@
 // from here; nothing here reaches back into it.
 //
 // Exported for that tool, and for it alone: `jx` (what the open container carries), `engine` (is one
-// there), `bookBytes` (the container as it stands) and `pageIndexOf`.
+// there) and `pageIndexOf`.
 
-import { zipSync } from '/shared/vendor/fflate.js';
-import { makeEvents, confirm } from '/shared/vendor/qry/qry-app.js';
+import { makeEvents, confirm, saveFile } from '/shared/vendor/qry/qry-app.js';
 import * as backend from './backend.js';
-import { parseFonts as parseFontsSvg, SVG_NS, inReadingOrder, readingRuns, runBox } from '/shared/js/ocd.js';
+import { parseFonts as parseFontsSvg, inReadingOrder, readingRuns, runBox, enc, dec } from '/shared/js/ocd.js';
 import { book } from '/shared/js/book.js';
 
 const P = window.prism;                       // the chassis seam (state, hooks, API)
-const dec = b => new TextDecoder().decode(b);
-const enc = s => new TextEncoder().encode(s);
 const JX = 'OEBPS/ocd/';
 
 export const jx = { on: false, runs: [], structures: [], defaultId: null };   // runs[i] = [{id, text}]
@@ -215,7 +212,7 @@ function parseFonts() {
     const raw = P.state.files?.[P.state.opfDir + 'pages/fonts.svg'];
     if (!raw) return [];
     // the shared OCD API owns the fonts.svg grammar — the drawer just reshapes for display
-    return parseFontsSvg(new TextDecoder().decode(raw)).map(f => ({
+    return parseFontsSvg(dec(raw)).map(f => ({
         name: f.name || f.id || f.safe, weight: f.weight, style: f.style, embedded: f.embedded,
         // A PDF routinely carries the SAME BaseFont as several distinct font objects, each subset to
         // the glyphs its own section uses — a 600-page legal book: 119 objects for 47 names, 42 of
@@ -235,7 +232,6 @@ function buildFontsDrawer() {
         body.innerHTML = '<div class="search-info">No font data — this book has no <code>pages/fonts.svg</code> (generic EPUB?).</div>';
         return;
     }
-    const esc = P.esc;
     body.innerHTML = `
       <select id="fx-pick" class="qry-input" aria-label="Font">
         ${fxFonts.map((f, i) => {
@@ -243,10 +239,10 @@ function buildFontsDrawer() {
             // disambiguating suffix (Arial-BoldMT-2) so the rows can be told apart, and the one
             // glyph a single-glyph subset holds — that is what makes such an entry legible.
             const dup = fxFonts.filter(o => o.name === f.name).length > 1;
-            const tag = dup && f.safe && f.safe !== f.name ? ` · ${esc(f.safe)}` : '';
+            const tag = dup && f.safe && f.safe !== f.name ? ` · ${$.esc(f.safe)}` : '';
             const only = f.glyphs.length === 1 && f.glyphs[0].u && f.glyphs[0].u.trim()
-                ? ` ‘${esc(f.glyphs[0].u)}’` : '';
-            return `<option value="${i}">${esc(f.name)}${f.weight === 'bold' ? ' — bold' : ''}${f.style === 'italic' ? ' italic' : ''}${tag} (${f.glyphs.length}${only})</option>`;
+                ? ` ‘${$.esc(f.glyphs[0].u)}’` : '';
+            return `<option value="${i}">${$.esc(f.name)}${f.weight === 'bold' ? ' — bold' : ''}${f.style === 'italic' ? ' italic' : ''}${tag} (${f.glyphs.length}${only})</option>`;
         }).join('')}
       </select>
       <div id="fx-inspect"></div>
@@ -264,16 +260,15 @@ function renderFont() {
         fxSel = f.glyphs.findIndex(g => g.d);
         if (fxSel < 0) fxSel = 0;
     }
-    const esc = P.esc;
     document.getElementById('fx-meta').textContent =
         `asc ${f.asc} · desc ${f.desc} · cap ${f.cap} · x ${f.xh} · sp ${f.sp} · ${f.glyphs.length} glyphs · cmap ${f.cmapCount}${f.embedded ? ' · embedded' : ''}`;
     const grid = document.getElementById('fx-grid');
     grid.innerHTML = f.glyphs.map((g, k) => {
         const w = Math.max(g.adv, .3);
         const tile = g.d
-            ? `<svg viewBox="-0.04 ${-f.asc - .04} ${w + .08} ${f.asc + f.desc + .08}"><g transform="scale(1 -1)"><path d="${esc(g.d)}" fill="currentColor"/></g></svg>`
+            ? `<svg viewBox="-0.04 ${-f.asc - .04} ${w + .08} ${f.asc + f.desc + .08}"><g transform="scale(1 -1)"><path d="${$.esc(g.d)}" fill="currentColor"/></g></svg>`
             : `<svg viewBox="0 ${-f.asc} ${w} ${f.asc + f.desc}"><rect x=".02" y="${-f.asc + .02}" width="${w - .04}" height="${f.asc + f.desc - .04}" fill="none" stroke="currentColor" stroke-width=".02" stroke-dasharray=".05 .05"/></svg>`;
-        return `<div class="fx-cell${g.d ? '' : ' inkless'}${k === fxSel ? ' sel' : ''}" data-k="${k}">${tile}<div class="fx-cap">${g.u ? esc(g.u) : '·'} ${g.gid}</div></div>`;
+        return `<div class="fx-cell${g.d ? '' : ' inkless'}${k === fxSel ? ' sel' : ''}" data-k="${k}">${tile}<div class="fx-cap">${g.u ? $.esc(g.u) : '·'} ${g.gid}</div></div>`;
     }).join('');
     grid.querySelectorAll('.fx-cell').forEach(c => c.addEventListener('click', () => {
         fxSel = +c.getAttribute('data-k');
@@ -292,7 +287,6 @@ function renderInspector() {
     const f = fxFonts[fxCur];
     const g = fxSel >= 0 ? f.glyphs[fxSel] : null;
     if (!g) { box.innerHTML = '<div class="fx-hint">Click a glyph below to inspect it.</div>'; return; }
-    const esc = P.esc;
     const W = Math.max(g.adv, .6), padL = .22, padR = .22;
     const top = -f.asc - .1, H = f.asc + f.desc + .2;
     const hline = (y, color, width, dash) =>
@@ -306,7 +300,7 @@ function renderInspector() {
     s += hline(0, 'var(--jx-brand)', .014);                              // the baseline
     s += hline(-f.desc, 'var(--qry-line-strong)', .009);
     s += vline(0) + vline(g.adv);                                        // the advance box
-    if (g.d) s += `<g transform="scale(1 -1)"><path d="${esc(g.d)}" fill="currentColor"/></g>`;
+    if (g.d) s += `<g transform="scale(1 -1)"><path d="${$.esc(g.d)}" fill="currentColor"/></g>`;
     else s += `<rect x=".05" y="${-f.asc + .05}" width="${Math.max(g.adv - .1, .1)}" height="${f.asc + f.desc - .1}" fill="none" stroke="currentColor" stroke-width=".014" stroke-dasharray=".05 .05" opacity=".45"/>`;
     // the pen: ORIGIN (filled) → ADVANCE = the next glyph's origin (hollow), on the baseline
     s += `<circle cx="0" cy="0" r=".026" fill="var(--jx-brand)"><title>origin (0, 0)</title></circle>`;
@@ -318,7 +312,7 @@ function renderInspector() {
         ['unicode', g.u ? [...g.u].map(c => 'U+' + c.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')).join(' ') : '—'],
         ['gid', g.gid], ['advance', g.adv],
         ['name', g.gname || '—'], ['outline', g.d ? g.d.length + ' chars' : 'inkless'],
-    ].map(([k, v]) => `<div class="fx-kv"><span>${k}</span><b>${esc(String(v))}</b></div>`).join('');
+    ].map(([k, v]) => `<div class="fx-kv"><span>${k}</span><b>${$.esc(String(v))}</b></div>`).join('');
     box.innerHTML = `<div class="fx-inspector">${s}<div class="fx-info">${info}</div></div>`;
 }
 
@@ -455,64 +449,40 @@ function jumpToStruct(n) {
 
 /* -- Export as… : the container bytes through the engine -------------- */
 
-export function bookBytes() {
-    const files = P.state.files; if (!files) return null;
-    const out = { mimetype: [files['mimetype'] || enc('application/epub+zip'), { level: 0 }] };
-    for (const [p, b] of Object.entries(files)) if (p !== 'mimetype') out[p] = b;
-    return zipSync(out);
-}
-
-P.bookBytes = bookBytes;                                // the open book as bytes — what every tool posts to the engine
 
 const EXPORT_EXT = { pdf: '.pdf', ocd: '.ocd.epub', epub: '.epub', html: '.html', md: '.md', doctags: '.doctags' };
 
 async function exportAs(to, opts = {}) {
     if (!engine) return;
-    const bytes = bookBytes();
+    const bytes = book.bytes();
     if (!bytes) { P.toast('Open a document first.', { tone: 'warn' }); return; }
-    // save dialog FIRST (while the click's transient activation is valid):
-    // original name, new extension — then convert, then write to the handle
-    const name = P.exportName(EXPORT_EXT[to] || '.' + to);
-    const handle = await P.pickSave(name);
-    if (handle === 'aborted') return;
-    // pending redactions (the Redact tool's member) are applied by the engine on every export —
-    // the export is what leaves the machine, so it is where the proof must hold
+    // Pending redactions (the Redact tool's member) are applied by the engine on EVERY export: the export
+    // is what leaves the machine, so it is where the proof must hold.
     try { const rd = P.state.files?.[JX + 'redact.json']; const items = rd ? JSON.parse(dec(rd)) : [];
           if (items.length) opts = { ...opts, redact: JSON.stringify(items) }; } catch { /* no member, no redaction */ }
-
-    // This used to bypass the engine for `ocd` whenever augmentations were present, because the round
-    // trip dropped `prism/augment.json` — a member the model did not own. The ENGINE now carries what it
-    // does not own (OCDDocument passengers), so the bypass is gone and there is ONE export path.
-    //
-    // That matters beyond tidiness: the bypass also skipped the redaction pass above, so an augmented
-    // document exported to OCD kept its pending redactions UNAPPLIED — the one export that must never
-    // be the exception. Measured on the engine side: a container carrying both comes out with the
-    // augmentation intact and the redaction applied (the covered title is gone from the read-out).
-
-    // Augmentations live in the sidecar and NOTHING bakes them: every target but `ocd` goes through the
-    // engine, which does not know the member and drops it. Measured: a container carrying a reveal zone
-    // exported to EPUB comes out with no trace of it. That is a defensible state — an augmentation is a
-    // Prism capability, and the deliverable is the document — but losing work in silence is not, so the
-    // export says it once and asks. (A real bake — anchors, covers, the animation CSS written into the
-    // members before conversion — is a feature, not this line.)
-    // OCD carries them now (passengers), so only the OTHER targets lose them — and only those ask.
+    // Augmentations live in Prism's sidecar: the OCD-EPUB carries it (a passenger), every other target
+    // drops it — so those ask, rather than lose the work in silence.
     const augs = to === 'ocd' ? 0 : Object.values(P.state.aug?.pages || {}).reduce((n, l) => n + l.length, 0);
-    if (augs && !await confirm(`This document carries ${augs} augmentation${augs > 1 ? 's' : ''} — links, `
-                       + `reveal zones, animations, media. They live in Prism's own container and `
-                       + `${to.toUpperCase()} cannot carry them: the export will not contain them.\n\n`
-                       + `Export to OCD instead to keep them re-editable. Continue anyway?`)) {
-        P.toast('Export cancelled — the augmentations are still there.');
-        return;
-    }
-
-    const busy = P.toast(`Exporting ${to}…`, { duration: 0 });
+    const name = P.exportName(EXPORT_EXT[to] || '.' + to);
+    let busy = null;
     try {
-        const art = await backend.convert(bytes, to, opts);
-        await P.saveAs(art.blob, name, handle);
-        P.toast(`Exported ${name}`, { tone: 'ok' });
-    } catch (e) { P.toast(`Export failed: ${e.message || e}`, { tone: 'danger' }); }
-    finally { busy.close(); }
+        // The save dialog opens FIRST, while the click still allows it; the conversion runs once a place is chosen.
+        const saved = await saveFile(async () => {
+            if (augs && !await confirm(`This document carries ${augs} augmentation${augs > 1 ? 's' : ''} — links, `
+                               + `reveal zones, animations, media. They live in Prism's own container and `
+                               + `${to.toUpperCase()} cannot carry them: the export will not contain them.\n\n`
+                               + `Export to OCD instead to keep them re-editable. Continue anyway?`))
+                throw new Error(CANCELLED);
+            busy = P.toast(`Exporting ${to}…`, { duration: 0 });
+            return (await backend.convert(bytes, to, opts)).blob;
+        }, name);
+        if (saved) { P.toast(`Exported ${saved.name}`, { tone: 'ok' }); P.exported(to); }
+    } catch (e) {
+        if (e.message === CANCELLED) P.toast('Export cancelled — the augmentations are still there.');
+        else P.toast(`Export failed: ${e.message || e}`, { tone: 'danger' });
+    } finally { busy?.close(); }
 }
+const CANCELLED = 'cancelled';
 
 function wire() {
     $.opt('#m-fonts')?.addEventListener('click', () => { buildFontsDrawer(); P.dialog('fonts-drawer').open(); });

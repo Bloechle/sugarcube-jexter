@@ -98,7 +98,7 @@ const num = v => (Math.round(v * 100) / 100);
 
 function facts(el) {
   const kind = el.getAttribute('data-ocd');
-  const row = (k, v) => v == null || v === '' ? '' : `<dt>${P.esc(k)}</dt><dd>${P.esc(v)}</dd>`;
+  const row = (k, v) => v == null || v === '' ? '' : `<dt>${$.esc(k)}</dt><dd>${$.esc(v)}</dd>`;
 
   if (kind === 'run') {
     const u = el.getAttribute('data-text') || '';
@@ -178,7 +178,7 @@ function facts(el) {
 function layerOf(doc) {
   const svg = doc.querySelector('svg'); if (!svg) return null;
   let g = svg.querySelector(':scope > .trc-layer');
-  if (!g) { g = doc.createElementNS(SVG_NS, 'g'); g.setAttribute('class', 'trc-layer'); svg.appendChild(g); }
+  if (!g) { g = doc.createElementNS(SVG_NS, 'g'); g.setAttribute('class', 'trc-layer'); g.setAttribute('data-ui', ''); svg.appendChild(g); }
   return g;
 }
 
@@ -245,16 +245,7 @@ function clearInk(doc) { try { doc.querySelectorAll('.trc-layer').forEach(n => {
 const PICK = '[data-ocd="run"], [data-ocd="paragraph"], path[id^="v"], image';
 let pinned = false;
 
-function styleOn(doc, on) {
-  try {
-    let st = doc.getElementById('trc-css');
-    if (on && !st) {
-      st = doc.createElementNS('http://www.w3.org/1999/xhtml', 'style');
-      st.id = 'trc-css'; st.textContent = CSS;
-      (doc.head || doc.documentElement).appendChild(st);
-    } else if (!on && st) st.remove();
-  } catch { }
-}
+const styleOn = (doc, on) => book.frameCss(doc, 'trc-css', on && CSS);
 
 function bind(doc) {
   if (doc.__trcBound) return; doc.__trcBound = true;
@@ -291,7 +282,7 @@ function bind(doc) {
 
 function showCaptionFor(el, p) {
   const f = facts(el); if (!f) { hideCaption(); return; }
-  showCaption(`<b>${P.esc(f.title)}</b><span class="trc-id">${P.esc(f.sub || '')}</span><dl>${f.body}</dl>`, p.x, p.y);
+  showCaption(`<b>${$.esc(f.title)}</b><span class="trc-id">${$.esc(f.sub || '')}</span><dl>${f.body}</dl>`, p.x, p.y);
 }
 
 // ── Reveal is a MODE OF ANALYSIS, not a tool of its own (2026-09-05) ─────────────────────────────────

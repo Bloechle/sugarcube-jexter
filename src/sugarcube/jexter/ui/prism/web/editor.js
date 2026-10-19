@@ -10,6 +10,7 @@
 // written, and how it is undone. A zone editor or a group tool reuses the same gizmo with another pick.
 
 import { book } from '/shared/js/book.js';
+import * as backend from './backend.js';
 import { createGizmo } from './gizmo.js';
 
 const P = window.prism;
@@ -60,7 +61,11 @@ function pickIn(doc, svg) {
 
 function bind(doc, idx) {
   const svg = doc.querySelector('svg[data-ocd="page"]');
-  if (!svg || gizmos.has(idx)) return;
+  // Keyed on the SVG, not the index: a frame released and re-mounted (scrolling far and back) is a NEW
+  // page document, and a gizmo kept for its index would be bound to the one that is gone.
+  if (!svg || svg.__edBound) return;
+  svg.__edBound = true;
+  gizmos.get(idx)?.destroy();
 
   // The armed click is taken in the CAPTURE phase, before the gizmo's own pointerdown: the point is to
   // write where you point, not to pick what is already there. A gesture carries ITS OWN page index —
@@ -127,12 +132,12 @@ function remove() {
   book.persist(s.idx);
   describe(null);
   ribbon();
-  P.toast?.('Removed — Ctrl+Z to undo', 'primary');
+  P.toast?.('Removed — Ctrl+Z to undo');
 }
 
 function undo() {
   const u = undoStack.pop();
-  if (!u) { P.toast?.('Nothing to undo', 'neutral'); return; }
+  if (!u) { P.toast?.('Nothing to undo'); return; }
   if (u.also?.el?.isConnected) u.also.el.remove();        // a retype is TWO halves; one Ctrl+Z undoes both
   if (u.added) u.el.remove();                             // an addition is undone by taking it away
   else if (u.parent && !u.el.isConnected) u.parent.insertBefore(u.el, u.next);
@@ -157,15 +162,14 @@ const txt = { text: 'Text', size: 18, font: null, arming: false };
 
 /** The fonts the open container carries, by their stated name (never by alias — the engine re-derives
  *  fN alphabetically on every write). */
-const fontsOf = () => (book.page(idxNow())?.doc.fonts || []).map(f => f.safe);
-const idxNow = () => Math.max(0, P.state.current ?? 0);
+const fontsOf = () => book.fonts().map(f => f.safe);
 
 /** The characters the chosen font cannot paint. A container's font is a SUBSET — it carries the glyphs
  *  its pages used and nothing else — so writing "Premier jet" in a font imported for "Bonjour, Jean-Luc!"
  *  prints "re erje", correctly and silently. The text is intact in the model either way; what is missing
  *  is the ink, and the reader has to be told which characters and what to do about it. */
 function missingIn(font) {
-  const f = (book.page(idxNow())?.doc.fonts || []).find(x => x.safe === font);
+  const f = book.fonts().find(x => x.safe === font);
   if (!f) return '';
   const out = [];
   for (const ch of txt.text) {
@@ -200,10 +204,10 @@ function writeText(idx, x, y) {
   const p = book.page(idx); if (!p) return;
   const names = fontsOf();
   const font = txt.font && names.includes(txt.font) ? txt.font : names[0];
-  if (!font) { P.toast?.('This container carries no font to write with — add one first.', 'warning'); return; }
+  if (!font) { P.toast?.('This container carries no font to write with — add one first.', { tone: 'warn' }); return; }
   let r;
   try { r = p.text({ text: txt.text, x, y, size: txt.size, font }); }
-  catch (e) { P.toast?.(`Could not write: ${e.message || e}`, 'danger'); return; }
+  catch (e) { P.toast?.(`Could not write: ${e.message || e}`, { tone: 'danger' }); return; }
   // Added, so it must be removable the same way a removal is: the undo entry carries the parent and the
   // next sibling, which is exactly what `remove()` records — one stack, one shape.
   undoStack.push({ idx, el: r.el, before: '', parent: r.el.parentNode, next: r.el.nextSibling, added: true });
@@ -212,7 +216,7 @@ function writeText(idx, x, y) {
   describe(r.run);
   txt.arming = false;
   ribbon();
-  P.toast?.(`Written in ${font} — drag it, or Ctrl+Z`, 'success');
+  P.toast?.(`Written in ${font} — drag it, or Ctrl+Z`, { tone: 'ok' });
   warnMissing(font);
 }
 
@@ -225,14 +229,11 @@ async function addFontFile() {
     const file = inp.files?.[0]; if (!file) return;
     try {
       const alias = book.freeAlias();
-      const r = await fetch(`/api/font?chars=${encodeURIComponent(txt.text)}&id=${alias}`,
-                            { method: 'POST', body: await file.arrayBuffer() });
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
-      const f = await book.addFont(await r.text());
+      const f = await book.addFont(await backend.font(await file.arrayBuffer(), txt.text, alias));
       txt.font = f.safe;
       ribbon();
-      P.toast?.(`${f.safe} added — ${f.glyphs.length} glyph(s), for the characters of your text`, 'success');
-    } catch (e) { P.toast?.(`Could not add the font: ${e.message || e}`, 'danger'); }
+      P.toast?.(`${f.safe} added — ${f.glyphs.length} glyph(s), for the characters of your text`, { tone: 'ok' });
+    } catch (e) { P.toast?.(`Could not add the font: ${e.message || e}`, { tone: 'danger' }); }
   };
   inp.click();
 }
@@ -257,7 +258,7 @@ function retype() {
   const el = sel.el, idx = sel.idx;
   const m = /matrix\(([-\d.eE]+)[ ,]+[-\d.eE]+[ ,]+[-\d.eE]+[ ,]+[-\d.eE]+[ ,]+([-\d.eE]+)[ ,]+([-\d.eE]+)\)/
               .exec(el.getAttribute('transform') || '');
-  if (!m) { P.toast?.('That run states no matrix — nothing to place it by.', 'warning'); return; }
+  if (!m) { P.toast?.('That run states no matrix — nothing to place it by.', { tone: 'warn' }); return; }
   const p = book.page(idx); if (!p) return;
   const fr = p.frame;
   const size = Math.abs(+m[1]) || txt.size;
@@ -268,7 +269,7 @@ function retype() {
   const parent = el.parentNode, next = el.nextSibling;
   let r;
   try { r = p.text({ text: txt.text, x, y, size, font }); }
-  catch (e) { P.toast?.(`Could not write: ${e.message || e}`, 'danger'); return; }
+  catch (e) { P.toast?.(`Could not write: ${e.message || e}`, { tone: 'danger' }); return; }
   el.remove();
   undoStack.push({ idx, el, before: el.getAttribute('transform') || '', parent, next,
                    also: { el: r.el, parent: r.el.parentNode, next: r.el.nextSibling } });
@@ -276,7 +277,7 @@ function retype() {
   gizmos.get(idx)?.select(r.run);
   describe(r.run);
   ribbon();
-  P.toast?.('Retyped — Ctrl+Z puts the old one back', 'success');
+  P.toast?.('Retyped — Ctrl+Z puts the old one back', { tone: 'ok' });
   warnMissing(font);
 }
 
@@ -355,7 +356,7 @@ P.on?.('frame', (f, idx) => { try { bind(f.contentDocument, idx); } catch { } })
 P.on?.('close', () => { each(g => g.destroy()); gizmos.clear(); undoStack.length = 0; });
 
 window.addEventListener('keydown', e => {
-  if (P.tool?.() !== 'edit') return;
+  if (!P.keyFor('edit', e)) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
   else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); remove(); }
   else if (e.key === 'Escape') deselect();

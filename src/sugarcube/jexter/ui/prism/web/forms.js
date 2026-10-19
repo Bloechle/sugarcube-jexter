@@ -16,7 +16,7 @@
  * ignores it writes its labels across the boxes.
  */
 import { book } from '/shared/js/book.js';
-import { SVG_NS } from '/shared/js/ocd.js';
+import { SVG_NS, dec } from '/shared/js/ocd.js';
 
 const P = window.prism;
 const TOOL = 'forms';
@@ -61,7 +61,7 @@ function read() {
   // member's absence (a document with no form) is a null and never a parse exception.
   const raw = book.get(book.member(MEMBER));
   if (!raw) return;
-  let data; try { data = JSON.parse(new TextDecoder().decode(raw)); } catch { return; }
+  let data; try { data = JSON.parse(dec(raw)); } catch { return; }
   const pages = data?.pages;
   if (!pages) return;
   for (const key of Object.keys(pages).sort(byPage)) {
@@ -102,12 +102,7 @@ async function save() {
 
 /* -- the overlay: one data-ui layer per page ------------------------------------------------------ */
 
-function styleOn(doc) {
-  if (doc.getElementById('fm-style')) return;
-  const s = doc.createElement('style');
-  s.id = 'fm-style'; s.setAttribute('data-ui', ''); s.textContent = CSS;
-  doc.head.appendChild(s);
-}
+const styleOn = (doc) => book.frameCss(doc, 'fm-style', CSS);
 
 /** The page's own frame — the MEDIA box. A crop is a window over it (the viewBox), so a cropped page
  *  must not shift its fields: the flip is anchored here and nowhere else. */
@@ -338,7 +333,7 @@ function drawer() {
     if (multi && it.page !== at) { at = it.page; rows.push(`<li class="fm-group">Page ${at + 1}</li>`); }
     const status = it.f.value ? 'filled' : it.f.required ? 'required' : 'empty';
     rows.push(`<li><a class="nav-link${i === st.sel ? ' active' : ''}" data-fm="${i}">`
-            + `<b>${esc(it.f.name || '(unnamed)')}</b>`
+            + `<b>${$.esc(it.f.name || '(unnamed)')}</b>`
             + `<span class="hit px-sub fm-${status}">${status}</span></a></li>`);
   });
   list.innerHTML = rows.join('');
@@ -354,7 +349,6 @@ function drawer() {
        it.f.rotate ? `${it.f.rotate}°` : null].filter(Boolean).join(' · ');
 }
 
-const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /* -- the tool ---------------------------------------------------------------------------------- */
 

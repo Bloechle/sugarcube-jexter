@@ -1,4 +1,4 @@
-// The cut: analysis.js imports jx / engine / bookBytes / pageIndexOf from engine.js. Each of the four
+// The cut: analysis.js imports jx / engine / pageIndexOf from engine.js. Each of the three
 // has to be LIVE across the boundary — `engine` in particular flips after /api/health answers.
 import { serve, openPrism } from './prism_bench.mjs';
 const srv = serve(); await new Promise(d => srv.listen(8110, d));
@@ -21,7 +21,7 @@ out.tree = await page.evaluate(() => document.querySelectorAll('#inspect-drawer 
                                  || document.querySelectorAll('.jx-tree-row, .tree-row').length);
 // the structure rail (seam side) must have the container's trees
 out.rail = await page.evaluate(() => document.querySelectorAll('#structure-body *').length);
-// a stage overlay needs backend.stages(bookBytes()) — the cross-boundary call
+// a stage overlay needs backend.stages(book.bytes()) — the cross-boundary call
 await page.evaluate(() => { const b = [...document.querySelectorAll('#ribbon [data-ribbon="analysis"] .px-rb-btn')].find(x => x.textContent.trim() === 'Clean' || x.textContent.trim() === 'Lines' || x.textContent.trim() === 'Blocks'); if (b) b.click(); });
 await page.waitForTimeout(9000);
 out.stage = await page.evaluate(() => {

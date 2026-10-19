@@ -56,6 +56,13 @@ public final class Jexter extends WebApp {
 
     // ── engine ───────────────────────────────────────────────────────────────────
 
+    /** Normalize a PDF the Jexter way — rebuild the text layer, recover navigation only when the source
+     *  has none, keep annotations, always a selectable text layer. The whole Java API in one call (the
+     *  window's help documents it). */
+    public static OCDDocument normalize(File in, File out) throws IOException {
+        return normalize(in, out, null, true);
+    }
+
     /** As above, with optional {@code overrides} layered on the fixed policy and {@code selectable=false}
      *  for outline-only output. Package-private: the headless CLI is the only other caller. */
     static OCDDocument normalize(File in, File out, Map<String, String> overrides, boolean selectable) throws IOException {
