@@ -256,17 +256,12 @@ public final class Conversion {
     //   no args → the multi-target Swing launcher (WriterCli).
     public static void main(String[] args) throws Exception {
         if (args.length == 0) { WriterCli.launch(); return; }
-        if (args.length < 2) {
-            System.err.println("usage: <in.pdf|in.ocd.epub|in.png|in.jpg|in.tif> <out.ext> [--to=" + String.join("|", Target.ids())
-                    + "] [--key=value | --flag] …   (no args → window)");
-            System.exit(2);
-            return;
-        }
+        if (args.length == 1 && args[0].equals("--version")) { System.out.println(sugarcube.jexter.core.JxBuild.current().label()); return; }
         // Flags are position-independent: '--to=x out.md' and 'out.md --to=x' both work.
         Args a = Args.parse(args);
         if (a.positional().size() != 2) {
             System.err.println("usage: <in.pdf|in.ocd.epub|in.png|in.jpg|in.tif> <out.ext> [--to=" + String.join("|", Target.ids())
-                    + "] [--key=value | --flag] …   (no args → window)");
+                    + "] [--key=value | --flag] …   (no args → window; --version → this build)");
             System.exit(2);
             return;
         }

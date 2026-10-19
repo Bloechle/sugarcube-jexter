@@ -14,8 +14,8 @@
  *                class in TEST_DIR) from the project root, with SOURCE_DATE_EPOCH pinned (the
  *                reproducible-builds clock) unless the shell already sets it. No TEST_MAIN → no test.
  *     jar      → compile (-Xlint:all -Werror, the CI gate) → stage resources → explode
- *                lib/*.jar → clean META-INF → pack the fat jar. Clears the previous
- *                deliverables first — INCLUDING the app-image.
+ *                lib/*.jar → clean META-INF → stamp BUILD_INFO → pack the fat jar. Clears
+ *                the previous deliverables first — INCLUDING the app-image.
  *     build    → jar, then jpackage the app-image: one bundled runtime, one .exe per
  *                LAUNCHERS entry (javaw), plus one <Name>.cmd each for a real console;
  *                then the app-image zipped as <APP_NAME>-<APP_VERSION>-<os>.zip — the
@@ -46,6 +46,9 @@
  *   JAR_PACKAGES → core,app  (top-level dirs under SRC_DIR that make the deliverable; default: all)
  *   LINT         → all  (-Xlint:<LINT>; e.g. all,-fallthrough when a warning is the lesson)
  *   PORT         → 7333  (one deck per project when two run side by side)
+ *   BUILD_INFO   → a/b/build.properties  (a path INSIDE the jar: version=APP_VERSION, commit= the git
+ *                  short hash, -dirty when the tree has changes, built= ISO UTC — so a deployed jar can
+ *                  say what it is; '' = none)
  *   Nothing project-specific lives in this file: the defaults are neutral, .env is the
  *   project (tracked), .env.local the machine (ignored); shell env beats both. Only the
  *   FILE NAME says which project it sits in.
@@ -60,7 +63,7 @@ const cp = require('node:child_process');
 const DIR = __dirname;
 const HEADLESS = process.argv.includes('--serve');
 const RUN_ARG = (process.argv.find((a) => a.startsWith('--run=')) || '').slice(6); // headless one-shot action
-const VERSION = '1.9';   // 1.9 (2026-10-19): requests from another origin or host are refused (any web page could POST /run); the `test` action — compile src/ and TEST_DIR into SCRATCH_DIR, run TEST_MAIN with SOURCE_DATE_EPOCH pinned: one command for the project's functional gate on any OS, the one CI runs too; 1.8 (2026-10-15): the AI bundler is gone (the `context` action, KEEP_FILES, SKIP_FILES) — the repo is the hand-off, AGENTS.md and the skill in .claude/skills/ travel with every clone; 1.7 (2026-10-05): OUT_DIR defaults to _artifacts, the convention every deck shares (it holds the PRODUCTS, not "production"); 1.6 (2026-09-11): the deck wears the cloud deck's chrome - a hint line under every section header, ONE tooltip system (every title is rendered by the deck: keyboard-reachable, scroll-following, styled), a grouped config drawer, a focus ring on every control, and a copy that strips the console prefixes; the blue palette, the cube mark and the tooltip of nimbus-server.cjs (whose #tip font named --sans, a token that does not exist - the shorthand was invalid and the box fell back to the body font); named after its project, like nimbus-cloud.cjs. Engine, bundler and actions unchanged; 1.5 (2026-09-02): the header no longer names a JDK version — RELEASE is the project's; 1.4 (2026-09-02): audit — no project name in the tool, one glob compiler, one in/out authority for the bundle, launchers/keep/skip through cfg, OUT_DIR under the project; 1.3 (2026-09-02): build also zips the app-image as <APP_NAME>-<APP_VERSION>-<os>.zip — the distributable; 1.2 (2026-09-01): binary containers by extension (a PDF read as utf8 is corrupt); 1.1: neutral defaults, .env is the project, library jars, zip + overview.md
+const VERSION = '1.10';   // 1.10 (2026-10-19): BUILD_INFO — the jar carries its own identity (version, commit, build time), so a service running it can say which build it runs; 1.9 (2026-10-19): requests from another origin or host are refused (any web page could POST /run); the `test` action — compile src/ and TEST_DIR into SCRATCH_DIR, run TEST_MAIN with SOURCE_DATE_EPOCH pinned: one command for the project's functional gate on any OS, the one CI runs too; 1.8 (2026-10-15): the AI bundler is gone (the `context` action, KEEP_FILES, SKIP_FILES) — the repo is the hand-off, AGENTS.md and the skill in .claude/skills/ travel with every clone; 1.7 (2026-10-05): OUT_DIR defaults to _artifacts, the convention every deck shares (it holds the PRODUCTS, not "production"); 1.6 (2026-09-11): the deck wears the cloud deck's chrome - a hint line under every section header, ONE tooltip system (every title is rendered by the deck: keyboard-reachable, scroll-following, styled), a grouped config drawer, a focus ring on every control, and a copy that strips the console prefixes; the blue palette, the cube mark and the tooltip of nimbus-server.cjs (whose #tip font named --sans, a token that does not exist - the shorthand was invalid and the box fell back to the body font); named after its project, like nimbus-cloud.cjs. Engine, bundler and actions unchanged; 1.5 (2026-09-02): the header no longer names a JDK version — RELEASE is the project's; 1.4 (2026-09-02): audit — no project name in the tool, one glob compiler, one in/out authority for the bundle, launchers/keep/skip through cfg, OUT_DIR under the project; 1.3 (2026-09-02): build also zips the app-image as <APP_NAME>-<APP_VERSION>-<os>.zip — the distributable; 1.2 (2026-09-01): binary containers by extension (a PDF read as utf8 is corrupt); 1.1: neutral defaults, .env is the project, library jars, zip + overview.md
 // ── tiny .env loader (no dependency). Precedence: shell env > .env.local > .env ──
 // .env is the project's configuration and is tracked; .env.local is the machine's
 // (paths, a JDK, secrets) and is gitignored. Comments (#) and blank lines are fine.
@@ -101,6 +104,7 @@ const DEFAULTS = {
     ICON_FILE:     env('ICON_FILE', ''),                    // explicit .ico/.icns; else <name>.ico / app.ico in OUT_DIR
     TEST_DIR:      env('TEST_DIR', 'test'),                 // the test sources, compiled against src/ for the `test` action
     TEST_MAIN:     env('TEST_MAIN', ''),                    // the class the `test` action runs ('' = no test)
+    BUILD_INFO:    env('BUILD_INFO', ''),                   // a path inside the jar for the build identity ('' = none)
 };
 
 // Comma lists in .env (LAUNCHERS, JAR_PACKAGES): one splitter.
@@ -286,6 +290,20 @@ function cleanMeta(c, send) {
     if (n) send('line', { text: `cleaned ${n} stale META-INF entries`, kind: 'ok' });
 }
 
+/** Write the build identity at BUILD_INFO inside the stage: version, the git commit (-dirty when tracked
+ *  files changed; empty outside a work tree) and the build time. Written after the libs exploded, so ours wins. */
+function stampBuild(cfg, c, send) {
+    if (!cfg.BUILD_INFO) return;
+    const git = (...a) => { const r = cp.spawnSync('git', a, { cwd: c.root, encoding: 'utf8' }); return r.status === 0 ? r.stdout.trim() : null; };
+    const head = git('rev-parse', '--short=7', 'HEAD');
+    const commit = head ? head + (git('status', '--porcelain', '--untracked-files=no') ? '-dirty' : '') : '';
+    const built = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+    const file = path.join(c.stage, cfg.BUILD_INFO);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `version=${cfg.APP_VERSION}\ncommit=${commit}\nbuilt=${built}\n`);
+    send('line', { text: `build ${cfg.APP_VERSION} ${commit || '(no git)'} ${built}`, kind: 'ok' });
+}
+
 /** Assemble the fat jar — `--main-class` only when JAR_MAIN names one (else a library jar). */
 async function pack(cfg, c, send) {
     const code = await sh(c.jar, ['--create', '--file', c.outJar, ...(cfg.JAR_MAIN ? ['--main-class', cfg.JAR_MAIN] : []), '-C', c.stage, '.'],
@@ -355,6 +373,7 @@ async function doBuild(cfg, exe, send) {
     stageResources(c, send); guard();
     await explodeDeps(c, send); guard();
     cleanMeta(c, send);
+    stampBuild(cfg, c, send);
     await pack(cfg, c, send); guard();
     let exeBuilt = false;
     if (exe) exeBuilt = await packageExe(cfg, c, send);

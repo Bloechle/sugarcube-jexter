@@ -91,7 +91,9 @@ Skill < this card < the source: a disagreement is a signal — fix the skill in 
   CI is `.github/workflows/build.yml`: `javac --release 21 -Xlint:all -Werror` over the WHOLE tree
   (`src/jj2000` included) + doclint over **our** files only (`grep -v '^src/jj2000/'`, with
   `-sourcepath src` so vendored types still resolve) + `node --check` + link check + the **functional gates**.
-  `mvn -q package` is an IDE convenience, not the build.
+  `mvn -q package` is an IDE convenience, not the build. The jar carries its identity — version, git
+  commit (`-dirty` when the tree had changes), build time — written by the deck at `BUILD_INFO` (`.env`) and
+  read by `core.JxBuild` (`Conversion --version`), so a service embedding the jar can say which build it runs.
 - **Test** — `node nimbus-jexter.cjs --run=test` (what CI runs, any OS): compiles into `target/classes`, then
   `test/Gates.java` writes the fixture corpus into `target/corpus` (`test/Fixtures.java`, PDFBox only) and gates it — REPRO, DOCTAGS, STABLE, MODEL, TIERS,
   NAV, TAGS, PIXELS (the model's render against PDFBox's and against the direct render), AGAIN (a second analysis
