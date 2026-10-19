@@ -25,6 +25,7 @@ public final class OCDIndex {
 
     private final Map<String, OCDNode> byKey = new HashMap<>();
     private final Map<OCDNode, Integer> position = new java.util.IdentityHashMap<>();   // place in the page's content
+    private final Vocabulary vocabulary = new Vocabulary();
 
     private OCDIndex() {}
 
@@ -36,6 +37,7 @@ public final class OCDIndex {
             doc.page(p).nodes().forEach(n -> {
                 ix.position.put(n, ix.position.size());
                 if (n.id() != null) ix.byKey.put(key(page, n.id()), n);
+                if (n instanceof OCDText t) ix.vocabulary.add(t.text());
             });
         }
         return ix;
@@ -52,7 +54,7 @@ public final class OCDIndex {
     public static void appendText(StringBuilder b, OCDNode n) {
         OCDText[] prev = { null };
         n.stream().filter(OCDText.class::isInstance).map(OCDText.class::cast).forEach(t -> {
-            if (t.text() != null && !t.text().isEmpty()) { join(b, t, prev[0]); prev[0] = t; }
+            if (t.text() != null && !t.text().isEmpty()) { join(b, t, prev[0], null); prev[0] = t; }
         });
     }
 
@@ -61,10 +63,10 @@ public final class OCDIndex {
      *  plain concatenation. The only readout-time transform is the soft hyphen: a trailing {@code '-'} that a
      *  line break split is dropped to rejoin the word — the hyphen stays <i>painted</i> in the model, so it can
      *  only be resolved here, not materialised. (OCDBreak is a layout flag, never a spacing mechanism.) */
-    private static void join(StringBuilder b, OCDText cur, OCDText prev) {
+    private static void join(StringBuilder b, OCDText cur, OCDText prev, Vocabulary words) {
         String x = cur.text();
         if (prev != null && b.length() > 0 && b.charAt(b.length() - 1) == '-' && softHyphen(prev, cur, x)) {
-            b.deleteCharAt(b.length() - 1);                          // line-break hyphen → rejoin the word
+            if (words == null || !words.compound(b, x)) b.deleteCharAt(b.length() - 1);   // line-break hyphen → rejoin the word
             b.append(x);
             return;
         }
@@ -91,6 +93,48 @@ public final class OCDIndex {
             b.append(' ');
         }
         b.append(x);
+    }
+
+    /** The document's own words, as it writes them on one line — the self-reference that tells a compound
+     *  broken at its hyphen ({@code allers-} / {@code retours}) from a word hyphenated at a syllable
+     *  ({@code préven-} / {@code tion}). No lexicon: the hyphen is kept when the document writes
+     *  {@code allers-retours} somewhere and never {@code allersretours}; when it says neither, the word is
+     *  rejoined, as poppler does — a syllable break is by far the common case. */
+    private static final class Vocabulary {
+        private final java.util.Set<String> whole = new java.util.HashSet<>(), compounds = new java.util.HashSet<>();
+
+        /** Every word of one run: letters and digits, with the hyphens inside it — a word the run ENDS on with a
+         *  hyphen is a break in progress and says nothing. */
+        void add(String text) {
+            if (text == null) return;
+            int n = text.length();
+            for (int i = 0; i < n; ) {
+                if (!Character.isLetterOrDigit(text.charAt(i))) { i++; continue; }
+                int j = i;
+                while (j < n && (Character.isLetterOrDigit(text.charAt(j)) || text.charAt(j) == '-')) j++;
+                int end = j;
+                while (end > i && text.charAt(end - 1) == '-') end--;
+                if (end == j) {
+                    String w = text.substring(i, end).toLowerCase(java.util.Locale.ROOT);
+                    (w.indexOf('-') >= 0 ? compounds : whole).add(w);
+                }
+                i = j;
+            }
+        }
+
+        /** Whether the hyphen ending {@code b} joins two halves of a compound the document writes whole. */
+        boolean compound(StringBuilder b, String next) {
+            int i = b.length() - 1;                                    // the hyphen
+            while (i > 0 && Character.isLetterOrDigit(b.charAt(i - 1))) i--;
+            String left = b.substring(i, b.length() - 1);
+            String s = next.stripLeading();
+            int j = 0;
+            while (j < s.length() && Character.isLetterOrDigit(s.charAt(j))) j++;
+            String right = s.substring(0, j);
+            if (left.isEmpty() || right.isEmpty()) return false;
+            String l = left.toLowerCase(java.util.Locale.ROOT), r = right.toLowerCase(java.util.Locale.ROOT);
+            return compounds.contains(l + "-" + r) && !whole.contains(l + r);
+        }
     }
 
     /** Slack on the "reading went back to a margin" test — above the export rounding, below any advance. */
@@ -146,7 +190,7 @@ public final class OCDIndex {
         OCDText prev = null;
         for (Run rr : runs) {                                     // assemble across refs so a word split over runs stays whole
             OCDText t = rr.text();
-            if (t.text() != null && !t.text().isEmpty()) { join(b, t, prev); prev = t; }
+            if (t.text() != null && !t.text().isEmpty()) { join(b, t, prev, vocabulary); prev = t; }
         }
         String tt = b.toString().strip();
         return nfkc(!tt.isEmpty() ? tt : (s.text() == null ? "" : s.text().strip()));

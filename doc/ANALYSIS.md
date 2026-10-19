@@ -396,7 +396,11 @@ Runs reach `Spacer` as pure ink. The moment `Segmenter` rebuilds a clean line (`
    there is no distribution and the style decides;
 3. **line end** (`endLine`) — the line ends on a word boundary: a trailing sentinel, unless it ends in a
    hyphen (left painted, for read-out to rejoin the split word or keep a compound). This seals the
-   inter-line *and* inter-block same-line seam — a `Titre 2` marker block to its rubric block.
+   inter-line *and* inter-block same-line seam — a `Titre 2` marker block to its rubric block. The
+   read-out (`OCDIndex`) decides by self-reference, no lexicon: the hyphen stays when the document writes
+   the compound whole on one line (`allers-retours`) and never the joined form; otherwise the word is
+   rejoined, as poppler does. Wider evidence — both halves being words the document writes — was
+   measured and refused: it kept as many syllable breaks (`inter-face`, `rassemble-ment`) as compounds.
 
 Every space is a render-neutral **sentinel** glyph (gid −1, unicode `" "`): outline-less, so every render
 path skips it (`font.glyph(gid) == null`), yet `text()` / extraction / structure read the `" "`. Because

@@ -156,8 +156,8 @@ final class Fixtures {
      * offset. A justified column whose word spaces vary from tight to loose, a results table whose names hold
      * a word space beside wide column gaps, tracked capitals, a headline under Tz, and two columns set on
      * baselines offset by half a line, running on under a photo set across their gutter, and a title set tight
-     * over a two-column list — each one a way the words were lost (glued, or read row by row across the
-     * columns).
+     * over a two-column list, and three line-final hyphens — each one a way the words were lost (glued, read row
+     * by row across the columns, or a compound's hyphen dropped).
      */
     private static void press(Doc d, PDPageContentStream cs) throws IOException {
         PDFont times = new PDType1Font(Standard14Fonts.FontName.TIMES_ROMAN);
@@ -208,6 +208,14 @@ final class Fixtures {
         String[] r2 = { "Jeudi", "Fête du village", "Samedi", "Course populaire" };
         for (int i = 0; i < l2.length; i++) words.add(tj(cs, i % 2 == 0 ? bold : times, 8, x, row(y, i), l2[i], null, 0, 100));
         for (int i = 0; i < r2.length; i++) words.add(tj(cs, i % 2 == 0 ? bold : times, 8, x + col + gutter, row(y, i), r2[i], null, 0, 100));
+        // a line-final hyphen, three ways: a compound the page also writes whole keeps it, a syllable break
+        // whose joined word the page writes rejoins, and one the page says nothing of rejoins (the common case)
+        y -= 70;
+        String[] hy = { "les allers-retours entre", "les deux villes et les allers-", "retours du soir avec la pré-",
+                        "vention routière et la prévention", "des chantiers de collabo-", "ration avec le canton" };
+        for (int i = 0; i < hy.length; i++) tj(cs, times, 9, x, y - i * 11, hy[i], null, 0, 100);
+        words.add("les allers-retours entre les deux villes et les allers-retours du soir avec la prévention"
+                + " routière et la prévention des chantiers de collaboration avec le canton");
         WORDS.put("text_press", words);
     }
 
