@@ -37,7 +37,7 @@ final class EpubPackage {
     private EpubPackage() {}
 
     static final String MIME       = "application/epub+zip";
-    static final String OPF        = "OEBPS/";
+    static final String OPF        = OCDVocab.OPF;
     /** The cover is a RASTERISED page, and a rasterised page is a photograph: PNG stores it losslessly
      *  and pays for it — measured 482 KB of a 722 KB container, two thirds of the whole book for a
      *  thumbnail a reader shows at a couple of hundred pixels. JPEG is what a cover is for. */
@@ -426,6 +426,6 @@ final class EpubPackage {
     /** Where a heading lives: the page member of its first referenced page. Also one method in each. */
     static String headingHref(OCDStructNode s) {
         int p = firstPage(s);
-        return "pages/" + OCDVocab.pageFile((p < 0 ? 0 : p) + 1) + ".xhtml";
+        return OCDVocab.pageHref((p < 0 ? 0 : p) + 1);
     }
 }

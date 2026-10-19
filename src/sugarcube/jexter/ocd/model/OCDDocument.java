@@ -74,11 +74,16 @@ public final class OCDDocument {
     // rendering the import (the export rounds to 4 decimals), so a re-export reuses the cover it read, or
     // write(read(x)) = x breaks on one member. A copy is only true while page 1 is: every model operation
     // that changes pages calls dropCover() — a redacted document once shipped its unredacted first page.
+    // The key is the container's own proof of the same fact (FORMAT §A2 "cover"): what page-1 member the
+    // cover was rasterized from, so an edit made OUTSIDE the engine (Prism's editor) is caught on read too.
     private byte[] cover;
-    public OCDDocument cover(byte[] png) { this.cover = png; return this; }
+    private String coverKey;
+    /** The cover read back, and the {@code meta.json} key that proved it still matched its page. */
+    public OCDDocument cover(byte[] jpg, String key) { this.cover = jpg; this.coverKey = key; return this; }
     public byte[]      cover()           { return cover; }
+    public String      coverKey()        { return coverKey; }
     /** Page 1 may have changed: the next write rasterizes a fresh cover. */
-    public OCDDocument dropCover()       { this.cover = null; return this; }
+    public OCDDocument dropCover()       { this.cover = null; this.coverKey = null; return this; }
 
     // ── images (document-scoped) ────────────────────────────────────────────────
     private int imageSeq = 0;

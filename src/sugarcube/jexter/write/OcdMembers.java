@@ -101,11 +101,14 @@ public final class OcdMembers {
     /** The output intent's ICC profile, a member of its own under {@code ocd/} — binary, so not in the JSON. */
     public static final String OUTPUT_INTENT_PROFILE = "output-intent.icc";
 
-    public static String metaJson(OCDDocument doc) {
+    /** {@code ocd/meta.json} (FORMAT §A2); {@code coverKey} is page 1's {@link OCDVocab#coverKey}, null when the
+     *  container carries no cover that matches it. */
+    public static String metaJson(OCDDocument doc, String coverKey) {
         OCDMeta m = doc.meta();
         JxStringer js = new JxStringer(512).obj()
                 .str("format", "ocd-epub")
-                .str("version", sugarcube.jexter.ocd.io.OCDVocab.VERSION);
+                .str("version", OCDVocab.VERSION);
+        if (coverKey != null) js.str("cover", coverKey);
         if (doc.id() != null && !doc.id().isEmpty()) js.str("id", doc.id());
         if (doc.textSegmented() || doc.headingsDetected()) {
             js.obj("analysis");

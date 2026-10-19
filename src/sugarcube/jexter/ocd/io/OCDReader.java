@@ -90,8 +90,7 @@ public final class OCDReader {
 
     private OCDReader() {}
 
-    static final String OPF = "OEBPS/";
-    static final String JX  = OPF + "ocd/";      // the members are named for the FORMAT, not the engine
+    private static final String OPF = OCDVocab.OPF, JX = OCDVocab.MEMBERS;
 
     // ── Tier 2: full model ──────────────────────────────────────────────────────
     public static OCDDocument read(File file) throws Exception {
@@ -162,8 +161,8 @@ public final class OCDReader {
         // A version this reader does not know is REFUSED, never guessed at (OCDVocab.readable).
         Object ver = meta.get("version");
         if (!OCDVocab.readable(ver == null ? null : ver.toString()))
-            throw new IOException("OCD-EPUB version " + ver + " is newer than this reader, which reads versions 2 to "
-                    + OCDVocab.VERSION + " \u2014 update jexter to open it");
+            throw new IOException("OCD-EPUB version " + ver + " \u2014 this reader reads version " + OCDVocab.VERSION
+                    + " only: reconvert the document from its source");
 
         OCDDocument doc = new OCDDocument();
         readMeta(meta, doc);
@@ -200,9 +199,15 @@ public final class OCDReader {
             ZipEntry e = entries.nextElement();
             String name = e.getName();
             if (e.isDirectory()) continue;
-            if (name.equals(OPF + "images/cover.jpg") || name.equals(OPF + "images/cover.png"))
-                doc.cover(zf.getInputStream(e).readAllBytes());        // resource: reused verbatim on re-export
-            else if (name.startsWith(OPF + "images/"))
+            if (name.equals(OPF + "images/cover.jpg") || name.equals(OPF + "images/cover.png")) {
+                // Reused verbatim on re-export — while it is still a picture of page 1 (FORMAT §A2 "cover"):
+                // a page edited outside the engine leaves a stale cover behind, and its key says so.
+                String key = s(meta, "cover");
+                List<ZipEntry> pages = pageFiles(zf);
+                if (key != null && !pages.isEmpty()
+                        && key.equals(OCDVocab.coverKey(zf.getInputStream(pages.get(0)).readAllBytes())))
+                    doc.cover(zf.getInputStream(e).readAllBytes(), key);
+            } else if (name.startsWith(OPF + "images/"))
                 doc.addImage(name.substring((OPF + "images/").length()), zf.getInputStream(e).readAllBytes());
             else if (name.startsWith(OPF + "media/"))
                 doc.addMedia(name.substring((OPF + "media/").length()), zf.getInputStream(e).readAllBytes());
@@ -212,14 +217,6 @@ public final class OCDReader {
         ZipEntry gl = zf.getEntry(OPF + "pages/fonts.svg");
         if (gl != null) fonts(zf, gl, doc);
         return doc;
-    }
-
-    /** A page written with the old rotation CARRIER ({@code <g data-ocd="rot">}), whose viewBox was the
-     *  visual frame and whose crop was {@code data-crop}. Nothing writes one any more; recognising it is
-     *  what keeps such a container readable instead of silently mis-framed. */
-    private static boolean legacyRotCarrier(Element svg) {
-        for (Element e : children(svg)) if ("rot".equals(e.getAttribute("data-ocd"))) return true;
-        return false;
     }
 
     /** The crop box a page's root {@code viewBox} states, in page space — null when the window is the
@@ -256,7 +253,7 @@ public final class OCDReader {
         while (entries.hasMoreElements()) {
             ZipEntry e = entries.nextElement();
             String n = e.getName();
-            if (!e.isDirectory() && OCDVocab.isPageMember(n, OPF))
+            if (!e.isDirectory() && OCDVocab.isPageMember(n))
                 byName.put(n, e);
         }
         List<ZipEntry> out = new ArrayList<>(byName.size());
@@ -321,10 +318,8 @@ public final class OCDReader {
         if (svg.hasAttribute("data-dpi")) page.dpi(dbl(svg.getAttribute("data-dpi"), 72));
         JxRect r;
         // The crop is a WINDOW: the root viewBox states it (§B2), so a re-crop moves no element and the
-        // stored page is the unrotated document. A page written before that — recognisable by its
-        // rotation CARRIER, which nothing mints any more — states its crop the old way and has a visual
-        // viewBox; it is read on its own terms rather than misread on the new ones.
-        page.cropBox(legacyRotCarrier(svg) ? battr(svg, "data-crop") : window(svg, media));
+        // stored page is the unrotated document.
+        page.cropBox(window(svg, media));
         if ((r = battr(svg, "data-bleedbox")) != null) page.bleedBox(r);
         if ((r = battr(svg, "data-trimbox"))  != null) page.trimBox(r);
         if ((r = battr(svg, "data-artbox"))   != null) page.artBox(r);
@@ -338,8 +333,7 @@ public final class OCDReader {
         var parsed = new LinkedHashMap<String, OCDNode>();     // id -> node, in paint (document) order
         var ord = new HashMap<OCDNode, Integer>();             // node -> data-order (reading index)
         float[] z = { 0f };
-        Element body = firstBelowRotation(svg, page);
-        for (Element el : children(body)) {
+        for (Element el : children(svg)) {
             if ("links".equals(el.getAttribute("data-ocd"))) { links(el, page); continue; }
             walk(el, page, css, grads, clipDefs, bySafe, parsed, z, null, null, ord);
         }
@@ -381,8 +375,9 @@ public final class OCDReader {
             OCDLink lk = new OCDLink(flip.apply(sr));
             String href = a.getAttribute("href");
             if (href == null || href.isEmpty()) href = a.getAttributeNS("http://www.w3.org/1999/xlink", "href");
-            if (href != null && href.startsWith("page-") && href.endsWith(".xhtml")) {
-                lk.pageIndex((int) dbl(href.substring(5, href.length() - 6), 1) - 1);
+            int target = OCDVocab.linkedPage(href);
+            if (target >= 0) {
+                lk.pageIndex(target);
                 if (a.hasAttribute("data-y")) lk.y(dbl(a.getAttribute("data-y"), Double.NaN));
             } else lk.uri(href == null ? "" : href);
             page.addLink(lk);
@@ -618,7 +613,6 @@ public final class OCDReader {
             p.stroke(argb(stroke, d.get("stroke-opacity"))).pen(pen(d));
         }
         blend(d, p);
-        clipRef(el, p);
         return p;
     }
 
@@ -641,15 +635,7 @@ public final class OCDReader {
         String style = el.getAttribute("style");
         if (style != null && style.contains("mix-blend-mode:"))
             im.blend(blendName(style.substring(style.indexOf("mix-blend-mode:") + 15).replace(";", "").trim()));
-        clipRef(el, im);
         return im;
-    }
-
-    /** {@code clip-path="url(#cN)"} borne by the node itself → its clip id. jexter writes the clip on a
-     *  wrapper instead (§B3), so this is tolerance for hand-authored SVG, not the grammar's own form. */
-    private static void clipRef(Element el, OCDNode n) {
-        String cp = el.getAttribute("clip-path");
-        if (cp != null && cp.startsWith("url(#")) n.clipId(cp.substring(5, cp.length() - 1));
     }
 
     private static void state(Element el, OCDNode n) {
@@ -772,14 +758,6 @@ public final class OCDReader {
         return n;
     }
 
-    /** Content root: past the rotation wrapper when /Rotate ≠ 0, matched by NAME (data-ocd="rot"). */
-    private static Element firstBelowRotation(Element svg, OCDPage page) {
-        if (page.rotation() == 0) return svg;
-        for (Element c : children(svg))
-            if ("g".equals(c.getLocalName()) && "rot".equals(c.getAttribute("data-ocd"))) return c;
-        return svg;
-    }
-
     private static List<Element> children(Element el) {
         var out = new ArrayList<Element>();
         for (Node n = el.getFirstChild(); n != null; n = n.getNextSibling())
@@ -822,7 +800,7 @@ public final class OCDReader {
                 double[] coords = linear
                         ? new double[]{ dbl(g.getAttribute("x1"), 0), dbl(g.getAttribute("y1"), 0),
                                         dbl(g.getAttribute("x2"), 0), dbl(g.getAttribute("y2"), 0) }
-                        : new double[]{ dbl(g.getAttribute("fx"), 0), dbl(g.getAttribute("fy"), 0), 0,
+                        : new double[]{ dbl(g.getAttribute("fx"), 0), dbl(g.getAttribute("fy"), 0), dbl(g.getAttribute("fr"), 0),
                                         dbl(g.getAttribute("cx"), 0), dbl(g.getAttribute("cy"), 0), dbl(g.getAttribute("r"), 0) };
                 JxTransform t = g.hasAttribute("gradientTransform")
                         ? transformOf(g.getAttribute("gradientTransform")) : JxTransform.IDENTITY;
@@ -834,12 +812,11 @@ public final class OCDReader {
                 }
                 float[] fo = new float[offs.size()]; int[] co = new int[cols.size()];
                 for (int k = 0; k < fo.length; k++) { fo[k] = offs.get(k); co[k] = cols.get(k); }
-                // spreadMethod="pad" (also the SVG default when absent) is the projection of PDF
-                // Extend [true true] — the writer emits it for extended axes; anything else means
-                // the source axis was not extended.
-                boolean pad = !g.hasAttribute("spreadMethod") || "pad".equals(g.getAttribute("spreadMethod"));
+                // PDF's Extend, start and end (§B3): data-extend="1 0", absent = both extended.
+                String[] ext = g.getAttribute("data-extend").trim().split("\\s+");
+                boolean e0 = ext.length != 2 || !"0".equals(ext[0]), e1 = ext.length != 2 || !"0".equals(ext[1]);
                 out.put(g.getAttribute("id"),
-                        new OCDGradient(linear ? OCDGradient.Kind.LINEAR : OCDGradient.Kind.RADIAL, coords, fo, co, t, pad, pad));
+                        new OCDGradient(linear ? OCDGradient.Kind.LINEAR : OCDGradient.Kind.RADIAL, coords, fo, co, t, e0, e1));
             }
         }
         return out;

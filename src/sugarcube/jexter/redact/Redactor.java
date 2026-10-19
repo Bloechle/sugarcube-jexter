@@ -253,7 +253,7 @@ public final class Redactor {
      *             covering box's own colour for audit zones. A non-null fill overrides both.
      */
     public static Report apply(OCDDocument doc, Zones zones, Integer fill) throws IOException {
-        doc.dropCover();                                              // the cover read back shows the page unredacted
+        if (zones.byPage().containsKey(1)) doc.dropCover();           // the cover read back shows page 1 unredacted
         for (Map.Entry<Integer, List<Zone>> e : zones.byPage().entrySet()) {
             OCDPage page = doc.page(e.getKey() - 1);
             if (page == null) throw new IllegalArgumentException("no page " + e.getKey());

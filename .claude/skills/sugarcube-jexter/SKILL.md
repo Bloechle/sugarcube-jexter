@@ -1105,8 +1105,8 @@ at (0,0)). Over that frame:
   carrier is gone from the OCD flavour — the stored page is the UNROTATED document and the viewer
   turns it. The presentation flavours keep baking it in, because they must render anywhere:
   `SvgWriter` (standalone `.svg`, fixed-layout EPUB) keeps the visual viewBox and the carrier,
-  `PdfWriter` sets `/Rotate`. A page written the old way is recognised by that carrier and read on its
-  own terms.
+  `PdfWriter` sets `/Rotate`. Since v4 a page written the old way is not read at all: the container
+  states version 3 and is refused (reconvert it).
 - Byte cost of the change: **27 of 29** documents (the synthetic matrix + a 6-page fixture) serialize
   byte-identically; only `page_mediabox_cropbox` and `page_rotate` move, once.
 - `OCDPage.cropBox(null)` — or the media box — now CLEARS the crop. The old guard made "back to full
@@ -1972,7 +1972,10 @@ It holds invariants that every engine change must keep. Gate them with
   PDF's md/doctags must contain body text, not just titles.
 - **Cover is a resource** — `OCDDocument.cover()` round-trips verbatim;
   `EpubPackage.cover` re-rasterizes only when absent. `write(read(x)) = x`
-  must hold on EVERY member, cover included.
+  must hold on EVERY member, cover included. Two guards keep it true: a model edit of page 1
+  calls `dropCover()` (Redactor, Pages), and `meta.json` `cover` (v4) is `OCDVocab.coverKey` of the
+  page-1 member, so the reader drops a cover whose page was edited outside the engine (EDITED gate).
+  A patch that redacts page 1 carries the fresh cover and its `meta.json`.
 - **Fonts** — `font/OtfBuilder` (abstract sealed) owns the shared sfnt tables;
   `CffOtf`/`GlyfOtf` keep only format-specific ones (`head`/`maxp`/cmap
   records/`OS/2`/`post` — metric constants are hand-tuned per upem grid, do

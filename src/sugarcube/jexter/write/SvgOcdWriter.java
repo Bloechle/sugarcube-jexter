@@ -474,7 +474,7 @@ public final class SvgOcdWriter {
             sugarcube.jexter.core.JxRect r = flip.apply(lk.rect());
             sb.append("<a href=\"");
             if (lk.isExternal()) sb.append(esc(lk.uri()));
-            else sb.append(String.format("page-%03d.xhtml", lk.pageIndex() + 1));
+            else sb.append(OCDVocab.pageLink(lk.pageIndex()));
             sb.append('"');
             if (!lk.isExternal() && lk.hasY()) sb.append(" data-y=\"").append(f(lk.y())).append('"');
             sb.append("><rect x=\"").append(f(r.x())).append("\" y=\"").append(f(r.y()))

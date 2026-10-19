@@ -49,7 +49,7 @@
  *
  * Chrome is the #redact-drawer declared in index.html (one right drawer per mode); this file only binds
  * it. The page overlay is data-ui chrome that persist() strips. Coordinates: a page SVG is the page's
- * effective box (data-mediabox, else a legacy page's data-crop) Y-flipped — svg (sx, sy) ↔ page (sx + bx, by + bh − sy);
+ * box (data-mediabox) Y-flipped — svg (sx, sy) ↔ page (sx + bx, by + bh − sy);
  * items are kept in PAGE space, what the engine reads.
  */
 import { unzipSync } from '/shared/vendor/fflate.js';
@@ -135,18 +135,16 @@ function hidden(idx) {
 
 /* -- page geometry ------------------------------------------------------------------------------ */
 function pageBox(svg) {
-  const [x, y, w, h] = (svg.getAttribute('data-mediabox') || svg.getAttribute('data-crop') || '').split(/\s+/).map(Number);
+  const [x, y, w, h] = (svg.getAttribute('data-mediabox') || '').split(/\s+/).map(Number);
   return Number.isFinite(h) ? { x, y, w, h } : { x: 0, y: 0, w: 0, h: 0 };
 }
 const toSvg  = (b, r) => ({ x: r[0] - b.x, y: b.y + b.h - r[1] - r[3], w: r[2], h: r[3] });
 const toPage = (b, s) => [s.x + b.x, b.y + b.h - s.y - s.h, s.w, s.h];
-const ref = (svg) => svg.querySelector('g[data-ocd="rot"]') || svg;   // the CTM that maps screen → page-SVG space
-// `ref` is the page root, or the rotation carrier a page written before the grammar moved rotation to
-// data-rotate still has: the mapping is gizmo.js's, the choice of reference is this format's.
-const svgPoint = (svg, e) => svgPointOf(svg, e, ref(svg));
+// The page root is the frame: its CTM maps screen → page-SVG space (the mapping is gizmo.js's).
+const svgPoint = (svg, e) => svgPointOf(svg, e, svg);
 /** An element's box in page-SVG space (its bbox through its CTM relative to the page frame). */
 function elBox(svg, el) {
-  const bb = el.getBBox(), m = ref(svg).getScreenCTM().inverse().multiply(el.getScreenCTM());
+  const bb = el.getBBox(), m = svg.getScreenCTM().inverse().multiply(el.getScreenCTM());
   const pts = [[bb.x, bb.y], [bb.x + bb.width, bb.y], [bb.x, bb.y + bb.height], [bb.x + bb.width, bb.y + bb.height]]
     .map(([x, y]) => { const p = svg.createSVGPoint(); p.x = x; p.y = y; return p.matrixTransform(m); });
   const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
@@ -157,7 +155,7 @@ function elBox(svg, el) {
 function layer(doc) {
   const svg = doc.querySelector('svg[data-ocd="page"]'); if (!svg) return null;
   let g = svg.querySelector('.rd-layer');
-  if (!g) { g = doc.createElementNS(SVG_NS, 'g'); g.setAttribute('class', 'rd-layer'); g.setAttribute('data-ui', ''); g.setAttribute('data-z', 'over'); ref(svg).appendChild(g); }
+  if (!g) { g = doc.createElementNS(SVG_NS, 'g'); g.setAttribute('class', 'rd-layer'); g.setAttribute('data-ui', ''); g.setAttribute('data-z', 'over'); svg.appendChild(g); }
   return g;
 }
 function rect(doc, cls, s, title, fill) {

@@ -32,6 +32,7 @@
 import '/shared/js/icons.js';                          // the apps' icon set (icons.add): registered before boot() draws
 import { boot, theme, toast, makeDropZone, makeDialog, makeMenu, copy } from '/shared/vendor/qry/qry-app.js';
 import { unzip } from '/shared/vendor/fflate.js';
+import { ocdRefusal } from '/shared/js/ocd.js';
 
 // The chassis takes NO static /shared import: `book.js` reads `window.prism` at module scope, so the
 // seam has to exist first — every /shared module is pulled in `main()`. One namespace string is not a
@@ -459,6 +460,8 @@ async function openEpub(buffer, name) {
   let files;
   try { files = await new Promise((res, rej) => unzip(new Uint8Array(buffer), (err, out) => err ? rej(err) : res(out))); }
   catch { toast('Not a valid ZIP/EPUB archive.', { tone: 'danger' }); setStatus('<i data-icon="sparkles"></i> Ready'); return; }
+  const refused = ocdRefusal(files);
+  if (refused) { toast(refused, { tone: 'danger' }); $('body').cls('-is-loading'); setStatus('<i data-icon="sparkles"></i> Ready'); return; }
 
   const prev = state.id;
   const id = 'b' + (++seq);
@@ -546,8 +549,7 @@ async function loadEpub(id, name) {
 // A stored page is the UNROTATED document (FORMAT §B2): its width/height are its own, and `data-rotate`
 // says how it must be turned to be read — page metadata, exactly as PDF's /Rotate, so rotating a page
 // touches one attribute and no element. THE VIEWER TURNS IT: `pw`/`ph` are the page's own size, `w`/`h`
-// the visual one the layout reserves. A page written before that rotates itself in a carrier group; it
-// is left alone, or it would be turned twice.
+// the visual one the layout reserves.
 async function prefetch(urls) {
   const pages = new Array(urls.length);
   let i = 0;
@@ -563,7 +565,7 @@ async function prefetch(urls) {
           page.w = +svg.getAttribute('width')  || page.w;
           page.h = +svg.getAttribute('height') || page.h;
           const rot = ((+svg.getAttribute('data-rotate') || 0) % 360 + 360) % 360;
-          if (rot && !svg.querySelector('[data-ocd="rot"]')) {          // not a self-rotating legacy page
+          if (rot) {
             page.rot = rot;
             page.pw = page.w; page.ph = page.h;                          // the page's own size
             if (rot === 90 || rot === 270) { page.w = page.ph; page.h = page.pw; }

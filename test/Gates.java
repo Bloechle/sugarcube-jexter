@@ -23,6 +23,7 @@
 import sugarcube.jexter.core.JxStroke;
 import sugarcube.jexter.core.JxTransform;
 import sugarcube.jexter.ocd.io.OCDReader;
+import sugarcube.jexter.ocd.io.OCDVocab;
 import sugarcube.jexter.ocd.model.*;
 import sugarcube.jexter.pdfimport.PdfImporter;
 import sugarcube.jexter.write.Conversion;
@@ -193,6 +194,7 @@ public final class Gates {
             if (a.fill() != b.fill()) d.add(String.format("fill %08X -> %08X", a.fill(), b.fill()));
             if (a.stroke() != b.stroke()) d.add(String.format("stroke %08X -> %08X", a.stroke(), b.stroke()));
             if (a.isStroked() && !samePen(a.pen(), b.pen())) d.add("pen " + a.pen() + " -> " + b.pen());
+            if (!sameGradient(a.fillGradient(), b.fillGradient())) d.add("gradient");
             if (!a.geometry().toSvg().equals(b.geometry().toSvg())) d.add("geometry");
         }
         return d;
@@ -205,6 +207,18 @@ public final class Gates {
         if (x != null) for (int i = 0; i < x.length; i++) if (Math.abs(x[i] - y[i]) > TOLERANCE) return false;
         return a.cap() == b.cap() && a.join() == b.join() && Math.abs(a.width() - b.width()) <= TOLERANCE
                 && Math.abs(a.miterLimit() - b.miterLimit()) <= TOLERANCE && Math.abs(a.dashPhase() - b.dashPhase()) <= TOLERANCE;
+    }
+
+    /** Same kind, both circles or the axis, both extends, the matrix and the stops — at export precision. */
+    private static boolean sameGradient(OCDGradient a, OCDGradient b) {
+        if (a == null || b == null) return a == b;
+        if (a.kind() != b.kind() || a.extend0() != b.extend0() || a.extend1() != b.extend1()
+                || a.coords().length != b.coords().length || a.offsets().length != b.offsets().length
+                || delta(a.transform(), b.transform()) > TOLERANCE) return false;
+        for (int i = 0; i < a.coords().length; i++) if (Math.abs(a.coords()[i] - b.coords()[i]) > TOLERANCE) return false;
+        for (int i = 0; i < a.offsets().length; i++)
+            if (Math.abs(a.offsets()[i] - b.offsets()[i]) > TOLERANCE || a.colors()[i] != b.colors()[i]) return false;
+        return true;
     }
 
     private static void diff(List<String> out, String what, Object a, Object b) {
@@ -289,13 +303,23 @@ public final class Gates {
     // ── EDITED ───────────────────────────────────────────────────────────────────
 
     private static List<String> edited(byte[] good, Path tmp) throws Exception {
+        List<String> bad = new ArrayList<>();
+        // The cover is page 1 rasterized (FORMAT §A2 "cover"): kept while page 1 is the page it was made
+        // from, dropped the moment page 1 is edited outside the engine — even by one byte.
+        OCDDocument same = OCDReader.read(tmpWrite(tmp, good));
+        if (same.cover() == null) bad.add("the cover of an unedited container was not kept");
+        Path touched = tmp.resolve("touched.ocd.epub");
+        Files.write(touched, onPage(good, s -> s + "\n"));
+        if (OCDReader.read(touched.toFile()).cover() != null) bad.add("page 1 was edited and its stale cover was kept");
+
         var m = java.util.regex.Pattern.compile("<path id=\"([^\"]+)\"[^>]* transform=\"").matcher(member(good, PAGE));
-        if (!m.find()) return ok();                                    // no content path on page 1
+        if (!m.find()) return bad;                                     // no content path on page 1
         String id = m.group(1), at = m.group();
         Path f = tmp.resolve("edited.ocd.epub");
         Files.write(f, onPage(good, s -> once(s, at, at + "translate(7 0) ")));
-        double before = pathX(OCDReader.read(tmpWrite(tmp, good)), id), after = pathX(OCDReader.read(f.toFile()), id);
-        return Math.abs(after - before - 7) < TOLERANCE ? ok() : List.of(id + " moved by " + (after - before) + ", expected 7");
+        double before = pathX(same, id), after = pathX(OCDReader.read(f.toFile()), id);
+        if (Math.abs(after - before - 7) >= TOLERANCE) bad.add(id + " moved by " + (after - before) + ", expected 7");
+        return bad;
     }
 
     private static File tmpWrite(Path tmp, byte[] bytes) throws Exception {
@@ -338,6 +362,13 @@ public final class Gates {
         variants.put("deepjson", rezip(good, (n, b) -> n.endsWith("meta.json")                       // once a StackOverflowError
                 ? ("[".repeat(100_000) + "]".repeat(100_000)).getBytes(StandardCharsets.UTF_8) : b));
         variants.put("trunc", Arrays.copyOf(good, good.length / 2));
+        // A version this reader is not (FORMAT, Versions): an older one and none at all are refused like a newer one.
+        String meta = member(good, "meta.json"), ver = "\"version\":\"" + OCDVocab.VERSION + "\"";
+        if (!meta.contains(ver)) bad.add("meta.json states no " + ver);
+        for (String[] v : new String[][] { { "oldver", "\"version\":\"3\"" }, { "nover", "\"v\":\"\"" } }) {
+            byte[] edited = meta.replace(ver, v[1]).getBytes(StandardCharsets.UTF_8);
+            variants.put(v[0], rezip(good, (n, b) -> n.endsWith("meta.json") ? edited : b));
+        }
 
         for (var v : variants.entrySet()) {
             Path f = tmp.resolve("hostile-" + v.getKey() + ".ocd.epub");

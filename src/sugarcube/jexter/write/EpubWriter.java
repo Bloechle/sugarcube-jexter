@@ -115,7 +115,7 @@ public final class EpubWriter {
                     </body>
                     </html>
                     """.formatted("OCDPage " + i, num(page.displayWidth()), num(page.displayHeight()), svg);
-            zip.deflated(OPF + "pages/" + OCDVocab.pageFile(i++) + ".xhtml", xhtml);
+            zip.deflated(OCDVocab.pagePath(i++), xhtml);
         }
     }
 
@@ -127,23 +127,23 @@ public final class EpubWriter {
         // projection choice, not a fact about the document — the model is never touched.
         String tocInner = Boolean.TRUE.equals(opt.get(ConvertOptions.NAV_PER_PAGE))
                 ? EpubPackage.tocPerPage(doc, doc.structure(), ix,
-                        p -> "pages/" + OCDVocab.pageFile(p + 1) + ".xhtml", p -> "Page " + (p + 1))
+                        p -> OCDVocab.pageHref(p + 1), p -> "Page " + (p + 1))
                 : doc.structure() != null
                 ? EpubPackage.tocOl(doc.structure(), ix, EpubPackage::headingHref) : "";
         if (tocInner.isBlank()) {
             var sb = new StringBuilder();
             int i = 1;
             for (OCDPage ignored : doc.pages())
-                sb.append("    <li><a href=\"pages/").append(OCDVocab.pageFile(i)).append(".xhtml\">Page ")
+                sb.append("    <li><a href=\"").append(OCDVocab.pageHref(i)).append("\">Page ")
                   .append(i++).append("</a></li>\n");
             tocInner = sb.toString();
         }
         var plist = new StringBuilder();
         int i = 1;
         for (OCDPage ignored : doc.pages())
-            plist.append("    <li><a href=\"pages/").append(OCDVocab.pageFile(i)).append(".xhtml\">")
+            plist.append("    <li><a href=\"").append(OCDVocab.pageHref(i)).append("\">")
                  .append(i++).append("</a></li>\n");
-        String start = "pages/" + OCDVocab.pageFile(1) + ".xhtml";
+        String start = OCDVocab.pageHref(1);
         zip.deflated(OPF + "nav.xhtml", EpubPackage.navDoc(title(doc), tocInner, start, plist.toString()));
     }
 
@@ -158,7 +158,7 @@ public final class EpubWriter {
             for (OCDStructNode h : heads) ncx.add(EpubPackage.label(h, ix), EpubPackage.headingHref(h));
         } else {
             int n = 1;
-            for (OCDPage ignored : doc.pages()) { ncx.add("Page " + n, "pages/" + OCDVocab.pageFile(n) + ".xhtml"); n++; }
+            for (OCDPage ignored : doc.pages()) { ncx.add("Page " + n, OCDVocab.pageHref(n)); n++; }
         }
         zip.deflated(OPF + "toc.ncx", EpubPackage.ncx(uid, title(doc), ncx.inner()));
     }
@@ -186,9 +186,8 @@ public final class EpubWriter {
         }
         int i = 1;
         for (OCDPage ignored : doc.pages()) {
-            String pf = OCDVocab.pageFile(i);
-            manifest.append("    <item id=\"page-").append(i).append("\" href=\"pages/").append(pf)
-                    .append(".xhtml\" media-type=\"application/xhtml+xml\" properties=\"svg\"/>\n");
+            manifest.append("    <item id=\"page-").append(i).append("\" href=\"").append(OCDVocab.pageHref(i))
+                    .append("\" media-type=\"application/xhtml+xml\" properties=\"svg\"/>\n");
             spine.append("    <itemref idref=\"page-").append(i).append("\"/>\n");
             i++;
         }

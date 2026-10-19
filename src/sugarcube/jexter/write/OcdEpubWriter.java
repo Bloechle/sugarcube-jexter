@@ -41,7 +41,7 @@ import static sugarcube.jexter.write.EpubPackage.safe;
 public final class OcdEpubWriter {
 
     public static final String MIME = EpubPackage.MIME;
-    static final String JX = OPF + "ocd/";       // the members are named for the FORMAT, not the engine
+    static final String JX = OCDVocab.MEMBERS;
 
     private OcdEpubWriter() {}
 
@@ -55,8 +55,8 @@ public final class OcdEpubWriter {
             EpubPackage.images(zip, doc);
             media(zip, doc);
             EpubPackage.cover(zip, doc);
-            pages(zip, doc);                                      // SVG-OCD pages (universal face)
-            members(zip, doc);                                    // ocd/* (authoritative face)
+            String coverKey = pages(zip, doc);                    // SVG-OCD pages (universal face)
+            members(zip, doc, coverKey);                          // ocd/* (authoritative face)
             nav(zip, doc);
             ncx(zip, doc, uid);
             opf(zip, doc, uid);
@@ -71,16 +71,21 @@ public final class OcdEpubWriter {
             zip.deflated(OPF + "media/" + safe(e.getKey()), e.getValue());
     }
 
-    private static void pages(JxZip zip, OCDDocument doc) throws IOException {
+    /** Writes the pages and returns the cover key of page 1 (null for a document without pages). */
+    private static String pages(JxZip zip, OCDDocument doc) throws IOException {
         var glyphs = new SvgOcdWriter.Fonts(doc);            // shared accumulator: aliases doc-stable
+        String coverKey = null;
         int i = 1;
-        for (OCDPage page : doc.pages()) { zip.deflated(pagePath(i), pageXhtml(doc, page, i, glyphs)); i++; }
+        for (OCDPage page : doc.pages()) {
+            byte[] xhtml = utf8(pageXhtml(doc, page, i, glyphs));
+            if (i == 1) coverKey = OCDVocab.coverKey(xhtml);
+            zip.deflated(OCDVocab.pagePath(i++), xhtml);
+        }
         zip.deflated(OPF + "pages/fonts.svg", utf8(SvgOcdWriter.glyphsSvg(doc, glyphs)));
         for (var e : doc.passengers().entrySet())                       // what the model does not own, verbatim
             zip.deflated(OPF + e.getKey(), e.getValue());
+        return coverKey;
     }
-
-    static String pagePath(int i) { return OPF + "pages/" + OCDVocab.pageFile(i) + ".xhtml"; }
 
     static String pageXhtml(OCDDocument doc, OCDPage page, int i, SvgOcdWriter.Fonts glyphs) {
         return """
@@ -108,17 +113,22 @@ public final class OcdEpubWriter {
      * {@code annots.json}, and {@code meta.json} when {@link ConvertOptions#REDACT_META} purged it). A client
      * puts each member into its open container and reloads those pages; nothing else moves. Font aliases are
      * computed from the skeleton exactly as the full write does, so a patched page addresses
-     * {@code pages/fonts.svg} unchanged.
+     * {@code pages/fonts.svg} unchanged. A patch that redacts page 1 also carries the cover rasterized from
+     * the redacted page and the {@code meta.json} that keys it (§A2): the cover is page 1, and an EPUB reader
+     * shows it on the shelf.
      */
     public static void patch(OCDDocument doc, OutputStream out, ConvertOptions opt) throws IOException {
         var pages = sugarcube.jexter.redact.Redactor.Zones.pagesOf(opt.get(ConvertOptions.REDACT));
         if (pages == null) throw new IllegalArgumentException("patch needs a redact spec that names its pages (not \"audit\")");
         var glyphs = new SvgOcdWriter.Fonts(doc);
+        String coverKey = doc.coverKey();                 // page 1 untouched: the container's cover stays true
         try (JxZip zip = new JxZip(out)) {
             for (int i : new java.util.TreeSet<>(pages)) {
                 OCDPage page = doc.page(i - 1);
                 if (page == null) throw new IllegalArgumentException("no page " + i);
-                zip.deflated(pagePath(i), pageXhtml(doc, page, i, glyphs));
+                byte[] xhtml = utf8(pageXhtml(doc, page, i, glyphs));
+                if (i == 1) coverKey = OCDVocab.coverKey(xhtml);
+                zip.deflated(OCDVocab.pagePath(i), xhtml);
                 for (var im : page.images().toList()) {
                     byte[] b = doc.image(im.resourceRef());
                     if (b != null) zip.deflated(OPF + "images/" + safe(im.resourceRef()), b);
@@ -129,14 +139,16 @@ public final class OcdEpubWriter {
             // The purge runs on the model in Conversion, so without this member it runs and is thrown away:
             // the client's container keeps the title, the authors and the keywords that quote the very text
             // the zones removed, and exports them. A patch must return everything the edit changed.
-            if (opt.get(ConvertOptions.REDACT_META)) zip.deflated(JX + "meta.json", utf8(OcdMembers.metaJson(doc)));
+            if (pages.contains(1)) EpubPackage.cover(zip, doc);     // Redactor dropped it: a fresh one
+            if (pages.contains(1) || opt.get(ConvertOptions.REDACT_META))
+                zip.deflated(JX + "meta.json", utf8(OcdMembers.metaJson(doc, coverKey)));
         }
     }
 
     // ── authoritative face: ocd/* ─────────────────────────────────────────────
 
-    private static void members(JxZip zip, OCDDocument doc) throws IOException {
-        zip.deflated(JX + "meta.json", utf8(OcdMembers.metaJson(doc)));
+    private static void members(JxZip zip, OCDDocument doc, String coverKey) throws IOException {
+        zip.deflated(JX + "meta.json", utf8(OcdMembers.metaJson(doc, coverKey)));
         if (doc.outputIntent() != null && doc.outputIntent().profile() != null)
             zip.deflated(JX + OcdMembers.OUTPUT_INTENT_PROFILE, doc.outputIntent().profile());
         zip.deflated(JX + "outline.json", utf8(OcdMembers.outlineJson(doc)));
@@ -156,16 +168,16 @@ public final class OcdEpubWriter {
             var sb = new StringBuilder();
             int i = 1;
             for (OCDPage ignored : doc.pages())
-                sb.append("    <li><a href=\"pages/").append(OCDVocab.pageFile(i)).append(".xhtml\">Page ")
+                sb.append("    <li><a href=\"").append(OCDVocab.pageHref(i)).append("\">Page ")
                   .append(i++).append("</a></li>\n");
             tocInner = sb.toString();
         }
         var plist = new StringBuilder();
         int i = 1;
         for (OCDPage ignored : doc.pages())
-            plist.append("    <li><a href=\"pages/").append(OCDVocab.pageFile(i)).append(".xhtml\">")
+            plist.append("    <li><a href=\"").append(OCDVocab.pageHref(i)).append("\">")
                  .append(i++).append("</a></li>\n");
-        String start = "pages/" + OCDVocab.pageFile(1) + ".xhtml";
+        String start = OCDVocab.pageHref(1);
         zip.deflated(OPF + "nav.xhtml", EpubPackage.navDoc(EpubPackage.title(doc), tocInner, start, plist.toString()));
     }
 
@@ -180,7 +192,7 @@ public final class OcdEpubWriter {
             for (OCDStructNode h : heads) ncx.add(EpubPackage.label(h, ix), EpubPackage.headingHref(h));
         } else {
             int n = 1;
-            for (OCDPage ignored : doc.pages()) { ncx.add("Page " + n, "pages/" + OCDVocab.pageFile(n) + ".xhtml"); n++; }
+            for (OCDPage ignored : doc.pages()) { ncx.add("Page " + n, OCDVocab.pageHref(n)); n++; }
         }
         zip.deflated(OPF + "toc.ncx", EpubPackage.ncx(uid, EpubPackage.title(doc), ncx.inner()));
     }
@@ -214,9 +226,8 @@ public final class OcdEpubWriter {
         }
         int i = 1;
         for (OCDPage ignored : doc.pages()) {
-            String pf = OCDVocab.pageFile(i);
-            manifest.append("    <item id=\"page-").append(i).append("\" href=\"pages/").append(pf)
-                    .append(".xhtml\" media-type=\"application/xhtml+xml\" properties=\"svg\"/>\n");
+            manifest.append("    <item id=\"page-").append(i).append("\" href=\"").append(OCDVocab.pageHref(i))
+                    .append("\" media-type=\"application/xhtml+xml\" properties=\"svg\"/>\n");
             spine.append("    <itemref idref=\"page-").append(i).append("\"/>\n");
             i++;
         }

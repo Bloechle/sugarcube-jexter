@@ -10,13 +10,13 @@
 > strongly-typed SVG dialect the pages are written in.
 
 Extension: **`.ocd.epub`** · media type `application/epub+zip` · current version
-**3** (`data-version="3"`, `"version": "3"`) — see *Versions* below for what that promises.
+**4** (`data-version="4"`, `"version": "4"`) — see *Versions* below for what that promises.
 
-Status: **v3 — implemented and gated** (`SvgOcdWriter` · `OcdMembers` ·
-`OcdEpubWriter` · `OCDReader`). Standing gates: `write(read(v3)) = v3`
-byte-identical (60/60 Fedlex pages + `fonts.svg`), `pdf→doctags ≡ (pdf→ocd)→doctags`
-byte-identical, fonts reread exactly (glyphs / cmap / weights), `ocd→pdf`
-selectable and `ocd→epub` from a reread container, `javac` 0 errors / 0 warnings.
+Status: **v4 — implemented and gated** (`SvgOcdWriter` · `OcdMembers` ·
+`OcdEpubWriter` · `OCDReader`). The standing gates are `test/Gates.java` (`node nimbus-jexter.cjs
+--run=test`, run by CI): `write(read(v4)) = v4` byte-identical, `pdf→doctags ≡ (pdf→ocd)→doctags`,
+the model read back field by field (paint, pen, gradients, geometry), the three read tiers, edits made
+outside the engine, and hostile containers — including every version but this one — refused.
 
 ## Versions
 
@@ -27,14 +27,16 @@ The format is the canonical model of a document, not a container that accretes o
   (`OCDVocab.VERSION`), the client from one (`ocd.js` `OCD_VERSION`).
 - **A new version owes nothing to the old readers.** It may drop, rename or reshape anything;
   backward compatibility is not a constraint on the design.
-- **A reader REFUSES a version it does not know**, with a message that says so — a reader that
-  half-understands a format is how a document is silently misread (`OCDVocab.readable`). It
-  reads an older version only where that version is a strict subset of the current one.
+- **A reader REFUSES every version but its own**, with a message that says so — a reader that
+  half-understands a format is how a document is silently misread (`OCDVocab.readable`). A
+  container that states no version is refused too. Reconvert from the source to move a document
+  to a new version.
 
 | version | since | what it is |
 |---|---|---|
 | 2 | 2026-08 | the self-contained page: text stream, reading order, lines, links and boxes in the page; fonts once in `fonts.svg` |
-| 3 | 2026-10-04 | **recognized text is native**: OCR text is a *recognition layer* over the picture (§B4b) naming the engine that read it, every word carrying its confidence (§B4 `data-conf`). A v2 container is v3 without them, and reads as one |
+| 3 | 2026-10-04 | **recognized text is native**: OCR text is a *recognition layer* over the picture (§B4b) naming the engine that read it, every word carrying its confidence (§B4 `data-conf`) |
+| 4 | 2026-10-19 | **lossless gradients and a cover that knows its page**: a radial gradient states its start radius (`fr`) and a gradient whose ends do not extend says so (`data-extend`, §B3); `meta.json` names the page the cover was rasterized from (`cover`, §A2), so a cover outlives no edit of page 1. Gone: the rotation carrier and `data-crop` of v2 pages, a clip stated on the node itself, and a container that states no version |
 
 ---
 
@@ -50,7 +52,7 @@ OEBPS/
   nav.xhtml                       EPUB nav (from the outline)
   toc.ncx                         EPUB 2 fallback nav
   pages/
-    page-001.xhtml …              SVG-OCD v3 pages (one spine item each)
+    page-001.xhtml …              SVG-OCD pages (one spine item each)
     fonts.svg                         THE font representation (shared, see §B6)
   images/<ref>                    shared raster resources (page <image> hrefs)
                                   PNG or JPEG only — a source in any other codec
@@ -77,7 +79,8 @@ book, not a model).
 
 ```jsonc
 {
-  "format": "ocd-epub", "version": "3",
+  "format": "ocd-epub", "version": "4",
+  "cover": "sha256:…",                     // the page-1 member the cover was rasterized from (below)
   "id": "…",                              // document id, when set
   "analysis": {                            // only when analysis ran
     "textSegmented": true, "headingsDetected": true },
@@ -101,6 +104,13 @@ verbatim and written back by the PDF projection; when its profile is CMYK the im
 `DeviceCMYK` paint to the model's sRGB through it (Java's `ICC_ColorSpace.toRGB`, within 1–2 levels of
 MuPDF on the same file) instead of PDFBox's built-in profile. Measured on a press page with Coated
 FOGRA39: a `1 0.5 0 0.2 k` background shows 0,89,154 with the intent and 0,94,157 without.
+
+`cover` is the SHA-256 of the page-1 member (`pages/page-001.xhtml`, its bytes as written) the cover
+was rasterized from. A reader keeps `images/cover.jpg` only while that member is byte-identical, and
+otherwise lets the next write rasterize a fresh one: a viewer that redacts, edits or replaces page 1
+invalidates the cover without knowing it exists. The cover is not re-rendered on every write because
+rendering the model read back is not pixel-identical to rendering the import (the export rounds to four
+decimals), and `write(read(x)) = x` must hold for every member.
 
 Empty fields are omitted. `language` is the DOCUMENT language; each page also
 carries its own detected `xml:lang` (see §B2).
@@ -243,7 +253,7 @@ container. `to=ocd` on a PDF is *open*; on an OCD-EPUB it is *re-export*.
 
 ---
 
-# Part B — the page & font grammar (SVG-OCD v3)
+# Part B — the page & font grammar (SVG-OCD)
 
 ## B1. Principles
 
@@ -276,7 +286,7 @@ nor recorded came back `Bonjour, Jean-Luc` — the final `!` gone, no error anyw
 ## B2. The page — `pages/page-NNN.xhtml`
 
 > The member's name is a fact of this format, so it has ONE authority on each side:
-> `OCDVocab.pageFile(n)` in the engine (with `isPageMember` for the reader) and `ocd.js`'s
+> `OCDVocab.pageFile(n)` in the engine (`pageHref`, `pagePath`, `pageLink` and `isPageMember` build on it) and `ocd.js`'s
 > `pageFile(n)` in the client. It used to be spelled out in five places — the two EPUB writers, the
 > reader and twice in the client — which is how a four-digit book stops being readable by the tool
 > that wrote it.
@@ -314,9 +324,6 @@ is one `<svg>`:
   flavours are the ones that must render anywhere and therefore still bake it in:
   `SvgWriter` (the standalone `.svg` and the fixed-layout EPUB) keeps the visual viewBox
   and the typed `<g data-ocd="rot">` carrier, `PdfWriter` sets `/Rotate`.
-  A page written before this — recognisable by that carrier, which nothing mints here any
-  more — states its crop as `data-crop` and rotates itself; `OCDReader` reads such a page
-  on its own terms rather than misframing it on these.
 - **`data-blending="cmyk"` — the page composites in CMYK.** Stated only when the source
   page's own transparency group names a four-component space (`/Group /CS /DeviceCMYK`, or
   an ICC profile with `N 4`); absent means the default. The colours stay sRGB — this is a
@@ -332,12 +339,16 @@ is one `<svg>`:
   per-page TTS voices; deterministic, so the round-trip stays byte-stable.
 - **`data-mediabox` / `data-bleedbox` / `data-trimbox` / `data-artbox`** — the PDF page boxes
   (`x y w h`), emitted only when
-  present and distinct. The crop is NOT among them: it is the `viewBox` (above). A page
-  written before this grammar states it as `data-crop` and is read on those terms; nothing
-  emits one any more.
+  present and distinct. The crop is NOT among them: it is the `viewBox` (above).
 
 Inside, in order: `<style>` (deduped paint classes `s0, s1…`), `<defs>` (clip
 paths, gradients), the content tree, then links.
+
+A gradient is an SVG `<linearGradient>` / `<radialGradient>` in `userSpaceOnUse` with its
+`gradientTransform`, and its stops. A radial one states both circles: the start `fx fy fr` (`fr`, SVG 2;
+0 when absent) and the end `cx cy r`. PDF can stop the ramp at either end where SVG always pads, so a
+gradient whose ends do not both extend states it: `data-extend="1 0"` (start, end; absent = `1 1`). The
+paint is SVG's either way; the model keeps what the document said.
 
 Each `<clipPath>` carries the **model** clip id (`c1, c2…`), with the page flip
 folded into its geometry like everything else in the page. The reader unfolds it

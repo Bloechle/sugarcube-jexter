@@ -404,11 +404,14 @@ public final class SvgWriter {
 
     /** SVG {@code <linear/radialGradient>} for an OCDGradient, with an {@code __ID__} placeholder the
      *  caller replaces with the assigned id. Coords are userSpaceOnUse (page space), with the
-     *  gradient→page matrix as gradientTransform; {@code pad} matches the renderer's NO_CYCLE. */
+     *  gradient→page matrix as gradientTransform; {@code pad} matches the renderer's NO_CYCLE. A radial one
+     *  states its start radius ({@code fr}) when it has one, and a gradient whose ends do not both extend
+     *  says so in {@code data-extend} (FORMAT §B3) — SVG pads either way, the model keeps what PDF said. */
     private static String gradientDef(OCDGradient g) {
         double[] c = g.coords();
         String head = " id=\"__ID__\" gradientUnits=\"userSpaceOnUse\" gradientTransform=\"matrix("
-                + mat(g.transform()) + ")\" spreadMethod=\"pad\"";
+                + mat(g.transform()) + ")\" spreadMethod=\"pad\""
+                + (g.extend0() && g.extend1() ? "" : " data-extend=\"" + (g.extend0() ? 1 : 0) + " " + (g.extend1() ? 1 : 0) + "\"");
         var s = new StringBuilder();
         if (g.isLinear())
             s.append("<linearGradient").append(head)
@@ -417,7 +420,8 @@ public final class SvgWriter {
         else
             s.append("<radialGradient").append(head)
              .append(" cx=\"").append(f(c[3])).append("\" cy=\"").append(f(c[4])).append("\" r=\"").append(f(c[5]))
-             .append("\" fx=\"").append(f(c[0])).append("\" fy=\"").append(f(c[1])).append("\">");
+             .append("\" fx=\"").append(f(c[0])).append("\" fy=\"").append(f(c[1]))
+             .append(c[2] == 0 ? "" : "\" fr=\"" + f(c[2])).append("\">");
         float[] off = g.offsets();
         int[]   col = g.colors();
         for (int i = 0; i < off.length; i++) {

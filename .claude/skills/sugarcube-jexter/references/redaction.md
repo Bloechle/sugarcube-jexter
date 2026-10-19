@@ -95,11 +95,11 @@ write(read(x)); gates.sh ALL GREEN on a redacted output; CI 21 + JDK 25 0/0; doc
 
 Prism mode done 2026-09-03 (`ui/prism/web/redact.js`, ~170 lines, one `<script>` after reveal.js):
 Audit → `backend.convert(P.bookBytes(), 'audit')`, findings drawn as `.rd-find` rects in a `data-ui`
-layer appended to the rotation wrapper (or the svg), tooltip = hidden text; drag = zone (rubber band
-through `ref(svg).getScreenCTM().inverse()`, kept in PAGE space); Apply → `convert(bytes, 'ocd',
+layer appended to the page svg, tooltip = hidden text; drag = zone (rubber band
+through `svg.getScreenCTM().inverse()`, kept in PAGE space); Apply → `convert(bytes, 'ocd',
 {redact: <findings + zones in the audit's JSON shape; a drawn zone is a finding with box ''>})` then
 `book.open`. `P.bookBytes` is now exposed by engine.js (was module-private). Page↔svg: svg (sx, sy)
-= (x − bx, by + bh − y − h) from `data-mediabox` (legacy pages: `data-crop`). Seam pitfalls: `g.ownerSVGElement` is
+= (x − bx, by + bh − y − h) from `data-mediabox`. Seam pitfalls: `g.ownerSVGElement` is
 null under linkedom — use `closest('svg')`; the engine refuses a PARTIAL payload (one box of two)
 with HTTP 500 `{"error":…}` — that is the gate, not a bug; `reason()` unwraps it for the toast.
 The redact option rides the query string: fine for hundreds of findings (Java's HttpServer header

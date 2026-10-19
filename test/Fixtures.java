@@ -330,6 +330,14 @@ final class Fixtures {
         cs.shadingFill(shading(3, new float[] { 135 * MM, H - 70 * MM, 0, 135 * MM, H - 70 * MM, 22 * MM },
                 new float[] { 1, 1, 1 }, new float[] { 0.12f, 0.54f, 0.3f }));
         cs.restoreGraphicsState();
+        // A radial whose start circle has a radius and whose end does not extend: what SVG cannot say
+        // (FORMAT §B3 fr, data-extend); `sh` under a clip lands as a gradient on a path.
+        cs.saveGraphicsState();
+        cs.addRect(20 * MM, H - 150 * MM, 60 * MM, 50 * MM);
+        cs.clip();
+        cs.shadingFill(shading(3, new float[] { 50 * MM, H - 125 * MM, 6 * MM, 50 * MM, H - 125 * MM, 20 * MM },
+                new float[] { 0.95f, 0.8f, 0.2f }, new float[] { 0.5f, 0.1f, 0.6f }, true, false));
+        cs.restoreGraphicsState();
     }
 
     private static void dashCaps(Doc d, PDPageContentStream cs) throws IOException {
@@ -706,13 +714,17 @@ final class Fixtures {
 
     /** Type 2 (axial) or 3 (radial), RGB, extended at both ends. */
     private static PDShading shading(int type, float[] coords, float[] from, float[] to) {
+        return shading(type, coords, from, to, true, true);
+    }
+
+    private static PDShading shading(int type, float[] coords, float[] from, float[] to, boolean e0, boolean e1) {
         PDShading s = type == 2 ? new PDShadingType2(new COSDictionary()) : new PDShadingType3(new COSDictionary());
         s.setShadingType(type);
         s.setColorSpace(PDDeviceRGB.INSTANCE);
         COSDictionary dict = s.getCOSObject();
         dict.setItem(COSName.COORDS, floats(coords));
         dict.setItem(COSName.FUNCTION, type2(from, to));
-        dict.setItem(COSName.EXTEND, new COSArray(List.of(COSBoolean.TRUE, COSBoolean.TRUE)));
+        dict.setItem(COSName.EXTEND, new COSArray(List.of(COSBoolean.getBoolean(e0), COSBoolean.getBoolean(e1))));
         return s;
     }
 

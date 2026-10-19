@@ -65,10 +65,10 @@ export const SVG_NS   = 'http://www.w3.org/2000/svg';
  *  rather than spelling the padding a third time. */
 export const pageFile = (n) => 'page-' + String(n).padStart(3, '0');
 
-/** THE format version this client writes — the engine's `OCDVocab.VERSION`, stated once on this side.
- *  3 since 2026-10-04: recognized text is native — a recognition LAYER (FORMAT §B4b) whose words carry
- *  their confidence (§B4 `data-conf`). */
-export const OCD_VERSION = '3';
+/** THE format version this client reads and writes — the engine's `OCDVocab.VERSION`, stated once on this
+ *  side. 4 since 2026-10-19 (FORMAT, Versions). A container that states another version is refused on open
+ *  (`loadOcd`), never half-read. */
+export const OCD_VERSION = '4';
 const XLINK_NS = 'http://www.w3.org/1999/xlink';
 const XMLNS_NS = 'http://www.w3.org/2000/xmlns/';
 
@@ -93,6 +93,17 @@ const F = (v) => {
 };
 const OPF = 'OEBPS/';
 const JX = OPF + 'ocd/';
+
+/** Why an unzipped container cannot be read as an OCD-EPUB of THIS version — the message, or null when it can
+ *  (or when it is no OCD-EPUB at all: a foreign fixed-layout EPUB is a book, read as one). The one version
+ *  gate of the client: `loadOcd` and Prism's open both ask it. */
+export function ocdRefusal(files) {
+    const raw = files[JX + 'meta.json'];
+    if (!raw) return null;
+    let v; try { v = JSON.parse(dec(raw)).version; } catch { return 'unreadable ' + JX + 'meta.json'; }
+    return String(v) === OCD_VERSION ? null
+        : 'OCD-EPUB version ' + v + ' — this client reads version ' + OCD_VERSION + ' only: reconvert the document from its source';
+}
 const enc = (s) => new TextEncoder().encode(s);
 const dec = (b) => new TextDecoder().decode(b);
 const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml' };
@@ -175,6 +186,8 @@ export async function loadOcd(src) {
     const read = (p) => files[p] ? dec(files[p]) : null;
     const meta = files[JX + 'meta.json'] ? JSON.parse(read(JX + 'meta.json')) : null;
     if (!meta) throw new Error('not an OCD-EPUB — no ' + JX + 'meta.json member (a foreign EPUB is a book, not a model)');
+    const refused = ocdRefusal(files);
+    if (refused) throw new Error(refused);
 
     const fontsRaw = files[OPF + 'pages/fonts.svg'] ? read(OPF + 'pages/fonts.svg') : '';
     const fonts = fontsRaw ? parseFonts(fontsRaw) : [];
