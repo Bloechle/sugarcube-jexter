@@ -11,8 +11,8 @@ import java.util.*;
 import java.util.function.Function;
 
 /**
- * The {@code stages} projection — exposes the geometry of every analysis stage so a viewer (Jexter Lab's
- * analysis layer) can scrub the pipeline on the rendered page and iterate on the heuristics live:
+ * The {@code stages} projection — exposes the geometry of every analysis stage so a viewer (Prism's Analysis
+ * tool) can scrub the pipeline on the rendered page and iterate on the heuristics live:
  *
  * <pre>  runs · lines · leaves · blocks · labeled (HEADING / PARAGRAPH / running-furniture + reading order)</pre>
  *

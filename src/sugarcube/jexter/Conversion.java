@@ -146,7 +146,7 @@ public final class Conversion {
             var pages = "patch".equals(Target.of(target).id) ? Redactor.Zones.pagesOf(o.get(ConvertOptions.REDACT)) : null;
             if (pages != null) return convert(OCDReader.readPages(tmp, pages.stream().map(p -> p - 1).collect(java.util.stream.Collectors.toSet())), target, o);
             return convert(load(tmp, o), target, o);          // OCD-EPUB → OCDReader: the selected default structure is preserved, so the
-                                                              // cloud re-exports the up-to-date OCD without re-analyzing the PDF; else PDF import
+                                                              // host re-exports the up-to-date OCD without re-analyzing the PDF; else PDF import
         } catch (IOException | RuntimeException e) { throw e; }   // a refused redaction or a bad option says so in its own words
         catch (Exception e)    { throw new IOException("unreadable source (not a valid PDF or OCD-EPUB)", e); }
         finally {

@@ -33,7 +33,7 @@ export let engine = false;
    Defaults come from the engine's registry (/api/options); only the DIFFS from
    default are persisted and sent, so the convert URL stays minimal and the
    engine's own defaults remain the single source of truth. The AI switch is the
-   same mechanism, gated by aiBound (no key on the engine -> stays disabled). */
+   same mechanism, gated by the bound model (none on the engine -> stays disabled). */
 
 const conv = { defs: {}, diffs: JSON.parse(localStorage.getItem('prism_conv') || '{}') };
 const convOpts = () => Object.fromEntries(Object.entries(conv.diffs).map(([k, v]) => [k, String(v)]));
@@ -56,8 +56,8 @@ async function loadOptions() {
         });
     });
     const st = $.opt('#ai-status'), sw = $.opt('#ai-refine');
-    if (d.aiBound) {
-        if (st) st.textContent = `Model: ${d.aiModel}${d.aiProvider ? ' (' + d.aiProvider + ')' : ''}`;
+    if (d.model) {
+        if (st) st.textContent = `Model: ${d.model}`;
         if (sw) sw.removeAttribute('disabled');
     } else {
         if (st) st.textContent = 'No LLM key configured on the engine \u2014 AI refine is unavailable.';

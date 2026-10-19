@@ -36,8 +36,8 @@ import java.util.Locale;
  *   <li><b>ollama</b> — a local server on {@code localhost:11434}, <i>no key</i> — fully free/offline.</li>
  * </ol>
  * Any provider other than {@code anthropic} speaks the OpenAI wire, so a new OpenAI-compatible backend
- * is just a provider id + endpoint + model. Configurable from the environment or at run time from the
- * AI panel (POST /api/ai/config). Calls are deterministic (temperature 0); the key is held in memory only.
+ * is just a provider id + endpoint + model, read from the environment ({@link #fromEnv}, bound by
+ * {@link LlmEngines}). Calls are deterministic (temperature 0); the key is held in memory only.
  *
  * <pre>
  *   JEXTER_LLM_PROVIDER  anthropic | openai | gemini | cerebras | openrouter | groq | mistral | ollama | …   (default anthropic)
@@ -86,6 +86,7 @@ public final class HttpLlmClient implements LlmClient {
     }
 
     @Override public String model() { return model; }
+    @Override public String label() { return model + " (" + providerLabel() + ")"; }
 
     /** Adaptive-thinking effort, or "" when unset (deterministic, temperature 0). */
     public String effort() { return effort; }

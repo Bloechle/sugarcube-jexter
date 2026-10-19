@@ -3,7 +3,7 @@
  * nimbus-jexter.cjs — Nimbus · the fat-jar + native app-image build deck.
  *
  * Same instrument deck, same SSE wiring and the same chrome as the rest of the Nimbus
- * family (nimbus-cloud.cjs), specialised for a Java project that vendors its jars in
+ * family, specialised for a Java project that vendors its jars in
  * lib/. One window, click the step you want — nothing chains automatically — and the
  * real javac / jar / jpackage output streams live into the console. Four actions, one
  * authority each (runAction):
@@ -48,7 +48,7 @@
  *   PORT         → 7333  (one deck per project when two run side by side)
  *   Nothing project-specific lives in this file: the defaults are neutral, .env is the
  *   project (tracked), .env.local the machine (ignored); shell env beats both. Only the
- *   FILE NAME says which project it sits in, the way nimbus-cloud.cjs does.
+ *   FILE NAME says which project it sits in.
  *
  * @author Jean-Luc Bloechle with Claude.ai
  */
@@ -188,7 +188,7 @@ function ctx(cfg) {
 
 const ANSI = /\x1b\[[0-9;]*m/g;   // strip SGR colour codes on display
 
-// One streamed child process → Promise<exitCode>. Mirrors the cloud deck's runner:
+// One streamed child process → Promise<exitCode>, the Nimbus runner:
 // spawn (no shell), pump stdout/stderr line-by-line as SSE 'line' events.
 function sh(bin, args, o, send) {
     o = o || {};

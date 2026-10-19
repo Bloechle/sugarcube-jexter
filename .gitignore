@@ -32,14 +32,13 @@ _*
 *.ocd.epub
 /hotfolder/
 
-# ── Secrets & local config (the LLM key lives in ~/.jexter/ai.json) ──────────
+# ── Secrets & local config (keys live in the environment, never in a file here) ─
 # .env is TRACKED: it is the project's nimbus configuration (no secrets in it).
 # Anything secret or machine-local goes in .env.local / .env.<name>, ignored here.
 .env.*
 *.pem
 *.p12
 *.key
-ai.json
 
 # ── IDE ──────────────────────────────────────────────────────────────────────
 .idea/

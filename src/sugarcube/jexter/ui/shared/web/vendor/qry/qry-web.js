@@ -730,12 +730,13 @@ export const format = {
         return h ? `${h}h ${_pad(m)}m` : m ? `${m}m ${_pad(s)}s` : `${s}s`;
     },
     /** bytes → `1.5 kB`, `3.2 MB` — in the page's language (<html lang>): `1,5 ko` in French,
-     *  `1,5 kB` in German (Intl units, binary steps of 1024).
+     *  `1,5 kB` in German (Intl units, binary steps of 1024). Below a kilobyte the unit is written in
+     *  full — `60 bytes`, `60 octets` — since CLDR's short form is singular in English (`60 byte`).
      *  @param {number} n  @param {{locale?: string}} [opts] */
     bytes(n, { locale = document.documentElement.lang || undefined } = {}) {
         const units = ['byte', 'kilobyte', 'megabyte', 'gigabyte', 'terabyte'];
         const i = n > 0 ? $.clamp(Math.floor(Math.log(n) / Math.log(1024)), 0, units.length - 1) : 0;
-        return new Intl.NumberFormat(locale, { style: 'unit', unit: units[i], unitDisplay: 'short', maximumFractionDigits: i ? 1 : 0 })
+        return new Intl.NumberFormat(locale, { style: 'unit', unit: units[i], unitDisplay: i ? 'short' : 'long', maximumFractionDigits: i ? 1 : 0 })
             .format(n > 0 ? n / 1024 ** i : 0);
     },
     /** Date|number|string → `YYYY-MM-DD HH:MM` (local time). */

@@ -40,8 +40,8 @@ const isVectorSrc = (s) => RENDER_SOURCES.some(r => r.id === s && r.vector);
 function status(text, busy) { $('#status').html(busy ? `<span class="jx-spin"></span> ${text}` : `<i data-icon="scan-search"></i> ${text}`); }
 
 // ── render stage (iframe) bridge ───────────────────────────────────────────────
-// The page raster + zoom now live in an isolated iframe (stage.html → js/stage.js), exactly like
-// Jexter Lab. The chrome just hands the current page over; the stage owns zoom, DPI and the blur-up.
+// The page raster + zoom live in an isolated iframe (stage.html → js/stage.js), as Prism's pages do.
+// The chrome just hands the current page over; the stage owns zoom, DPI and the blur-up.
 const frame    = () => document.getElementById('stage-frame');
 // Named access makes the frame's <div id="stage"> shadow window.stage until stage.js
 // has installed the API — so the element, not the API, comes back during boot. Only

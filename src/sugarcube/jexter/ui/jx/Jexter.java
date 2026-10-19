@@ -185,7 +185,7 @@ public final class Jexter extends WebApp {
 
     // ── read-only routes ─────────────────────────────────────────────────────────
     private void options(HttpExchange x) throws IOException {
-        try { json(x, ConvertOptions.optionsJson(false, "", "", "")); }
+        try { json(x, ConvertOptions.optionsJson()); }
         catch (Exception e) { error(x, e); }
     }
 }

@@ -42,17 +42,8 @@ the bookmark structure path), plus the real `welcome.pdf` from the repo
 
 ## H · Client bench (Prism + PDFInspector under real Chromium)
 
-The sandbox blocks `cdn.jsdelivr.net`, and WebApp rewrites the stack to its
-`/cdn/` proxy (server-side fetch → also blocked → 502). **Seed the proxy's disk
-cache instead** — it serves cached files without fetching:
-
-- cache root `~/.jexter/cdn/<rel>` + sibling `<rel>.ct` content-type files;
-- text assets must be stored POST-rewrite (`https://cdn.jsdelivr.net/` → `/cdn/`);
-- sources: qry-js from `raw.githubusercontent.com/Bloechle/qry-js/<tag>/…`,
-  Shoelace/lucide/@fontsource/fflate as npm tarballs from `registry.npmjs.org`
-  (seed the ENTIRE shoelace `cdn/` dir — the autoloader imports chunks; fflate's
-  jsdelivr `+esm` ≈ the tarball's `esm/browser.js`);
-- `scripts/seed_cdn_cache.py` does all of it.
+The front-end stack is vendored under `ui/shared/web/vendor/` — nothing is fetched, so the apps run
+in the sandbox as they are.
 
 Then: launch the app from the jar **inside the same python process**
 (`subprocess.Popen` + kill at the end — backgrounded shells die between

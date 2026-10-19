@@ -317,15 +317,13 @@ public final class ConvertOptions {
 
     /**
      * The full {@code /api/options} response body, as one JSON string — the single serialization
-     * shared by every convert front (Prism desktop + the cloud), so both emit byte-identical
-     * shape: {@code { aiBound, aiModel, aiProvider, aiEffort, options:[ {key,label,help,type,group,def} … ] } }.
-     * The {@code ai*} fields describe the bound LLM (all empty / false where there is none).
+     * every convert host answers with: {@code { model, options:[ {key,label,help,type,group,def} … ] } }.
+     * {@code model} names the bound language model ({@link LlmClient#label}), {@code ""} when none is
+     * bound — then {@link #REFINE_STRUCTURE} does nothing.
      */
-    public static String optionsJson(boolean aiBound, String aiModel, String aiProvider, String aiEffort) {
-        StringBuilder b = new StringBuilder("{\"aiBound\":").append(aiBound)
-                .append(",\"aiModel\":").append(JxStringer.quoted(aiModel))
-                .append(",\"aiProvider\":").append(JxStringer.quoted(aiProvider))
-                .append(",\"aiEffort\":").append(JxStringer.quoted(aiEffort))
+    public static String optionsJson() {
+        StringBuilder b = new StringBuilder("{\"model\":")
+                .append(JxStringer.quoted(LlmClient.isBound() ? LlmClient.bound().label() : ""))
                 .append(",\"options\":[");
         for (int i = 0; i < ALL.size(); i++) {
             Opt<?> o = ALL.get(i);

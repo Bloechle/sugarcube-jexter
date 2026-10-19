@@ -1,7 +1,6 @@
 package sugarcube.jexter.ui.prism;
 
 import sugarcube.jexter.bind.LlmEngines;
-import sugarcube.jexter.bind.HttpLlmClient;
 import sugarcube.jexter.bind.OcrEngines;
 import sugarcube.jexter.Conversion;
 import sugarcube.jexter.ocd.io.SvgOcdWriter;
@@ -9,30 +8,19 @@ import com.sun.net.httpserver.HttpExchange;
 
 import sugarcube.jexter.core.JxStringer;
 import sugarcube.jexter.core.JxLog;
-import sugarcube.jexter.core.JxJson;
-import sugarcube.jexter.core.LlmClient;
 import sugarcube.jexter.ui.WebApp;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.core.ConvertOptions;
+import sugarcube.jexter.core.JxProgress;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.LinkedHashMap;
 import sugarcube.jexter.core.JxName;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.Locale;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 
 /**
  * Prism — the jexter document workbench as a local web app: the reader chassis (the EPUB tree
@@ -42,23 +30,20 @@ import java.time.Duration;
  *
  * <pre>
  *   POST /api/convert?to=&lt;a target id&gt;[&amp;&lt;opt&gt;=&lt;val&gt;…]
- *        body: a PDF (%PDF) → import + export · OR an OCD-EPUB (PK zip) → re-export
- *        or:   ?url=&lt;http(s)&gt; to fetch the source server-side first
+ *        body: the document — a PDF, an image or an OCD-EPUB; the engine reads its first bytes
  *        → the artifact (media type + filename from jexter)
- *   GET  /api/options      → the ConvertOptions registry (+ bound-model status)
+ *   GET  /api/options      → the ConvertOptions registry and the bound model
  *   GET  /api/targets      → the valid `to` ids
  *   GET  /api/health       → "ok"
- *   POST /api/ai/config        bind / unbind the LLM connection from the UI                  (desktop only)
- *   GET  /api/log              JxLog as Server-Sent Events (the F2 console)                  (desktop only)
+ *   POST /api/font             a font file → its block for the container                    (desktop only)
+ *   GET  /api/log · /api/progress   Server-Sent Events: JxLog (F2) and the conversion's progress (desktop only)
  * </pre>
  *
  * Structure refinement is not a route of its own: it rides {@code /api/convert?to=ocd&refineStructure=true}
- * (the bound LLM runs in the engine), identical to the cloud. All conversion semantics live in
+ * (the bound LLM runs in the engine), as on any convert host. All conversion semantics live in
  * {@link Conversion}; adding a target happens once, there.
  */
 public final class Prism extends WebApp {
-
-    private volatile Thread refineThread;   // the worker running an in-flight refine convert, so /api/ai/stop can interrupt it
 
     public static void main(String[] args) throws Exception { new Prism().launch(args); }
 
@@ -70,13 +55,11 @@ public final class Prism extends WebApp {
     }
     @Override protected void routes(Routes routes) {
         installLogBridge();                                   // mirror JxLog → /api/log (in-page console)
-        bindModel();                                          // bind an LLM iff a key is in env or saved config
+        LlmEngines.bindFromEnv();                             // bind a language model iff the environment names one
         OcrEngines.bindFromEnv();                             // bind an OCR engine iff the environment names one
         routes.add("/api/convert",  this::convert); // the one engine route: bytes (+ to/opts) → artifact bytes
         routes.add("/api/options",  this::options); // the ConvertOptions registry (+ bound-model status)
         routes.add("/api/targets",  this::targets); // valid `to` ids
-        routes.add("/api/ai/config",this::aiConfig);// AI: bind the LLM connection from the UI
-        routes.add("/api/ai/stop",  this::aiStop);  // AI: interrupt an in-flight refine (page-windowed → stops at the next page)
         routes.add("/api/font",     this::font);    // a TTF/OTF → the container's own font block
         routes.add("/api/log",      this::log);     // JxLog SSE (F2)
         routes.add("/api/progress", this::progress);// conversion progress SSE
@@ -87,59 +70,22 @@ public final class Prism extends WebApp {
         try {
             Map<String, String> opts = new LinkedHashMap<>(query(x));
             String to   = opts.remove("to");  if (to == null || to.isBlank()) to = "ocd";
-            String url  = opts.remove("url");
-            String path = opts.remove("path");
-            opts.remove("name");
+            byte[] body = body(x);
+            if (body.length == 0) { error(x, new IllegalArgumentException("empty body — POST a PDF, an image or an OCD-EPUB")); return; }
 
-            byte[] body;
-            if (path != null && !path.isBlank()) {            // desktop only: re-open a recent file straight off disk
-                body = Files.readAllBytes(Path.of(path));
-            } else if (url != null && !url.isBlank()) {
-                URI uri = URI.create(url.trim());
-                String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
-                if (!scheme.equals("http") && !scheme.equals("https")) { error(x, new IllegalArgumentException("only http/https URLs are supported")); return; }
-                body = download(uri);
-            } else {
-                body = body(x);
-            }
-            if (body.length == 0) { error(x, new IllegalArgumentException("empty body — POST a PDF, an image or an OCD-EPUB, or pass ?url= / ?path=")); return; }
-
-            boolean refining = "true".equalsIgnoreCase(opts.get("refineStructure"));
-            if (refining) refineThread = Thread.currentThread();   // expose this worker to /api/ai/stop
-            try {
-                // The window is watching: bind the progress channel of THIS conversion to the SSE stream.
-                // Per conversion, never global — the engine's concurrency contract is one document per thread.
-                sugarcube.jexter.core.ConvertOptions co =
-                        sugarcube.jexter.core.ConvertOptions.fromMap(opts).progress(p -> pushProgress(p.toJson()));
-                Conversion.Output out = Conversion.convert(body, to, co);   // PDF, image or OCD-EPUB: the engine sniffs
-                pushProgress(new sugarcube.jexter.core.JxProgress(
-                        sugarcube.jexter.core.JxProgress.Stage.WRITE, 0, 0, "done").toJson());
-                send(x, out);
-            } finally {
-                if (refining) { refineThread = null; Thread.interrupted(); }   // clear any leftover interrupt before the pool reuses the thread
-            }
+            // The window is watching: bind the progress channel of THIS conversion to the SSE stream.
+            // Per conversion, never global — the engine's concurrency contract is one document per thread.
+            ConvertOptions co = ConvertOptions.fromMap(opts).progress(p -> pushProgress(p.toJson()));
+            Conversion.Output out = Conversion.convert(body, to, co);   // PDF, image or OCD-EPUB: the engine sniffs
+            pushProgress(new JxProgress(JxProgress.Stage.WRITE, 0, 0, "done").toJson());
+            send(x, out);
         } catch (Exception e) { error(x, e); }
-    }
-
-    // ── /api/ai/stop — interrupt an in-flight refine (it stops at the next page, keeping partial) ──
-    private void aiStop(HttpExchange x) throws IOException {
-        Thread t = refineThread;
-        boolean stopping = t != null;
-        if (stopping) { t.interrupt(); JxLog.info(this, "AI refine — stop requested"); }
-        json(x, new JxStringer().obj().bool("ok", true).bool("stopping", stopping).end().toString());
     }
 
     // ── /api/options — the introspectable ConvertOptions registry ─────────────
-    // Delegates to the shared serializer so desktop and cloud emit identical shape; also
-    // reports the bound LLM so the AI panel can show connection state without a second call.
+    // The engine's one serializer: every convert host answers the same shape, the bound model included.
     private void options(HttpExchange x) throws IOException {
-        try {
-            boolean bound = LlmClient.isBound();
-            json(x, ConvertOptions.optionsJson(bound,
-                    bound ? LlmClient.bound().model() : "",
-                    LlmClient.bound() instanceof HttpLlmClient h ? h.providerLabel() : "",
-                    LlmClient.bound() instanceof HttpLlmClient h ? h.effort() : ""));
-        } catch (Exception e) { error(x, e); }
+        try { json(x, ConvertOptions.optionsJson()); } catch (Exception e) { error(x, e); }
     }
 
     // ── /api/targets — the valid `to` ids (single source: Conversion) ─────────
@@ -150,41 +96,7 @@ public final class Prism extends WebApp {
         } catch (Exception e) { error(x, e); }
     }
 
-
-    // ── /api/ai/config — bind / unbind the LLM connection at run time ─────────
-    // JSON body { provider, endpoint, key, model, effort, keyless, clear }. The key travels in the
-    // body (not the URL), is held inside the bound client, and is persisted owner-only for restarts.
-    private void aiConfig(HttpExchange x) throws IOException {
-        try {
-            byte[] raw = body(x);
-            Object root = raw.length == 0 ? null : JxJson.parse(new String(raw, StandardCharsets.UTF_8));
-            Map<String, Object> m = JxJson.asObj(root);
-            if (m == null) m = Map.of();
-            if (Boolean.TRUE.equals(m.get("clear"))) {
-                LlmClient.bind(null);
-                deleteAiConfig();
-                JxLog.info(this, "LLM unbound via AI panel");
-                json(x, new JxStringer().obj().bool("ok", true).bool("bound", false).end().toString());
-                return;
-            }
-            String key = strv(m, "key");
-            boolean keyless = Boolean.TRUE.equals(m.get("keyless"));
-            if (key.isBlank() && !keyless) {
-                json(x, new JxStringer().obj().bool("ok", false).bool("bound", LlmClient.isBound())
-                        .str("reason", "API key required").end().toString());
-                return;
-            }
-            HttpLlmClient c = new HttpLlmClient(strv(m, "provider"), strv(m, "endpoint"), key, strv(m, "model"), strv(m, "effort"));
-            LlmClient.bind(c);
-            saveAiConfig(strv(m, "provider"), strv(m, "endpoint"), strv(m, "model"), strv(m, "effort"), key, keyless);
-            JxLog.info(this, "LLM bound via AI panel \u2014 provider=" + c.providerLabel() + " model=" + c.model()
-                    + (c.effort().isEmpty() ? "" : " effort=" + c.effort()));
-            json(x, new JxStringer().obj().bool("ok", true).bool("bound", true)
-                    .str("model", c.model()).str("provider", c.providerLabel()).str("effort", c.effort()).end().toString());
-        } catch (Exception e) { error(x, e); }
-    }
-
-    // ── input handling: URL fetch, response ──────────────────
+    // ── the artifact back ──
     private static void send(HttpExchange x, Conversion.Output o) throws IOException {
         x.getResponseHeaders().set("Content-Type", o.mediaType());
         x.getResponseHeaders().set("Content-Disposition", (o.inline() ? "inline" : "attachment") + "; filename=\"" + o.filename() + "\"");
@@ -193,81 +105,6 @@ public final class Prism extends WebApp {
         x.sendResponseHeaders(200, d.length);
         try (OutputStream os = x.getResponseBody()) { os.write(d); }
     }
-
-    private static final long MAX_FETCH = 128L * 1024 * 1024;   // 128 MB
-
-    private static byte[] download(URI uri) throws Exception {
-        HttpClient client = HttpClient.newBuilder()
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .connectTimeout(Duration.ofSeconds(20)).build();
-        HttpRequest req = HttpRequest.newBuilder(uri)
-                .header("User-Agent", "Prism")
-                .timeout(Duration.ofSeconds(60)).GET().build();
-        HttpResponse<java.io.InputStream> resp = client.send(req, HttpResponse.BodyHandlers.ofInputStream());
-        if (resp.statusCode() / 100 != 2) {
-            try (var b = resp.body()) { b.readAllBytes(); }
-            throw new IOException("HTTP " + resp.statusCode() + " for " + uri);
-        }
-        try (var in = resp.body(); var bos = new ByteArrayOutputStream()) {
-            byte[] buf = new byte[1 << 16]; long total = 0; int r;
-            while ((r = in.read(buf)) >= 0) {
-                total += r;
-                if (total > MAX_FETCH) throw new IOException("download exceeds " + (MAX_FETCH >> 20) + " MB cap");
-                bos.write(buf, 0, r);
-            }
-            return bos.toByteArray();
-        }
-    }
-
-    // ── AI: bind a language model (env key wins, else the saved panel config) ──
-    private void bindModel() {
-        if (LlmClient.isBound()) return;
-        if (LlmEngines.bindFromEnv() != null) return;
-        AiCfg saved = loadAiConfig();
-        if (saved != null && (saved.keyless() || !saved.key().isBlank())) {
-            try {
-                HttpLlmClient c = new HttpLlmClient(saved.provider(), saved.endpoint(), saved.key(), saved.model(), saved.effort());
-                LlmClient.bind(c);
-                JxLog.info(this, "LLM restored from " + aiConfigPath() + " \u2014 provider=" + c.providerLabel()
-                        + " model=" + c.model() + (c.effort().isEmpty() ? "" : " effort=" + c.effort()));
-            } catch (Exception e) { JxLog.warn(this, "saved AI config failed to bind", e); }
-            return;
-        }
-        JxLog.info(this, "no LLM key in environment or saved config \u2014 AI structure refinement disabled");
-    }
-
-    private static String strv(Map<String, Object> m, String k) { Object v = m.get(k); return v == null ? "" : v.toString(); }
-
-    // Persisted at ~/.jexter/ai.json (provider/endpoint/model/effort + key), owner-only on POSIX.
-    private record AiCfg(String provider, String endpoint, String model, String effort, String key, boolean keyless) {}
-
-    private static Path aiConfigPath() { return Path.of(System.getProperty("user.home", "."), ".jexter", "ai.json"); }
-
-    private void saveAiConfig(String provider, String endpoint, String model, String effort, String key, boolean keyless) {
-        try {
-            Path p = aiConfigPath();
-            Files.createDirectories(p.getParent());
-            String json = new JxStringer().obj()
-                    .str("provider", provider).str("endpoint", endpoint).str("model", model)
-                    .str("effort", effort).bool("keyless", keyless).str("key", key)
-                    .end().toString();
-            Files.writeString(p, json, StandardCharsets.UTF_8);
-            try { Files.setPosixFilePermissions(p, PosixFilePermissions.fromString("rw-------")); } catch (Exception ignore) {}
-        } catch (Exception e) { JxLog.warn(this, "could not save AI config", e); }
-    }
-
-    private AiCfg loadAiConfig() {
-        try {
-            Path p = aiConfigPath();
-            if (!Files.isReadable(p)) return null;
-            Map<String, Object> m = JxJson.asObj(JxJson.parse(Files.readString(p, StandardCharsets.UTF_8)));
-            if (m == null) return null;
-            return new AiCfg(strv(m, "provider"), strv(m, "endpoint"), strv(m, "model"),
-                    strv(m, "effort"), strv(m, "key"), Boolean.TRUE.equals(m.get("keyless")));
-        } catch (Exception e) { JxLog.warn(this, "could not read saved AI config", e); return null; }
-    }
-
-    private void deleteAiConfig() { try { Files.deleteIfExists(aiConfigPath()); } catch (Exception ignore) {} }
 
     // ── Debug log bridge — mirror JxLog (java.util.logging) into the F2 console ──
     private static final Events logEvents = new Events();

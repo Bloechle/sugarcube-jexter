@@ -20,11 +20,11 @@ that consumer's business, outside this repository.
 | Method | Route | Body / query | Returns |
 |--------|-------|--------------|---------|
 | `POST` | `/api/convert?to=<target>[&<opt>=<val>…]` | a **PDF** (`%PDF`) → import+export · or an **OCD-EPUB** (`PK` zip) → re-export | the artifact bytes (media type + `Content-Disposition` from jexter) |
-| `GET`  | `/api/options` | — | `{ aiBound, aiModel, aiProvider, aiEffort, options:[ {key,label,help,type,group,def} … ] }` |
+| `GET`  | `/api/options` | — | `{ model, options:[ {key,label,help,type,group,def} … ] }` — `model` names the bound language model, `""` when none |
 | `GET`  | `/api/targets` | — | `{ targets:[ "svg","pdf","epub","epub-reflow","html","md","doctags","ocd","stages","audit","zones","patch" ] }` — `Conversion.Target`, the only list |
 | `GET`  | `/api/health`  | — | `"ok"` (liveness) |
 
-- **`to`** is the only consumed query key (the desktop adds `url`, `path` and `name`, below); every other key is forwarded verbatim
+- **`to`** is the only consumed query key; every other key is forwarded verbatim
   to `ConvertOptions` — the introspectable registry, serialized once by
   `ConvertOptions.optionsJson` and shared by both engines, so they emit a
   byte-identical option shape. A consumer that checks what it asks for against
@@ -39,15 +39,13 @@ that consumer's business, outside this repository.
 - **Refine is not its own route** — logical-structure refinement rides the shared
   call, `POST /api/convert?to=ocd&refineStructure=true[&llmModel=…]`, and the
   bound LLM runs inside the engine.
-- The conversion service adds asynchronous jobs (`/api/jobs`) for documents whose
-  conversion outlives a request; its consumer documentation is served with it.
+- A service may add asynchronous jobs for documents whose conversion outlives a request;
+  that is the service's business, outside this repository.
 
 ### Desktop-only routes (the Prism server)
 
 | Method | Route | Body / query | Returns |
 |--------|-------|--------------|---------|
-| `POST` | `/api/ai/config` | `{ provider, endpoint, key, model, effort, keyless, clear }` | bind / unbind a model |
-| `GET`  | `/api/ai/stop` | — | interrupt an in-flight refine (it stops at the next page) |
 | `POST` | `/api/font?chars=…` | a TTF / OTF | the container's own font block for those characters (Edit's "write text") |
 | `GET`  | `/api/log` | — | Server-Sent Events: `JxLog` records (the **F2** console) |
 | `GET`  | `/api/progress` | — | Server-Sent Events: `{stage, done, total, detail}` while a conversion runs |
@@ -62,9 +60,9 @@ page can read the answer. A request is served only when its `Host` is `127.0.0.1
 over 512 MB is refused with 413, a bad request answers 400 with `{"error": …}`, a failure 500. The guard
 also counts the requests in flight, so the window watchdog never exits in the middle of a conversion.
 
-The desktop `/api/convert` also accepts `?url=<http(s)>` (the engine fetches it
-server-side — no browser CORS) and `?path=<local file>` (re-open a file off disk).
-The conversion service reads the request body only.
+**The body is the document**, on every host: no URL to fetch, no path to read. The model and the
+OCR engine are bound from the host's environment (`LlmEngines` / `OcrEngines.bindFromEnv()`), never
+from a request.
 
 ## The seam — `backend.js`
 

@@ -150,7 +150,7 @@ public abstract class WebApp {
         Routes routes = (path, h) -> s.createContext(path, guarded(h));
         routes(routes);                                    // app-specific /api/* handlers
         routes.add("/api/app",    x -> send(x, 200, "text/plain; charset=utf-8", title().getBytes(StandardCharsets.UTF_8)));
-        routes.add("/api/health", this::health);           // liveness, parity with the cloud probe
+        routes.add("/api/health", this::health);           // liveness, the probe every convert host answers
         routes.add("/api/alive",  this::alive);            // SSE heartbeat: the window keeps this open
         routes.add("/",           this::statics);
         server.setExecutor(Executors.newCachedThreadPool());
@@ -481,7 +481,7 @@ public abstract class WebApp {
         }
         return null;
     }
-    /** {@code /api/health} — liveness, parity with the cloud probe; every app answers it. */
+    /** {@code /api/health} — liveness, the probe every convert host answers. */
     private void health(HttpExchange x) throws IOException {
         send(x, 200, "text/plain; charset=utf-8", "ok".getBytes(StandardCharsets.UTF_8));
     }

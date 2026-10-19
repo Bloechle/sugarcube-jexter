@@ -25,6 +25,9 @@ public interface LlmClient {
     /** Short identifier of the underlying model, recorded as structure provenance (e.g. the model name). */
     default String model() { return "llm"; }
 
+    /** How a host shows the model to a person: the model, and where it runs when that says more. */
+    default String label() { return model(); }
+
     // ── façade binding: the host installs a provider, the engine reads it ────────────────────────
     /** Holder for the process-wide bound client (interfaces cannot have instance state). */
     final class Holder { private static volatile LlmClient bound; private Holder() {} }

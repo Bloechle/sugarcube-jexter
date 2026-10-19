@@ -139,28 +139,28 @@
     <marker id="ar" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto"><path d="M0,0 L6.5,3 L0,6 Z" fill="#9aa09a"/></marker>
     <marker id="ag" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto"><path d="M0,0 L6.5,3 L0,6 Z" fill="#33699f"/></marker>
   </defs>
-  <text x="8" y="20" font-size="13" font-weight="600" fill="#1c1e1b">Convert over HTTP — <tspan fill="#2b567f">one key, every target</tspan></text>
+  <text x="8" y="20" font-size="13" font-weight="600" fill="#1c1e1b">Convert over HTTP — <tspan fill="#2b567f">one call, every target</tspan></text>
 
   <!-- client -->
   <g transform="translate(20,72)">
     <rect width="150" height="54" rx="10" fill="#ffffff" stroke="#cfd2cc" stroke-width="1.4"/>
-    <text x="75" y="24" text-anchor="middle" font-size="11" font-weight="600" fill="#1c1e1b">Your service</text>
-    <text x="75" y="40" text-anchor="middle" font-size="8.5" fill="#6a6f69">server-to-server</text>
+    <text x="75" y="24" text-anchor="middle" font-size="11" font-weight="600" fill="#1c1e1b">A client</text>
+    <text x="75" y="40" text-anchor="middle" font-size="8.5" fill="#6a6f69">any HTTP caller</text>
   </g>
 
   <!-- request -->
   <g transform="translate(176,99)">
     <rect x="2" y="-27" width="116" height="16" rx="8" fill="#e7eff8" stroke="#8ec63f"/>
-    <text x="60" y="-15" text-anchor="middle" font-size="8" font-family="DejaVu Sans Mono" fill="#2b567f">Bearer &lt;key&gt;</text>
+    <text x="60" y="-15" text-anchor="middle" font-size="8" font-family="DejaVu Sans Mono" fill="#2b567f">?to=&lt;target&gt;</text>
     <line x1="0" y1="0" x2="116" y2="0" stroke="#9aa09a" stroke-width="1.8" marker-end="url(#ar)"/>
-    <text x="60" y="18" text-anchor="middle" font-size="8" fill="#6a6f69">POST · PDF or .ocd.epub</text>
+    <text x="60" y="18" text-anchor="middle" font-size="8" fill="#6a6f69">PDF · image · .ocd.epub</text>
   </g>
 
-  <!-- cloud / engine -->
+  <!-- the engine behind a host -->
   <g transform="translate(300,72)">
     <rect width="208" height="54" rx="10" fill="#e7eff8" stroke="#33699f" stroke-width="1.6"/>
-    <text x="104" y="23" text-anchor="middle" font-size="10" font-weight="600" font-family="DejaVu Sans Mono" fill="#1c1e1b">sugarcloud.ch/api/convert</text>
-    <text x="104" y="40" text-anchor="middle" font-size="8.5" fill="#3c6f1a">jexter engine — same as desktop</text>
+    <text x="104" y="23" text-anchor="middle" font-size="10" font-weight="600" font-family="DejaVu Sans Mono" fill="#1c1e1b">POST /api/convert</text>
+    <text x="104" y="40" text-anchor="middle" font-size="8.5" fill="#3c6f1a">jexter Conversion — any host</text>
   </g>
 
   <!-- response -->
@@ -180,7 +180,7 @@
 
   <!-- bottom strips -->
   <text x="390" y="166" text-anchor="middle" font-size="9.5" fill="#6a6f69"><tspan font-weight="600" fill="#2b567f">to = </tspan><tspan font-family="DejaVu Sans Mono" fill="#34403a">ocd · svg · pdf · epub · epub-reflow · html · md · doctags</tspan></text>
-  <text x="390" y="184" text-anchor="middle" font-size="8.5" fill="#9aa09a"><tspan font-family="DejaVu Sans Mono">GET /api/health</tspan> → ok · public, no key</text>
+  <text x="390" y="184" text-anchor="middle" font-size="8.5" fill="#9aa09a"><tspan font-family="DejaVu Sans Mono">GET /api/targets · /api/options · /api/health</tspan> — what the engine serves</text>
 </svg>
 ```.text
 
@@ -1333,43 +1333,37 @@ and SVG are facsimiles of the *presentation* layer. Because both come from one m
 they never disagree about what the document says.
 
 // ============================================================================
-= The conversion API — `sugarcloud.ch`
+= The convert contract over HTTP
 
-Every projection above is also reachable over HTTP. `sugarcloud.ch` is a stateless front
-for the *same* jexter engine: a client sends a PDF (or an `.ocd.epub`) together with a
-per-client API key and gets the converted artifact straight back. It is meant for
-server-to-server use — each consumer holds its own key and never exposes it to a browser.
+jexter is a standalone engine, and every projection above is one call:
+`Conversion.convert(bytes, target, options)`. A host that puts it behind HTTP speaks one
+small, stateless contract — Prism does on the desktop, and a conversion service embeds the
+same jar behind its own keys and quotas. The engine owns every conversion semantic, so a
+target or an option is added once, in jexter, and every host serves it the same day.
 
-#fig(SVG_API)[One authenticated `POST` carries the source and a chosen target; the
-same engine that produced every projection in this overview answers with the artifact,
-its media type and a filename.]
+#fig(SVG_API)[One `POST` carries the document and a chosen target; the same engine that
+produced every projection in this overview answers with the artifact, its media type and
+a filename.]
 
-Two endpoints matter to a client. `GET /api/health` is a public probe that returns `ok`.
-`POST /api/convert?to=<target>` does the work, where `to` is one of the projection ids —
-`ocd`, `svg`, `pdf`, `epub`, `epub-reflow`, `html`, `md`, `doctags` (it defaults to
-`svg`). The key travels as `Authorization: Bearer <key>` or `X-API-Key: <key>`; a missing
-or invalid key is a `401`. Keys are stored hashed and hot-reloaded, so granting or
-revoking a client never needs a restart.
-
-The source is a raw `application/pdf` body or a multipart `file` field; an `.ocd.epub` body is
-re-exported without re-parsing. A few writer options ride along as query parameters —
-`page` (SVG, 0-based), `selectable` (PDF), `renderAnnotations` (SVG/EPUB), `grid` (DocTags) —
-and any other key passes straight through to jexter's `ConvertOptions`. The response
-carries jexter's own media type and `Content-Disposition` filename.
+`POST /api/convert?to=<target>` does the work. The body IS the document — a PDF, an image
+or an `.ocd.epub` — and the engine reads its first bytes to know which: never a name, never
+a declared type. Every other query parameter is a `ConvertOptions` key. Three read-only
+routes let a client check what it asks for before it asks: `GET /api/targets` (the target
+ids: `svg`, `pdf`, `epub`, `epub-reflow`, `html`, `md`, `doctags`, `ocd`, and the analysis
+and redaction ones), `GET /api/options` (the option registry, with label, help, type,
+group and default) and `GET /api/health`. The response carries jexter's own media type and
+`Content-Disposition` filename.
 
 ```
-# health — public, no key
-curl https://sugarcloud.ch/api/health                       # -> ok
+# the targets and the options this engine serves
+curl http://127.0.0.1:7345/api/targets
+curl http://127.0.0.1:7345/api/options
+
+# PDF -> normalized, selectable PDF
+curl --data-binary @doc.pdf "http://127.0.0.1:7345/api/convert?to=pdf" -o out.pdf
 
 # PDF -> first page as SVG
-curl -H "Authorization: Bearer <key>" \
-     -F file=@doc.pdf \
-     "https://sugarcloud.ch/api/convert?to=svg&page=0" -o page-0.svg
-
-# PDF -> normalized, selectable PDF (raw body)
-curl -H "Authorization: Bearer <key>" -H "Content-Type: application/pdf" \
-     --data-binary @doc.pdf \
-     "https://sugarcloud.ch/api/convert?to=pdf&selectable=true" -o out.pdf
+curl --data-binary @doc.pdf "http://127.0.0.1:7345/api/convert?to=svg&page=0" -o page-0.svg
 ```
 
 = Fidelity, by construction

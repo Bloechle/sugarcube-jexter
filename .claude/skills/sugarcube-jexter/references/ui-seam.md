@@ -359,13 +359,9 @@ swallows clicks. Rename both sides or neither, and check the computed style rath
 now ships a *Reveal* that does strip paint off hidden content. Augment's `type:"reveal"` spoiler keeps
 the word — it is PERSISTED in containers, so renaming it is a format change.)
 
-**The OTHER two apps need the seeded /cdn cache, and their controls are not `<button>`.** PDFInspector
-and Jexter proxy the CDN through their own `/cdn/…`, which the sandbox blocks: without
-`scripts/seed_cdn_cache.py` the shell renders and none of its JS loads, so a run proves nothing (measured:
-qry.js 502, then 200 after seeding). Start the server and drive it in ONE shell — a background server does
-not survive between tool calls. And their controls are Shoelace CUSTOM ELEMENTS:
-`querySelectorAll('button')` finds none of them, so a driver must ask for `button, sl-button` or it
-silently clicks nothing and reports the app stuck. Measured once each: the Inspector opens a PDF and
+**The OTHER two apps serve themselves** (everything vendored under `/shared/`, nothing fetched): start
+the server and drive it in ONE shell — a background server does not survive between tool calls, and
+stop it by its PID. Measured once each: the Inspector opens a PDF and
 answers on all four tabs (COS trailer, `Helvetica Type1 54 glyphs not embedded`, no image XObjects, the
 four rasterizers), Jexter normalises one (`1.9 KB → 9.8 KB (+429%) · selectable text READY`), 0 console
 errors either side.
