@@ -353,9 +353,10 @@ Analysis (`ocd.analysis`)
   gate that only reads words passes a page read row by row across its columns. Three shapes hid the
   columns: a proto-line cut at 1 em of the LARGER run (a newspaper gutter is ≈ 1 em), a photo or box over
   the gutter (only text cuts the order), a title set tight over a two-column list (`XYCut.headed`).
-- A line-final hyphen is judged by the document's own words (`OCDIndex` `Vocabulary`): kept only when the
-  compound is written whole elsewhere. A broken compound the document never writes whole is rejoined —
-  every wider guess (both halves are words) traded compounds for syllable breaks one for one.
+- A line-final hyphen is judged by the document's own words (`OCDIndex` `Vocabulary`, mirrored by `ocd.js`
+  `keepsHyphen` for read-aloud and search — the bench `hyphens.mjs` fails when they drift): the compound
+  written whole keeps it, the word written whole drops it, else lowercase → rejoined, capital → kept; never a
+  space. Every wider guess (both halves are words) traded compounds for syllable breaks one for one.
 
 ## 6 · Client traps (Prism, the Inspector, Jexter)
 

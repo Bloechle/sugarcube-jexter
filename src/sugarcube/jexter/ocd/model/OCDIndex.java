@@ -60,13 +60,15 @@ public final class OCDIndex {
 
     /** Append one run's text to {@code b}. Every word space — intra-glyph, inter-run and inter-line — already
      *  lives in the runs as a sentinel (see {@link sugarcube.jexter.ocd.analysis.Spacer}), so the index is a
-     *  plain concatenation. The only readout-time transform is the soft hyphen: a trailing {@code '-'} that a
-     *  line break split is dropped to rejoin the word — the hyphen stays <i>painted</i> in the model, so it can
-     *  only be resolved here, not materialised. (OCDBreak is a layout flag, never a spacing mechanism.) */
+     *  plain concatenation. The only readout-time transform is the line-final hyphen: the word it split joins
+     *  again, with no space, and {@link #keepsHyphen} says whether the hyphen stays — it stays <i>painted</i> in
+     *  the model, so it can only be resolved here, not materialised. (OCDBreak is a layout flag, never a
+     *  spacing mechanism.) */
     private static void join(StringBuilder b, OCDText cur, OCDText prev, Vocabulary words) {
         String x = cur.text();
-        if (prev != null && b.length() > 0 && b.charAt(b.length() - 1) == '-' && softHyphen(prev, cur, x)) {
-            if (words == null || !words.compound(b, x)) b.deleteCharAt(b.length() - 1);   // line-break hyphen → rejoin the word
+        if (prev != null && b.length() > 0 && b.charAt(b.length() - 1) == '-' && lowerLine(prev, cur)) {
+            if (splitsWord(b, x)) { if (!keepsHyphen(b, x, words)) b.deleteCharAt(b.length() - 1); }   // a syllable break → the word rejoins
+            else if (!x.isEmpty() && !Character.isWhitespace(x.charAt(0))) b.append(' ');   // a dash ending a line: Spacer left it no space
             b.append(x);
             return;
         }
@@ -97,9 +99,8 @@ public final class OCDIndex {
 
     /** The document's own words, as it writes them on one line — the self-reference that tells a compound
      *  broken at its hyphen ({@code allers-} / {@code retours}) from a word hyphenated at a syllable
-     *  ({@code préven-} / {@code tion}). No lexicon: the hyphen is kept when the document writes
-     *  {@code allers-retours} somewhere and never {@code allersretours}; when it says neither, the word is
-     *  rejoined, as poppler does — a syllable break is by far the common case. */
+     *  ({@code préven-} / {@code tion}, {@code Trace-} / {@code Monkey}). No lexicon. Mirrored by the client's
+     *  read-aloud ({@code ocd.js} {@code keepsHyphen}). */
     private static final class Vocabulary {
         private final java.util.Set<String> whole = new java.util.HashSet<>(), compounds = new java.util.HashSet<>();
 
@@ -122,31 +123,41 @@ public final class OCDIndex {
             }
         }
 
-        /** Whether the hyphen ending {@code b} joins two halves of a compound the document writes whole. */
-        boolean compound(StringBuilder b, String next) {
-            int i = b.length() - 1;                                    // the hyphen
-            while (i > 0 && Character.isLetterOrDigit(b.charAt(i - 1))) i--;
-            String left = b.substring(i, b.length() - 1);
-            String s = next.stripLeading();
-            int j = 0;
-            while (j < s.length() && Character.isLetterOrDigit(s.charAt(j))) j++;
-            String right = s.substring(0, j);
-            if (left.isEmpty() || right.isEmpty()) return false;
+        /** What the document says of {@code left-right}: {@code TRUE} it writes the compound and never the word,
+         *  {@code FALSE} the reverse, {@code null} neither (or both). */
+        Boolean compound(String left, String right) {
             String l = left.toLowerCase(java.util.Locale.ROOT), r = right.toLowerCase(java.util.Locale.ROOT);
-            return compounds.contains(l + "-" + r) && !whole.contains(l + r);
+            boolean c = compounds.contains(l + "-" + r), w = whole.contains(l + r);
+            return c == w ? null : c;
         }
+    }
+
+    /** Whether the hyphen ending {@code b} stays when the word it split joins {@code next}: what the document
+     *  writes decides; with no evidence, a lowercase continuation is a syllable break (rejoined, as poppler
+     *  does — by far the common case) and a capital one a compound ({@code Saint-} / {@code Gall}). */
+    private static boolean keepsHyphen(StringBuilder b, String next, Vocabulary words) {
+        int i = b.length() - 1;                                        // the hyphen
+        while (i > 0 && Character.isLetterOrDigit(b.charAt(i - 1))) i--;
+        String s = next.stripLeading();
+        int j = 0;
+        while (j < s.length() && Character.isLetterOrDigit(s.charAt(j))) j++;
+        Boolean said = words == null ? null : words.compound(b.substring(i, b.length() - 1), s.substring(0, j));
+        return said != null ? said : !Character.isLowerCase(s.charAt(0));
     }
 
     /** Slack on the "reading went back to a margin" test — above the export rounding, below any advance. */
     private static final double LINE_BACK_EPS = 0.01;
 
-    /** A trailing {@code '-'} is a line-break (soft) hyphen, not a compound hyphen, when the next run
-     *  begins a lower line with a lowercase letter — i.e. the word continues on the following line. The
-     *  rare compound that breaks exactly at its hyphen ({@code assurance-\naccidents}) is merged, as in
-     *  poppler; the lowercase-continuation guard keeps proper nouns and new clauses intact. */
-    private static boolean softHyphen(OCDText prev, OCDText cur, String x) {
+    /** The hyphen ending {@code b} splits a word {@code x} continues: a letter or digit on both sides — the dash
+     *  of {@code "client -"} does not. */
+    private static boolean splitsWord(StringBuilder b, String x) {
+        int n = b.length();
         String s = x.stripLeading();
-        if (s.isEmpty() || !Character.isLetter(s.charAt(0)) || !Character.isLowerCase(s.charAt(0))) return false;
+        return n >= 2 && Character.isLetterOrDigit(b.charAt(n - 2)) && !s.isEmpty() && Character.isLetterOrDigit(s.charAt(0));
+    }
+
+    /** {@code cur} begins a lower line than {@code prev} ends — the hyphen between them ends a line. */
+    private static boolean lowerLine(OCDText prev, OCDText cur) {
         JxRect a = prev.bounds(), c = cur.bounds();
         if (a.isEmpty() || c.isEmpty()) return false;
         double size = Math.max(prev.fontSize(), cur.fontSize());

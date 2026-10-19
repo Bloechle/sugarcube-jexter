@@ -16,6 +16,7 @@ python3 ../make_bench_fixtures.py /tmp/fix  # the documents (see its header)
 cp target/corpus/rich.pdf /tmp/fix/         # the form, links and layers: written by the gates' corpus
 cp target/corpus/rich.pdf /tmp/fix/big.pdf  # indexcost: any multi-page book
 cp target/corpus/text_embedded_ttf.pdf /tmp/fix/withfont.pdf   # retype: a font of its own
+cp target/corpus/text_press.pdf /tmp/fix/  # hyphens: the line-final hyphen cases
 # readingorder, indexcost: order.pdf — two columns, the RIGHT one painted first, its first word SECOND
 # and the left one's FIRST (any generator; paint order must differ from reading order)
 for f in /tmp/fix/*.pdf; do java -cp "$CP" sugarcube.jexter.Conversion \

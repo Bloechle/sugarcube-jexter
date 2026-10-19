@@ -397,9 +397,13 @@ Runs reach `Spacer` as pure ink. The moment `Segmenter` rebuilds a clean line (`
 3. **line end** (`endLine`) — the line ends on a word boundary: a trailing sentinel, unless it ends in a
    hyphen (left painted, for read-out to rejoin the split word or keep a compound). This seals the
    inter-line *and* inter-block same-line seam — a `Titre 2` marker block to its rubric block. The
-   read-out (`OCDIndex`) decides by self-reference, no lexicon: the hyphen stays when the document writes
-   the compound whole on one line (`allers-retours`) and never the joined form; otherwise the word is
-   rejoined, as poppler does. Wider evidence — both halves being words the document writes — was
+   read-out (`OCDIndex`) joins the split word again, never with a space, and decides the hyphen by
+   self-reference, no lexicon: it stays when the document writes the compound whole on one line
+   (`allers-retours`) and never the joined form, it goes when the document writes the word
+   (`TraceMonkey`); with no evidence a lowercase continuation is a syllable break (rejoined, as poppler
+   does) and a capital one a compound (`Saint-Gall`). A dash ending a line (`client -`) splits no word and
+   gets its space back. The client's read-aloud and search index apply the same rule over the whole book
+   (`ocd.js` `keepsHyphen`; the bench `hyphens.mjs` holds the two sides together). Wider evidence — both halves being words the document writes — was
    measured and refused: it kept as many syllable breaks (`inter-face`, `rassemble-ment`) as compounds.
 
 Every space is a render-neutral **sentinel** glyph (gid −1, unicode `" "`): outline-less, so every render

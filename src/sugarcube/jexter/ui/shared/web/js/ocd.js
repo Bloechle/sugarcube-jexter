@@ -249,6 +249,37 @@ export const inReadingOrder = (els) => [...els]
     .sort((a, b) => a.k - b.k)
     .map(x => x.el);
 
+/* -- The line-final hyphen: one rule, the engine's (`OCDIndex.keepsHyphen`) -- */
+
+const WORD = /[\p{L}\p{N}]/u;
+
+/** The words a book writes on one line, from its runs' texts: `whole` and `compounds` (hyphen inside), lower
+ *  case. A word a run ENDS on with a hyphen is a break in progress and says nothing. */
+export function vocabulary(texts) {
+    const whole = new Set(), compounds = new Set();
+    for (const t of texts)
+        for (const m of String(t || '').matchAll(/[\p{L}\p{N}][\p{L}\p{N}-]*/gu)) {
+            if (m[0].endsWith('-')) continue;
+            const w = m[0].toLowerCase();
+            (w.includes('-') ? compounds : whole).add(w);
+        }
+    return { whole, compounds };
+}
+
+/** `before` ends on a hyphen that splits a word `after` continues (a letter or digit on both sides). */
+export const splitsWord = (before, after) =>
+    /[\p{L}\p{N}]-$/u.test(before) && WORD.test(after.trimStart().charAt(0));
+
+/** Whether that hyphen stays when the word joins again (always with no space): what the book writes
+ *  decides — the compound and never the word keeps it, the reverse drops it; with no evidence, a lowercase
+ *  continuation is a syllable break and a capital one a compound ("Saint-" + "Gall"). */
+export function keepsHyphen(before, after, vocab) {
+    const l = (before.slice(0, -1).match(/[\p{L}\p{N}]+$/u) || [''])[0].toLowerCase();
+    const a = after.trimStart(), r = (a.match(/^[\p{L}\p{N}]+/u) || [''])[0].toLowerCase();
+    const c = !!vocab?.compounds.has(l + '-' + r), w = !!vocab?.whole.has(l + r);
+    return c !== w ? c : !/^\p{Ll}/u.test(a);
+}
+
 /** Every run under `root`, in reading order, depth first — the text of a page as it is meant to be
  *  read. Stops at the run: its `<use>` children are glyphs, not content. */
 export function readingRuns(root) {

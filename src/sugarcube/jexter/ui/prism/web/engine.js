@@ -15,13 +15,13 @@
 
 import { makeEvents, confirm, saveFile } from '/shared/vendor/qry/qry-app.js';
 import * as backend from './backend.js';
-import { parseFonts as parseFontsSvg, inReadingOrder, readingRuns, runBox, enc, dec } from '/shared/js/ocd.js';
+import { parseFonts as parseFontsSvg, inReadingOrder, readingRuns, runBox, enc, dec, vocabulary, splitsWord, keepsHyphen } from '/shared/js/ocd.js';
 import { book } from '/shared/js/book.js';
 
 const P = window.prism;                       // the chassis seam (state, hooks, API)
 const JX = 'OEBPS/ocd/';
 
-export const jx = { on: false, runs: [], structures: [], defaultId: null };   // runs[i] = [{id, text}]
+export const jx = { on: false, runs: [], vocab: null, structures: [], defaultId: null };   // runs[i] = [{id, text}]
 // A LIVE binding on purpose: it is false until /api/health answers, and ESM gives importers the
 // binding rather than a copy — `analysis.js` sees it flip without asking again.
 export let engine = false;
@@ -141,7 +141,7 @@ P.hooks.openSource = async (buffer, name) => {
 
 P.on('book', (state) => {
     jx.on = !!state.files?.[JX + 'meta.json'];
-    jx.runs = []; jx.structures = []; jx.defaultId = null;
+    jx.runs = []; jx.vocab = null; jx.structures = []; jx.defaultId = null;
     document.body.classList.toggle('jx-book', jx.on);
     if (!jx.on) { renderStructure(); return; }
 
@@ -175,8 +175,10 @@ P.on('book', (state) => {
         }
         if (!runs.length) { RUN.lastIndex = 0; let m; while ((m = RUN.exec(xml))) runs.push({ id: m[1], text: unesc(m[2]) }); }
         jx.runs[i] = runs;
-        if (state.pages[i]) state.pages[i].text = runs.map(r => r.text).join(' ').replace(/\s+/g, ' ').trim();
     });
+    // the book's own words, which decide every line-final hyphen (read-aloud, the search index)
+    jx.vocab = vocabulary(jx.runs.flatMap(rs => rs.map(r => r.text)));
+    jx.runs.forEach((runs, i) => { if (state.pages[i]) state.pages[i].text = joinRuns(runs.map(r => r.text)); });
 
     try {
         const ss = JSON.parse(dec(book.get(JX + 'structures.json') || enc('{}')));
@@ -185,7 +187,18 @@ P.on('book', (state) => {
     renderStructure();
 });
 
-P.on('close', () => { jx.on = false; jx.runs = []; jx.structures = []; renderStructure(); document.body.classList.remove('jx-book'); });
+/** A page's runs as one string: a hyphen that splits a word joins it again with no space (the engine's rule),
+ *  every other run boundary is a space. */
+function joinRuns(texts) {
+    let out = '';
+    texts.forEach((t, k) => {
+        if (k && splitsWord(out, t)) { if (!keepsHyphen(out, t, jx.vocab)) out = out.slice(0, -1); out += t.trimStart(); }
+        else out += (k ? ' ' : '') + t;
+    });
+    return out.replace(/\s+/g, ' ').trim();
+}
+
+P.on('close', () => { jx.on = false; jx.runs = []; jx.vocab = null; jx.structures = []; renderStructure(); document.body.classList.remove('jx-book'); });
 
 /* -- Hook: in-page search highlight, by run id ------------------------ */
 
@@ -321,9 +334,10 @@ function renderInspector() {
 // Speech text is SHAPED here, straight from the page DOM (grammar v2):
 //   • furniture paragraphs (header/footer roles) are never read;
 //   • soft hyphens (U+00AD) vanish;
-//   • a line-final "-" rejoins its word when the next line starts lowercase
-//     ("préven-" + "tion" → "prévention"), and stays (joined, no space) before a
-//     capital — a compound broken at its own hyphen ("Saint-" + "Gall");
+//   • a line-final "-" that splits a word joins it again, with no space, and the
+//     engine's rule says whether it stays (`keepsHyphen`, ocd.js): the book's own
+//     words first ("allers-" + "retours" stays when the book writes it whole), then
+//     lowercase → a syllable break ("préven-" + "tion"), capital → a compound;
 //   • paragraphs come as separate groups: the chassis speaks one utterance each,
 //     with a breath in between.
 P.hooks.ttsNodes = (doc, idx) => {
@@ -346,10 +360,9 @@ P.hooks.ttsNodes = (doc, idx) => {
                 const lastOfLine = ri === line.length - 1, lastLine = li === lines.length - 1;
                 if (lastOfLine) {
                     text = text.replace(/\s+$/, '');
-                    if (!lastLine && /-$/.test(text)) {
-                        const next = lines[li + 1]?.[0]?.getAttribute('data-text') || '';
-                        if (/^[\p{Ll}]/u.test(next.trimStart())) text = text.slice(0, -1);   // rejoined word
-                        // capital next → keep the hyphen, join without a space (compound)
+                    const next = lastLine ? '' : lines[li + 1]?.[0]?.getAttribute('data-text') || '';
+                    if (!lastLine && splitsWord(text, next)) {
+                        if (!keepsHyphen(text, next, jx.vocab)) text = text.slice(0, -1);   // a syllable break → one word
                     } else if (!lastLine) text += ' ';
                 }
                 if (text) nodes.push({ el, text });

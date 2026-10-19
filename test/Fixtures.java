@@ -208,14 +208,17 @@ final class Fixtures {
         String[] r2 = { "Jeudi", "Fête du village", "Samedi", "Course populaire" };
         for (int i = 0; i < l2.length; i++) words.add(tj(cs, i % 2 == 0 ? bold : times, 8, x, row(y, i), l2[i], null, 0, 100));
         for (int i = 0; i < r2.length; i++) words.add(tj(cs, i % 2 == 0 ? bold : times, 8, x + col + gutter, row(y, i), r2[i], null, 0, 100));
-        // a line-final hyphen, three ways: a compound the page also writes whole keeps it, a syllable break
-        // whose joined word the page writes rejoins, and one the page says nothing of rejoins (the common case)
+        // a line-final hyphen: a compound the page also writes whole keeps it, a syllable break whose joined
+        // word the page writes rejoins (before a capital too), and with no evidence a lowercase continuation
+        // rejoins (the common case) and a capital one keeps it — never a space either way
         y -= 70;
         String[] hy = { "les allers-retours entre", "les deux villes et les allers-", "retours du soir avec la pré-",
-                        "vention routière et la prévention", "des chantiers de collabo-", "ration avec le canton" };
+                        "vention routière et la prévention", "des chantiers de collabo-", "ration avec le canton",
+                        "et le moteur TraceMonkey du Trace-", "Monkey du soir à Saint-", "Gall ce jeudi" };
         for (int i = 0; i < hy.length; i++) tj(cs, times, 9, x, y - i * 11, hy[i], null, 0, 100);
         words.add("les allers-retours entre les deux villes et les allers-retours du soir avec la prévention"
-                + " routière et la prévention des chantiers de collaboration avec le canton");
+                + " routière et la prévention des chantiers de collaboration avec le canton"
+                + " et le moteur TraceMonkey du TraceMonkey du soir à Saint-Gall ce jeudi");
         WORDS.put("text_press", words);
     }
 
