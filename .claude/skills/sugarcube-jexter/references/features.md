@@ -42,6 +42,7 @@ and Unicode mapping, not glyph drawing.
 | `page_mediabox_cropbox` | CropBox inset 15 mm from the MediaBox |
 | `doc_outline_links` | two pages, outline, an external URI link; the second bookmark and the internal link are NAMED destinations (`/Names /Dests` and the catalog `/Dests`, as hyperref and InDesign write them) |
 | `doc_metadata` | Info dictionary: title, author, subject, keywords |
+| `doc_running_heads` | five pages under one running head and a folio: furniture stays out of every logical tree |
 | `rich` | the tracks beside the ink: a text field with a value, a checkbox on, a highlight, a note, two OCG layers (one off), two links, a two-level outline |
 | `tagged` | StructTreeRoot, ParentTree, MarkInfo; a title typed `Titre` and made H1 by the RoleMap · P · H2 · ONE P holding TWO MCIDs · L > LI > (Lbl, LBody) · a P in a form XObject with its own `/StructParents`, reached by an MCR with `/Stm` (its MCID 0 is not the page's) |
 

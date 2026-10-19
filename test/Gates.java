@@ -33,8 +33,10 @@ import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDDe
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDNamedDestination;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem;
+import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.core.JxStroke;
 import sugarcube.jexter.core.JxTransform;
+import sugarcube.jexter.ocd.analysis.Analysis;
 import sugarcube.jexter.ocd.io.OCDReader;
 import sugarcube.jexter.ocd.io.OCDVocab;
 import sugarcube.jexter.ocd.model.*;
@@ -94,6 +96,8 @@ public final class Gates {
             gate("NAV",      () -> nav(pdf, model));
             gate("TAGS",     () -> tags(pdf, model));
             gate("PIXELS",   () -> pixels(pdf, model));
+            gate("FURNITURE",() -> furniture(model));
+            gate("AGAIN",    () -> again(pdf));
             gate("STRADDLE", () -> straddle(model));
             gate("CLIPS",    () -> clips(model, OCDReader.read(container.toFile())));
             gate("COPY",     () -> copies(OCDReader.read(container.toFile())));
@@ -346,6 +350,58 @@ public final class Gates {
         return 100.0 * n / Math.max(1, (long) w * h);
     }
 
+    // ── AGAIN ────────────────────────────────────────────────────────────────────
+
+    /** Reading the analysis leaves the document as it was, and running it again finds the same document: the
+     *  stages export changes nothing, a second {@code Analysis.run} writes the same container byte for byte,
+     *  and Prism's "restructure text" keeps every heading role. */
+    private static List<String> again(File pdf) throws Exception {
+        List<String> bad = new ArrayList<>();
+        OCDDocument d = PdfImporter.convert(pdf);
+        byte[] first = Conversion.convert(d, "ocd", Map.<String, String>of()).bytes();
+        Conversion.convert(d, "stages", Map.<String, String>of());
+        if (!Arrays.equals(first, Conversion.convert(d, "ocd", Map.<String, String>of()).bytes())) bad.add("the stages export edited the document");
+        Analysis.run(d, ConvertOptions.defaults());
+        if (!Arrays.equals(first, Conversion.convert(d, "ocd", Map.<String, String>of()).bytes())) bad.add("a second analysis changed the container");
+        List<String> roles = headingRoles(d);
+        Analysis.restructureText(d, ConvertOptions.defaults());
+        if (!roles.equals(headingRoles(d))) bad.add("restructure text: heading roles " + roles + " -> " + headingRoles(d));
+        return bad;
+    }
+
+    private static List<String> headingRoles(OCDDocument d) {
+        List<String> out = new ArrayList<>();
+        for (int p = 0; p < d.pageCount(); p++)
+            d.page(p).nodes().filter(OCDParagraph.class::isInstance).map(OCDParagraph.class::cast)
+             .filter(q -> q.role() != null && q.role().startsWith("heading-")).forEach(q -> out.add(q.role()));
+        return out;
+    }
+
+    // ── FURNITURE ────────────────────────────────────────────────────────────────
+
+    /** Running heads and folios stay on the page and out of every structure the writers read. */
+    private static List<String> furniture(OCDDocument model) {
+        List<String> bad = new ArrayList<>();
+        for (OCDStructure st : model.structures()) {
+            if ("pdf".equals(st.id())) continue;                      // the author's tags say what they say
+            List<String> hits = new ArrayList<>();
+            furnitureRefs(st.root(), model, hits);
+            if (!hits.isEmpty()) bad.add(st.id() + " reads running furniture: " + hits);
+        }
+        return bad;
+    }
+
+    private static void furnitureRefs(OCDStructNode n, OCDDocument model, List<String> hits) {
+        for (var r : n.refs()) {
+            OCDNode x = model.page(r.page()).nodes().filter(q -> r.nodeId().equals(q.id())).findFirst().orElse(null);
+            if (x != null && x.stream().filter(OCDText.class::isInstance).map(OCDText.class::cast)
+                    .filter(t -> t.text() != null && !t.text().isBlank())
+                    .allMatch(t -> "page-header".equals(t.role()) || "page-footer".equals(t.role()))
+                    && x.stream().anyMatch(OCDText.class::isInstance)) hits.add(r.nodeId());
+        }
+        for (OCDStructNode c : n.children()) furnitureRefs(c, model, hits);
+    }
+
     // ── TAGS ─────────────────────────────────────────────────────────────────────
 
     /** A tagged PDF's tree lands as the author wrote it: every heading, paragraph, list and item, typed by its
@@ -364,8 +420,23 @@ public final class Gates {
             if (!want.equals(got)) bad.add("tree " + got + ", source " + want);
             var seen = new HashSet<OCDStructNode.Ref>();
             refs(pdfTree.root(), seen, bad);
+            if (!pdfTree.id().equals(model.defaultStructureId())) bad.add("default structure is " + model.defaultStructureId() + ", not the PDF's own");
+            if (model.outline().isEmpty()) headingRoles(pdfTree.root(), model, bad);   // no nav to win: the tags decide
         }
         return bad;
+    }
+
+    /** Every paragraph a PDF/UA heading references carries that heading's role. */
+    private static void headingRoles(OCDStructNode n, OCDDocument model, List<String> bad) {
+        if (n.type() == OCDStructNode.Type.HEADING)
+            for (var r : n.refs()) {
+                String want = "heading-" + Math.max(1, Math.min(6, n.level()));
+                OCDParagraph p = model.page(r.page()).nodes().filter(OCDParagraph.class::isInstance).map(OCDParagraph.class::cast)
+                        .filter(q -> r.nodeId().equals(q.id()) || q.children().stream().anyMatch(c -> r.nodeId().equals(c.id())))
+                        .findFirst().orElse(null);
+                if (p != null && !want.equals(p.role())) bad.add("heading " + r.nodeId() + " has role " + p.role() + ", the tags say " + want);
+            }
+        for (OCDStructNode c : n.children()) headingRoles(c, model, bad);
     }
 
     private static void tokens(PDStructureElement e, List<String> out) {

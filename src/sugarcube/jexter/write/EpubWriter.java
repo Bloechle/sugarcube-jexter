@@ -1,7 +1,6 @@
 package sugarcube.jexter.write;
 
 import sugarcube.jexter.core.ConvertOptions;
-import sugarcube.jexter.ocd.analysis.LanguageDetector;
 import sugarcube.jexter.core.JxLog;
 import sugarcube.jexter.core.JxZip;
 import sugarcube.jexter.ocd.io.OCDVocab;
@@ -54,7 +53,6 @@ public final class EpubWriter {
 
     public static void write(OCDDocument doc, OutputStream out, ConvertOptions opt) throws IOException {
         boolean annotations = Boolean.TRUE.equals(opt.get(ConvertOptions.RENDER_ANNOTATIONS));
-        LanguageDetector.detect(doc);                 // fill dc:language when the PDF declared none (export-time fallback)
         String uid = EpubPackage.uniqueId(doc);
         try (JxZip zip = new JxZip(out)) {
             zip.mimetype(MIME);                                  // STORED, first

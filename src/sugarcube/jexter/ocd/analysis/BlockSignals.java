@@ -149,8 +149,8 @@ final class BlockSignals {
             if (n instanceof OCDText t) {
                 String run = t.text();
                 if (run != null && !run.isEmpty()) {
-                    if (s.sb.length() > 0) s.sb.append(' ');
-                    s.sb.append(run);
+                    s.sb.append(run);                                        // word spaces live IN the runs (Spacer):
+                                                                             // a separator here split "Wo" + "rld"
                     if (run.length() > s.domChars) {                       // longest run drives size/font/colour/angle
                         s.domChars = run.length();
                         s.domSize = t.fontSize(); s.domFontId = t.fontId(); s.domFill = t.fill();
@@ -165,7 +165,8 @@ final class BlockSignals {
                 }
                 if (t.id() != null && !t.id().isEmpty()) s.leaves.add(t.id());
             } else if (n instanceof OCDBreak) {
-                if (s.sb.length() > 0) s.sb.append(' ');                    // a break separates words; the LINE
+                if (s.sb.length() > 0 && !Character.isWhitespace(s.sb.charAt(s.sb.length() - 1)))
+                    s.sb.append(' ');                                       // a break separates words; the LINE
                                                                             // count comes from Liner, not from here
             } else if (n.id() != null && !n.id().isEmpty()) {
                 s.leaves.add(n.id());                                       // image / path / media leaf inside the block

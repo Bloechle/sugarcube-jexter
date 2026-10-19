@@ -4,7 +4,6 @@ import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.core.JxText;
 import sugarcube.jexter.core.JxZip;
 import sugarcube.jexter.ocd.io.OCDVocab;
-import sugarcube.jexter.ocd.analysis.LanguageDetector;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDPage;
 import sugarcube.jexter.ocd.model.OCDStructNode;
@@ -47,7 +46,6 @@ public final class OcdEpubWriter {
 
     /** Uniform projection. */
     public static void write(OCDDocument doc, OutputStream out, ConvertOptions opt) throws IOException {
-        LanguageDetector.detect(doc);
         String uid = EpubPackage.uniqueId(doc);
         try (JxZip zip = new JxZip(out)) {
             zip.mimetype(MIME);                                   // STORED, first

@@ -18,8 +18,8 @@ import sugarcube.jexter.ocd.model.OCDParagraph;
  *
  * <p>{@link #run} performs the detection passes: ids, running furniture, segmentation, graphics,
  * heuristic structure (text + titles), reading-order, and an optional LLM refine. It deliberately does
- * <b>not</b> build the PDF/UA tagged structure — that needs the PDF tag tree and is added by
- * the PDF importer when importing a tagged document.
+ * <b>not</b> build the PDF/UA tagged structure — that needs the PDF tag tree: the PDF importer
+ * builds it BEFORE calling {@code run}, which then treats it as the document's own structure.
  *
  * <p>{@link #run} {@linkplain Cleaner#clean cleans} the content first — non-painting tokens and blank runs
  * dropped, render-neutral wrappers spliced, inked content kept — so detection restarts from a clean
@@ -38,14 +38,9 @@ public final class Analysis {
      *  base whatever the source — a freshly imported PDF (a near no-op: nothing analysed yet) or an
      *  OCD-EPUB read back with structure already on it (wrappers spliced, refs preserved). */
     public static void run(OCDDocument doc, ConvertOptions opts) {
-        // OCD-EPUB / generic entry: a PDF/UA structure is "native" iff one is already on the document.
+        // A PDF/UA structure is native iff one is already on the document: the importer builds it first.
         OCDStructure pdf = doc.structureById("pdf");
-        run(doc, opts, pdf != null && pdf.root() != null && !pdf.root().isEmpty());
-    }
-
-    /** Run the detection passes. {@code pdfTagged} = the source carries a PDF/UA tag tree (known by the
-     *  the PDF importer, before the {@code pdf} structure is built); it drives the outline-priority gate. */
-    public static void run(OCDDocument doc, ConvertOptions opts, boolean pdfTagged) {
+        boolean pdfTagged = pdf != null && pdf.root() != null && !pdf.root().isEmpty();
         opts.at(sugarcube.jexter.core.JxProgress.Stage.ANALYSIS, 0, 0);   // one shot: it has no unit to count
         Cleaner.clean(doc);                                                          // clean to the shared base — idempotent, source-agnostic; mints leaf ids (IdStamper.fill) and preserves any a structure already references
         if (opts.get(ConvertOptions.STRUCTURE)) {
@@ -63,6 +58,7 @@ public final class Analysis {
         }
         if (opts.get(ConvertOptions.REFINE_STRUCTURE) && LlmClient.isBound())      // optional LLM logical-structure pass
             Refiner.refine(doc, opts, LlmClient.bound());                     // grounded; no-op on failure
+        LanguageDetector.detect(doc);                                                // the text's language when none is declared — once, here, not by each writer
     }
 
     /**
@@ -92,7 +88,9 @@ public final class Analysis {
         Cleaner.clean(doc);                                                  // back to clean runs; mints leaf ids; preserves structure refs
         Paragrapher.recompose(doc);                                         // re-segment runs → paragraphs/lines
         if (opts.get(ConvertOptions.GRAPHICS)) GraphicClusterer.cluster(doc); // re-cluster vector graphics — text engulfed in a drawing segments with it, so this must run with the text layer, not be lost
+        OutlineAligner.align(doc);                                          // the new paragraphs re-cut on the nav, as in run
         IdStamper.fill(doc);                                                // ids for the new paragraph + graphic wrappers
+        HeadingRoles.project(doc);                                          // heading roles ride the paragraphs just replaced
         doc.textSegmented(true);
     }
 

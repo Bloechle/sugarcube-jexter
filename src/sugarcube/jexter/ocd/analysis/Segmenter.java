@@ -46,7 +46,7 @@ public final class Segmenter {
     /** Size ratio (larger / smaller) above which a size change starts a new block. */
     private static final double SIZE_JUMP  = 1.20;
     /** A line whose char-weighted bold fraction reaches this counts as a bold (heading-candidate) line. */
-    private static final double BOLD_LINE   = 0.60;
+    private static final double BOLD_LINE   = FontProfile.BOLD_LINE;
     /** Block grain: a block counts as bold / monospace when over half its characters are. */
     private static final double MAJORITY    = 0.50;
     /** × line height: a baseline gap wider than the region's body leading by this much is a paragraph
@@ -108,6 +108,16 @@ public final class Segmenter {
      *  crosses a graphical-group boundary. Columns, bands and the L-shape case are handled by the single
      *  {@link XYCut} engine. */
     public static List<Block> segment(OCDDocument doc, List<OCDText> runs, int page) {
+        return segment(doc, runs, page, true);
+    }
+
+    /** The same blocks, the runs left as they are: no line is frozen (ordered, spaced). What a read-only view
+     *  of the pipeline asks — {@link AnalysisStages} — so exporting the stages never edits the document. */
+    static List<Block> preview(OCDDocument doc, List<OCDText> runs, int page) {
+        return segment(doc, runs, page, false);
+    }
+
+    private static List<Block> segment(OCDDocument doc, List<OCDText> runs, int page, boolean freeze) {
         if (runs.isEmpty()) return List.of();
         // ① proto-lines: baseline bands, each cut at any >1 em horizontal gap so a margin number / second
         //    column stands as its own unit for XY-Cut. Ink-only — spaces are not derived yet.
@@ -126,7 +136,7 @@ public final class Segmenter {
             for (Line l : leaf) leafRuns.addAll(l.runs);
             List<Line> clean = new ArrayList<>();
             for (Liner.Line cl : Liner.lines(leafRuns, false)) {  // clean lines, band only — reading order
-                Spacer.freeze(doc, cl.runs());                    // freeze the line: order + word spaces, sealed once
+                if (freeze) Spacer.freeze(doc, cl.runs());        // freeze the line: order + word spaces, sealed once
                 clean.add(line(doc, cl.runs()));                  // Line.text is now built from spaced runs
             }
             // ④ split the leaf's lines into blocks by typography (size / weight) and leading

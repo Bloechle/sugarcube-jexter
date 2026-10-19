@@ -151,7 +151,8 @@ public final class Spacer {
             List<OCDText.Glyph> out = new ArrayList<>(gs.size() + idxs.size());
             for (int i = 0; i < gs.size(); i++) {
                 out.add(gs.get(i));
-                if (idxs.contains(i)) out.add(new OCDText.Glyph(SENTINEL, gs.get(i).x(), " "));
+                boolean spaced = i + 1 < gs.size() && gs.get(i + 1).isBlank();     // frozen before: idempotent
+                if (idxs.contains(i) && !spaced) out.add(new OCDText.Glyph(SENTINEL, gs.get(i).x(), " "));
             }
             gs.clear();
             gs.addAll(out);

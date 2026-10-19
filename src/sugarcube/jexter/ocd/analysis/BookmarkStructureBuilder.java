@@ -66,7 +66,7 @@ public final class BookmarkStructureBuilder {
             for (Block b : pageBlocks) {
                 OCDStructNode h = anchored.get(b);
                 if (h != null) current = h;
-                else StructureBuilder.addParagraph(current, b);
+                else if (!StructureBuilder.isFurniture(b)) StructureBuilder.addParagraph(current, b);
             }
         sugarcube.jexter.core.JxLog.info(BookmarkStructureBuilder.class,
                 "anchors: " + stats[0] + " exact, " + stats[1] + " fuzzy, " + stats[2] + " nearest-y");
@@ -99,6 +99,8 @@ public final class BookmarkStructureBuilder {
     private static Block anchor(OCDOutline o, List<Block> blocks, int[] stats) {
         if (blocks == null || blocks.isEmpty() || !o.hasDestination()) return null;
         String want = norm(o.title());
+        blocks = blocks.stream().filter(b -> !StructureBuilder.isFurniture(b)).toList();   // a running head quoting the title is not it
+        if (blocks.isEmpty()) return null;
         Block best = null; double bestDist = Double.MAX_VALUE;
         for (Block b : blocks) {                                  // 1) EXACT — the aligner made these one-block
             if (want.isEmpty() || !norm(b.text()).equals(want)) continue;

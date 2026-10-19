@@ -2,7 +2,6 @@ package sugarcube.jexter.write;
 
 import sugarcube.jexter.core.JxText;
 import sugarcube.jexter.core.ConvertOptions;
-import sugarcube.jexter.ocd.analysis.LanguageDetector;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDImage;
 import sugarcube.jexter.ocd.model.OCDMedia;
@@ -60,7 +59,6 @@ public final class HtmlWriter {
     // ── entry points ─────────────────────────────────────────────────────────
 
     public static String toHtml(OCDDocument doc) {
-        LanguageDetector.detect(doc);                 // fill the BCP-47 lang for <html lang> when the PDF declared none (export-time fallback)
         String title = doc.meta() != null && doc.meta().title() != null && !doc.meta().title().isBlank()
                 ? doc.meta().title() : "Document";
         String lang = doc.meta() != null && doc.meta().language() != null && !doc.meta().language().isBlank()

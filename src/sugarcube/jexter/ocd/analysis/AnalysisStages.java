@@ -60,7 +60,7 @@ public final class AnalysisStages {
         }
 
         List<JxRect> blockB = new ArrayList<>();
-        for (Segmenter.Block b : Segmenter.segment(doc, runs, pg)) blockB.add(b.bounds);
+        for (Segmenter.Block b : Segmenter.preview(doc, runs, pg)) blockB.add(b.bounds);
 
         // labelled — read the analysed paragraphs already on the page
         List<OCDParagraph> paras = page.nodes()
@@ -68,11 +68,8 @@ public final class AnalysisStages {
         StringBuilder lab = new StringBuilder("["); int ro = 0;
         for (OCDParagraph p : paras) {
             Segmenter.Block b = Segmenter.fromParagraph(doc, p, pg);
-            double sz = Math.round(b.size * 2) / 2.0;
-            FontProfile.Style st = new FontProfile.Style(sz, b.bold());
             boolean run = Furniture.isRunning(p);
-            boolean head = !run && (fp.isTitle(st) || fp.headingLevel(st) > 0)
-                    && b.lines.size() <= 2 && b.text().matches(".*\\p{L}{2,}.*") && b.text().length() <= 160;
+            boolean head = !run && StructureBuilder.isHeading(b, fp, doc);       // the builder's own verdict
             String k = run ? "F" : (head ? "H" : "P");
             if (ro > 0) lab.append(',');
             lab.append("{\"k\":\"").append(k).append("\",\"i\":").append(ro++).append(",\"b\":").append(box(b.bounds)).append('}');

@@ -58,6 +58,9 @@ public final class Furniture {
 
     public static void detect(OCDDocument doc) {
         int pages = doc.pageCount();
+        // Re-analysis starts from nothing: a line that WAS furniture and no longer is must lose the role.
+        for (int p = 0; p < pages; p++)
+            doc.page(p).texts().filter(Furniture::isRunning).forEach(t -> t.role(null));
         if (pages < MIN_PAGES) { JxLog.debug(Furniture.class, "header/footer skipped \u2014 " + pages + " pages (< " + MIN_PAGES + ")", null); return; }
 
         List<Page> pg = scan(doc);

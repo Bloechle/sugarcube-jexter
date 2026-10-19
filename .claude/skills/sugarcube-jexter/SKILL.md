@@ -330,10 +330,11 @@ Refactored, public layout — all under `sugarcube.jexter`:
     only**, never a spacing mechanism; `OCDIndex` is concatenation + soft-hyphen rejoin.
   - **`Liner`/`XYCut`/`Spacer` are inside `Paragrapher`, not stages** — mistaking them for
     pipeline steps is the classic misreading. So are `BlockSignals` and `AnalysisStages`
-    (read-only projections), and `LanguageDetector` (runs at export).
+    (read-only projections), and `LanguageDetector` (runs once, last in `Analysis.run`).
   - **Font name is deliberately not a cut signal** in `Segmenter` — an italic emphasis word
     would over-segment a paragraph. Size, weight, enumerator lead, interline only.
-  - **Three structures coexist**, priority `pdf` (PDF/UA, `TaggedStructureBuilder`) >
+  - **Three structures coexist**, priority `pdf` (PDF/UA, `TaggedStructureBuilder`, built by the
+    importer BEFORE `Analysis.run`, which then treats it as native) >
     `outline` (bookmarks, `BookmarkStructureBuilder`) > `heuristic` (`StructureBuilder`);
     `generateOutline` forces the heuristic **in parallel** without removing the native one.
     Nav-as-ground-truth is **self-reference, not a lexicon** — a bookmark title is a string
@@ -599,7 +600,7 @@ elements have no recurring style.
 > **Structure-axis GT for free — tagged PDFs and outlines.** A tagged (PDF/UA)
 > document carries the author's structure tree, so one file yields *both* surfaces at
 > once: `PdfImporter.convert` builds the PDF/UA tree (`TaggedStructureBuilder`, id
-> `pdf`) **and** the heuristic tree (`StructureBuilder`, id `heuristic`), so
+> `pdf`) **and**, with `generateOutline`, the heuristic tree (`StructureBuilder`, id `heuristic`), so
 > `doc.structures()` lets you diff recovery against ground truth. **But on legal /
 > government corpora the tag tree is a poor heading GT** — Swiss **Fedlex** law PDFs are
 > deeply nested (Titre › Chapitre › Section › Art.) yet their StructTreeRoot files most

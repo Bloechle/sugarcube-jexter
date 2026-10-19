@@ -85,6 +85,7 @@ final class Fixtures {
         FEATURES.put("page_mediabox_cropbox", (Whole) Fixtures::cropBox);
         FEATURES.put("doc_outline_links", (Whole) Fixtures::outlineLinks);
         FEATURES.put("doc_metadata", (Whole) Fixtures::metadata);
+        FEATURES.put("doc_running_heads", (Whole) Fixtures::runningHeads);
         FEATURES.put("rich", (Whole) Fixtures::rich);
         FEATURES.put("tagged", (Whole) Fixtures::tagged);
     }
@@ -708,6 +709,19 @@ final class Fixtures {
         internal.setAction(go);
         internal.setBorderStyle(noBorder());
         p1.getAnnotations().add(internal);
+    }
+
+    /** Five pages under one running head and a folio — page furniture, which the logical tree must leave out. */
+    private static void runningHeads(Doc d) throws IOException {
+        for (int i = 1; i <= 5; i++)
+            try (var cs = d.page(A4)) {
+                text(cs, d.sans(), 9, 20 * MM, H - 12 * MM, "MATRIX::doc_running_heads");
+                text(cs, d.sans(), 9, 20 * MM, H - 18 * MM, "A Treatise on Running Heads");
+                float y = H - 40 * MM;
+                for (int l = 0; l < 8; l++, y -= 6 * MM)
+                    text(cs, d.sans(), 11, 20 * MM, y, "Page " + i + ", line " + (l + 1) + ": the body text that changes on every page.");
+                text(cs, d.sans(), 9, A4.getWidth() / 2, 12 * MM, String.valueOf(i));
+            }
     }
 
     private static void metadata(Doc d) throws IOException {

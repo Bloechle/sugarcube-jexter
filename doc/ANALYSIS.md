@@ -142,7 +142,7 @@ line with `Liner` (overlap-only banding) and has **`Spacer` freeze it on the spo
 word spaces, sealed once — *before* the frozen lines are grouped into blocks (`splitLeaf`) and wrapped
 into paragraphs with `OCDBreak` markers. `Furniture` then runs on the reconstructed, spaced lines.
 
-`LanguageDetector` is **not** a pipeline stage — it runs at export (HTML / EPUB) as a language fallback.
+`LanguageDetector` runs once, last in `Analysis.run`, as a language fallback (never at export).
 
 It groups into four phases:
 
@@ -178,7 +178,10 @@ removes content that reaches no pixel and unwraps render-neutral wrappers, in **
 It is idempotent (re-running is a no-op) and structure-preserving — the native `pdf` (PDF/UA) tag tree
 survives untouched. `clean` runs first in `Analysis.run`, so a re-analysis is simply `run` again
 (there is no separate re-analysis entry point; `restructureText` / `restructureHierarchy` are the two
-PARTIAL re-runs Prism offers, each a documented subset of `run`).
+PARTIAL re-runs Prism offers, each a documented subset of `run` — `restructureText` re-cuts on the nav
+and re-projects the heading roles, which ride the paragraphs it replaces). The `AGAIN` gate holds all of
+it: a second `run` writes the same container, the `stages` export edits nothing, `restructureText`
+keeps every heading role.
 
 *(Ligature / NFKC normalization is not a pipeline pass; it is handled at the glyph/model and writer
 level so the painted glyph shapes are never altered.)*
@@ -260,7 +263,9 @@ never becomes a heading because its style does not recur.
 Reading order is **not a separate class**; it is `XYCut.order` — the same XY-Cut++ engine the
 segmenter uses — applied in two places: `Paragrapher` orders the page `content` array (so the array
 order *is* the reading order), and `StructureBuilder` orders the structure blocks. Running furniture
-is excluded via `Furniture.isRunning`. Paint order is carried separately by each node's `z`.
+is excluded via `Furniture.isRunning`: a block made of it alone never enters a logical tree (the
+`FURNITURE` gate). Paint order is carried separately by each node's `z`. The read-out (`OCDIndex`)
+follows the content's order too — never the ids, which a restructure leaves behind.
 
 ### 8. Refiner — optional logical refinement
 
@@ -274,10 +279,10 @@ heading depth **locally** — a level 1 on page 3 need not mean what a level 1 o
 `StructureReconciler` owns that one decision a per-page model cannot make, re-deriving a coherent
 global hierarchy deterministically. It is a normalization, not a second opinion.
 
-### At export — LanguageDetector
+### Last — LanguageDetector
 
-`LanguageDetector` is **not** a pipeline stage; the HTML and EPUB writers call it to fill the document
-language when the source declared none (never overriding an explicit `/Lang`). Script first (kana → ja,
+`LanguageDetector` runs once, at the end of `Analysis.run`, to fill the document language when the
+source declared none (never overriding an explicit `/Lang`); the writers only read it. Script first (kana → ja,
 hangul → ko, han → zh, …), then Latin-script stopword scoring with a frequency floor and a margin gate;
 it abstains when unsure.
 
@@ -392,7 +397,7 @@ is the **soft-hyphen rejoin** (the line-break hyphen stays painted, so it is res
 ### FontProfile — headings by recurrence
 
 `FontProfile.of` reads the whole document once and builds a typographic alphabet: per page (excluding
-running furniture) it clusters lines and accumulates, per type-style signature (half-point size +
+running furniture, INCLUDING invisible text — a scan's words are its OCR layer) it clusters lines and accumulates, per type-style signature (half-point size +
 whole-line bold), the total ink, the number of pages it appears on, and its occurrence count. The
 **body** is the signature with the most ink. The canonical rule for a heading:
 
@@ -472,7 +477,9 @@ the classic misreading of this layer:
   the projection **recomputes them with the same `Liner`/`XYCut`/`Segmenter`** — which is why the dump
   always tracks the current heuristics instead of drifting from them.
 
-`LanguageDetector` is likewise not a stage: it runs at export (HTML / EPUB) as a language fallback.
+The `stages` export segments with `Segmenter.preview` — the same blocks, no line frozen — so it never
+edits the document it describes. Its labelled stage asks `StructureBuilder.isHeading`, the builder's own
+verdict, and the builder reads a block's style with `FontProfile.styleOfLine`, the profile's own rule.
 
 ## Verification discipline
 

@@ -28,6 +28,7 @@ import java.util.Map;
 final class OCDIndex {
 
     private final Map<String, OCDNode> byKey = new HashMap<>();
+    private final Map<OCDNode, Integer> position = new java.util.IdentityHashMap<>();   // place in the page's content
 
     private OCDIndex() {}
 
@@ -36,7 +37,10 @@ final class OCDIndex {
         OCDIndex ix = new OCDIndex();
         for (int p = 0; p < doc.pageCount(); p++) {
             int page = p;
-            doc.page(p).nodes().forEach(n -> { if (n.id() != null) ix.byKey.put(key(page, n.id()), n); });
+            doc.page(p).nodes().forEach(n -> {
+                ix.position.put(n, ix.position.size());
+                if (n.id() != null) ix.byKey.put(key(page, n.id()), n);
+            });
         }
         return ix;
     }
@@ -139,7 +143,7 @@ final class OCDIndex {
     static boolean isInline(OCDStructNode s) { return INLINE.contains(s.type()); }
 
     /** A run tagged with the page it was referenced from — node ids are page-scoped, so reading order
-     *  is restored by sorting on {@code (page, sequential-id)} across own + inline-descendant refs. */
+     *  is restored by sorting on {@code (page, position in the content)} across own + inline-descendant refs. */
     private record Run(int page, OCDText text) {}
 
     /** Canonical text of a structure node: its referenced content (restricted to {@code page}
@@ -148,7 +152,9 @@ final class OCDIndex {
     String text(OCDStructNode s, int page) {
         List<Run> runs = new ArrayList<>();
         collect(s, page, runs);                                   // own refs + inline-descendant refs (SPAN/CODE/OTHER)
-        runs.sort(java.util.Comparator.comparingInt(Run::page).thenComparingInt(r -> idNum(r.text().id())));
+        // Reading order is the content's order, which the analysis set (XYCut) — never the ids, which a
+        // restructure leaves behind and which made a second, hidden reading-order authority.
+        runs.sort(java.util.Comparator.comparingInt(Run::page).thenComparingInt(r -> position.getOrDefault(r.text(), Integer.MAX_VALUE)));
         StringBuilder b = new StringBuilder();
         OCDText prev = null;
         for (Run rr : runs) {                                     // assemble across refs so a word split over runs stays whole
@@ -170,15 +176,5 @@ final class OCDIndex {
             }
         for (OCDStructNode c : s.children())
             if (isInline(c)) collect(c, page, out);              // recurse inline emphasis; stop at block children
-    }
-
-    /** Sequential reading-order key from a page-scoped node id (e.g. {@code "t45"} -> 45). */
-    private static int idNum(String id) {
-        if (id == null) return 0;
-        int i = 0, n = id.length();
-        while (i < n && !Character.isDigit(id.charAt(i))) i++;
-        int v = 0;
-        while (i < n && Character.isDigit(id.charAt(i))) v = v * 10 + (id.charAt(i++) - '0');
-        return v;
     }
 }

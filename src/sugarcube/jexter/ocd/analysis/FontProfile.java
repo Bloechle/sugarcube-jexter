@@ -46,8 +46,9 @@ public final class FontProfile {
     private static final int    MIN_PAGES  = 2;
     /** …or at least this many runs across the document. */
     private static final int    MIN_RUNS   = 3;
-    /** A block/line counts as bold when at least this fraction of its ink is bold (whole-line-bold rule). */
-    private static final double BOLD_LINE  = 0.60;
+    /** A block/line counts as bold when at least this fraction of its ink is bold (whole-line-bold rule) —
+     *  the one threshold: {@link Segmenter} cuts on the same. */
+    static final double BOLD_LINE  = 0.60;
 
     /** A typographic signature: point size (rounded to ½ pt) and weight. The unit of the style alphabet. */
     public record Style(double size, boolean bold) {}
@@ -80,14 +81,10 @@ public final class FontProfile {
         return 0;
     }
 
-    /** A style from an explicit size + weight, size snapped to the ½-pt alphabet — the one place a {@link Style}
-     *  is minted from a measured size, so callers never re-implement the bucket. */
-    public static Style styleOf(double size, boolean bold) { return new Style(round(size), bold); }
-
     /** The style of one run: its (rounded) size and the weight of its font. */
     public static Style styleOf(OCDText t, OCDDocument doc) {
         OCDFont f = t.fontId() == null ? null : doc.findFont(t.fontId());
-        return styleOf(t.fontSize(), f != null && f.isBold());
+        return new Style(round(t.fontSize()), f != null && f.isBold());
     }
 
     /** The style of a whole line: its dominant (most-ink) size, and bold iff the line is bold as a whole
@@ -119,7 +116,9 @@ public final class FontProfile {
             final int pg = p;
             List<OCDText> runs = new ArrayList<>();
             doc.page(p).texts().forEach(t -> {
-                if (t.isInvisible() || t.count() == 0) return;
+                // Invisible text votes: a scan's words ARE invisible (its OCR layer), and skipped they left the
+                // profile empty and the scan without a single heading.
+                if (t.count() == 0) return;
                 if (Furniture.isRunning(t)) return;                 // page furniture never votes
                 runs.add(t);
             });

@@ -15,6 +15,7 @@ import sugarcube.jexter.core.JxProgress;
 import sugarcube.jexter.core.JxRect;
 import sugarcube.jexter.core.JxTransform;
 import sugarcube.jexter.ocd.analysis.Analysis;
+import sugarcube.jexter.ocd.analysis.Cleaner;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDGroup;
 import sugarcube.jexter.ocd.model.OCDLayer;
@@ -123,12 +124,16 @@ public final class PdfImporter extends PdfStreamEngine {
             boolean tagged = opts.get(ConvertOptions.STRUCTURE)
                     && !opts.get(ConvertOptions.IGNORE_TAGS)                          // escape hatch: badly tagged PDFs
                     && st != null && st.getKids() != null && !st.getKids().isEmpty();
-            Analysis.run(doc, opts, tagged);                                          // OCD-native detection; outline priority gated on `tagged`
-            if (tagged) {                                                             // PDF/UA ground truth on top, when present
-                TaggedStructureBuilder.build(doc, st, pdf, mcidByPage);              // ground truth (PDF/UA)
-                doc.defaultStructureId("pdf");                                        // … becomes the default structure
-                sugarcube.jexter.ocd.analysis.HeadingRoles.project(doc);              // now that it exists, project its headings to page roles too
+            // PDF/UA is the author's own structure: it exists BEFORE the analysis, so the analysis knows the
+            // document is tagged, builds no heuristic in its place, and projects ITS headings to the pages.
+            // Built after, it came second to whatever the heuristic had already tagged. The clean first gives
+            // the marked runs their ids (it is the analysis' own first step, idempotent).
+            if (tagged) {
+                Cleaner.clean(doc);
+                TaggedStructureBuilder.build(doc, st, pdf, mcidByPage);
+                doc.defaultStructureId("pdf");
             }
+            Analysis.run(doc, opts);
         }
         return doc;
     }

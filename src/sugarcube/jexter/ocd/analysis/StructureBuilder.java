@@ -54,7 +54,8 @@ public final class StructureBuilder {
         Deque<OCDStructNode> headings = new ArrayDeque<>();
         for (Block b : blocks) {
             OCDStructNode container = headings.isEmpty() ? root : headings.peek();
-            if (isHeading(b, fp)) addHeading(b.page, level(b, fp), headingIds(b), headings, root);
+            if (isFurniture(b))   continue;                       // running heads and folios are no part of the text
+            if (isHeading(b, fp, doc)) addHeading(b.page, level(b, fp, doc), headingIds(b), headings, root);
             else                  addParagraph(container, b);
         }
         doc.structures().removeIf(st -> "heuristic".equals(st.id()));     // idempotent re-run / generate-outline
@@ -121,29 +122,47 @@ public final class StructureBuilder {
 
     /** A block is a heading when it is not running furniture / pure numbering and its document-wide
      *  typographic style ({@link FontProfile}) ranks as a recurring title. Always a short label. */
-    private static boolean isHeading(Block b, FontProfile fp) {
+    static boolean isHeading(Block b, FontProfile fp, OCDDocument doc) {
         if (isRunning(b)) return false;                            // running head/foot (Furniture authority)
         if (!hasAlphaWord(b.text())) return false;                 // a heading needs a real word — rejects "832.20", "1 / 60"
         if (b.lines.size() > HEADING_MAX_LINES) return false;      // a heading is a short label, never a flowing paragraph
         if (b.text().length() > HEADING_MAX_CHARS) return false;
-        FontProfile.Style s = styleOf(b);                          // document-wide recurrence decides — no local size ratio
+        FontProfile.Style s = styleOf(b, doc);                     // document-wide recurrence decides — no local size ratio
         return fp.isTitle(s) || fp.headingLevel(s) > 0;
     }
 
-    /** A block's typographic signature for the {@link FontProfile} lookup: half-pt size and whole-block weight. */
-    private static FontProfile.Style styleOf(Block b) {
-        return FontProfile.styleOf(b.size, b.bold());
+    /** A block's style for the {@link FontProfile} lookup — the profile's OWN reading of a line
+     *  ({@link FontProfile#styleOfLine}), over the block's runs: a lookup by a style the profile never
+     *  counted (another bold share, another size) finds no level. */
+    private static FontProfile.Style styleOf(Block b, OCDDocument doc) {
+        List<OCDText> runs = new ArrayList<>();
+        for (Segmenter.Line ln : b.lines) runs.addAll(ln.runs);
+        return FontProfile.styleOfLine(runs, doc);
     }
 
     /** Heading level: the document-wide size rank (largest = 1) from the {@link FontProfile}. */
-    private static int level(Block b, FontProfile fp) {
-        FontProfile.Style s = styleOf(b);
+    private static int level(Block b, FontProfile fp, OCDDocument doc) {
+        FontProfile.Style s = styleOf(b, doc);
         int r = fp.isTitle(s) ? 0 : Math.max(0, fp.headingLevel(s) - 1);   // 0-based rank from the document-wide profile
         return Math.min(6, r + 1);
     }
 
     /** True iff the block is running furniture, per the single authority {@link Furniture#isRunning}. */
     private static boolean isRunning(Block b) { return b.source != null && Furniture.isRunning(b.source); }
+
+    /** A block made of running furniture and nothing else: it stays on the page, never in the logical tree —
+     *  a running head or a folio read into Markdown, DocTags, HTML or a reflowable EPUB repeats on every page.
+     *  ALL its runs, not any: a block that also carries body text keeps it. */
+    static boolean isFurniture(Block b) {
+        boolean any = false;
+        for (Segmenter.Line ln : b.lines)
+            for (OCDText t : ln.runs) {
+                if (t.text() == null || t.text().isBlank()) continue;
+                if (!Furniture.isRunning(t)) return false;
+                any = true;
+            }
+        return any;
+    }
 
     /** A heading's content ids with footnote-reference superscripts dropped: a pure-digit run distinctly
      *  smaller than its line's dominant size is a footnote marker, so {@code "Titre 10 superscript"} keeps
