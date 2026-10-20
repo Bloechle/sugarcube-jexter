@@ -26,6 +26,7 @@ public final class OCDIndex {
     private final Map<String, OCDNode> byKey = new HashMap<>();
     private final Map<OCDNode, Integer> position = new java.util.IdentityHashMap<>();   // place in the page's content
     private final Vocabulary vocabulary = new Vocabulary();
+    private final java.util.Set<OCDNode> hidden = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());   // under a layer switched off
 
     private OCDIndex() {}
 
@@ -34,14 +35,18 @@ public final class OCDIndex {
         OCDIndex ix = new OCDIndex();
         for (int p = 0; p < doc.pageCount(); p++) {
             int page = p;
+            doc.page(p).nodes().filter(doc::hides).forEach(layer -> layer.stream().forEach(ix.hidden::add));
             doc.page(p).nodes().forEach(n -> {
                 ix.position.put(n, ix.position.size());
                 if (n.id() != null) ix.byKey.put(key(page, n.id()), n);
-                if (n instanceof OCDText t) ix.vocabulary.add(t.text());
+                if (n instanceof OCDText t && !ix.hidden.contains(t)) ix.vocabulary.add(t.text());
             });
         }
         return ix;
     }
+
+    /** {@code n} is read out: it is not under a layer switched off ({@link OCDDocument#hides}). */
+    public boolean shows(OCDNode n) { return !hidden.contains(n); }
 
     /** The node referenced on {@code page} by {@code id}, or {@code null}. */
     public OCDNode node(int page, String id) { return byKey.get(key(page, id)); }
@@ -193,7 +198,7 @@ public final class OCDIndex {
      *  straddling run) — its denormalized {@link OCDStructNode#text()}. The one resolver all writers share. */
     public String text(OCDStructNode s, int page) {
         List<Run> runs = new ArrayList<>();
-        collect(s, page, runs);                                   // own refs + inline-descendant refs (SPAN/CODE/OTHER)
+        boolean resolved = collect(s, page, runs);                // own refs + inline-descendant refs (SPAN/CODE/OTHER)
         // Reading order is the content's order, which the analysis set (XYCut) — never the ids, which a
         // restructure leaves behind and which made a second, hidden reading-order authority.
         runs.sort(java.util.Comparator.comparingInt(Run::page).thenComparingInt(r -> position.getOrDefault(r.text(), Integer.MAX_VALUE)));
@@ -204,19 +209,25 @@ public final class OCDIndex {
             if (t.text() != null && !t.text().isEmpty()) { join(b, t, prev, vocabulary); prev = t; }
         }
         String tt = b.toString().strip();
-        return nfkc(!tt.isEmpty() ? tt : (s.text() == null ? "" : s.text().strip()));
+        // the denormalized text stands in only for refs that resolve to nothing — never for a hidden layer's
+        return nfkc(!tt.isEmpty() || resolved ? tt : (s.text() == null ? "" : s.text().strip()));
     }
 
     /** Gather the text runs of {@code s}: its own refs plus those of its inline descendants
-     *  ({@link OCDStructNode#isInline}). Order is not preserved here — {@link #text} re-sorts into reading order. */
-    private void collect(OCDStructNode s, int page, List<Run> out) {
+     *  ({@link OCDStructNode#isInline}), none under a layer switched off. Order is not preserved here —
+     *  {@link #text} re-sorts into reading order. → whether any ref resolved to content. */
+    private boolean collect(OCDStructNode s, int page, List<Run> out) {
+        boolean resolved = false;
         for (OCDStructNode.Ref r : s.refs())
             if (page < 0 || r.page() == page) {
                 OCDNode n = node(r.page(), r.nodeId());
-                if (n != null) n.stream().filter(OCDText.class::isInstance).map(OCDText.class::cast)
-                                .forEach(t -> out.add(new Run(r.page(), t)));
+                if (n == null) continue;
+                resolved = true;
+                n.stream().filter(OCDText.class::isInstance).map(OCDText.class::cast).filter(t -> !hidden.contains(t))
+                          .forEach(t -> out.add(new Run(r.page(), t)));
             }
         for (OCDStructNode c : s.children())
-            if (c.isInline()) collect(c, page, out);              // recurse inline emphasis; stop at block children
+            if (c.isInline()) resolved |= collect(c, page, out);  // recurse inline emphasis; stop at block children
+        return resolved;
     }
 }

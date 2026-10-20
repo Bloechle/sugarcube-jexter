@@ -278,8 +278,9 @@ public final class HtmlWriter {
     // ── fallback (no structure tree) ───────────────────────────────────────────
 
     private static void fallback(OCDDocument doc, StringBuilder sb) {
+        OCDIndex ix = OCDIndex.of(doc);
         for (int p = 0; p < doc.pageCount(); p++)
-            doc.page(p).texts().filter(t -> t.text() != null && !t.text().isBlank())
+            doc.page(p).texts().filter(t -> t.text() != null && !t.text().isBlank() && ix.shows(t))
                              .forEach(t -> sb.append("<p>").append(text(t.text())).append("</p>\n"));
     }
 

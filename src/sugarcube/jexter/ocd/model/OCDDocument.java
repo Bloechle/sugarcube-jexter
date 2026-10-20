@@ -132,6 +132,13 @@ public final class OCDDocument {
     // ── layers (document-scoped registry) ────────────────────────────────────────
     public OCDDocument add(OCDLayer layer) { if (layer != null) layers.put(layer.id(), layer); return this; }
     public OCDLayer    layer(String id)    { return id == null ? null : layers.get(id); }
+
+    /** {@code n} is the content of a layer switched off: no reader shows it, so no projection paints
+     *  it or reads it out — the one rule the renderer, the writers and {@link OCDIndex} share. The
+     *  OCD-EPUB keeps it, layer and state, so a viewer can switch it on. */
+    public boolean hides(OCDNode n) {
+        return n instanceof OCDLayerContent lc && layer(lc.layerId()) != null && !layer(lc.layerId()).visible();
+    }
     public Map<String, OCDLayer> layers()  { return layers; }
 
     // ── outline (bookmark tree) ──────────────────────────────────────────────

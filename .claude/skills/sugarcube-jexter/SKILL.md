@@ -105,7 +105,7 @@ plus the workflow's client steps (every `src/**/*.js` parses as a module, no tem
 
 The gates (`test/Gates.java`, one JVM, `SOURCE_DATE_EPOCH` pinned by the deck — Gates refuses to run
 without it): REPRO · DOCTAGS · STABLE · MODEL · TIERS · NAV · TAGS · PIXELS · FURNITURE · AGAIN ·
-STRADDLE · CLIPS · COPY · DRAWN · EDITED · HOSTILE, each described in the file's header. **A change is done
+STRADDLE · CLIPS · COPY · DRAWN · EDITED · LAYERS · HOSTILE, each described in the file's header. **A change is done
 when they are green; a new defect class gets its check there.** Every check reports through the exit
 code — a gate that prints a report someone greps can be wired never to go red, and two once were.
 
@@ -179,7 +179,8 @@ writer) already shows the defect, the writer is innocent.
 - **The tracks** — links, fields, annotations, layers, outline ride outside the content tree, so a whole
   track can vanish with every paint and text gate green. `Rich.java` on `target/corpus/rich.pdf`. What
   each target keeps: ocd and pdf keep all (pdf drops the LAYERS), fixed epub drops external links,
-  reflow/html/md/doctags keep link text only. Re-measure before promising a target.
+  reflow/html/md/doctags keep link text only; none of them shows a
+  layer switched off (LAYERS). Re-measure before promising a target.
 - **A form field is live data**: no appearance stream is imported, the renderer draws a preview — a
   pixel diff confined to widget rects is expected.
 - **Colour and stroke questions** are scored with **poppler AND MuPDF** too (`batch_score.py` does
@@ -260,7 +261,11 @@ Import (`pdfimport`)
   folds into a SPAN (`TaggedStructureBuilder`). Typst writes every heading as H1 › Div › Span: kept as a
   SECTION, the heading read as nothing and every EPUB's contents said « Heading 1 » (TAGS checks it).
 - Layers are read at DOCUMENT level (`/OCProperties /D /OFF`), never discovered lazily from content —
-  a hidden stratum painted on every surface while the layer COUNT round-tripped.
+  a hidden stratum painted on every surface while the layer COUNT round-tripped. And a layer switched
+  off is honoured by ONE rule, `OCDDocument.hides`: the renderer, `PdfWriter`, `SvgWriter` (hence the
+  fixed EPUB) and `OCDIndex` (hence every text target) skip it; only the OCD-EPUB keeps it, with its
+  state. Before, only the renderer did — the PIXELS gate renders the MODEL, so it was blind while a
+  redaction's clean PDF painted a hidden draft in blue. Gate LAYERS.
 - Pattern fills: a shading pattern's ramp is sampled; grey (128,128,128) is the fallback showing through.
 - Paint the model cannot vectorise (tiling patterns, anything under an ExtGState SMask) goes through ONE
   route, `beyondVectors()` → a crop of `ReferenceRaster`; a masked glyph keeps its run as invisible text.

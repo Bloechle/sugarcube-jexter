@@ -133,6 +133,9 @@ public final class PdfWriter {
     }
 
     private void paint(PDPageContentStream cs, OCDNode n, OCDDocument doc, OCDPage page) throws IOException {
+        // A layer switched off: this writer does not carry layers, and painting it would SHOW what the
+        // source hides (the clean PDF of a redaction once revealed a hidden draft layer, in blue).
+        if (doc.hides(n)) return;
         cs.saveGraphicsState();
         try {
             if (n.hasClip()) {

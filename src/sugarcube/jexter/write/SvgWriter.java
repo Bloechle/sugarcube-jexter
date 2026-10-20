@@ -123,6 +123,7 @@ public final class SvgWriter {
     private static void node(StringBuilder sb, OCDDocument doc, OCDPage page, OCDNode n,
                              Map<String, String> styles, Map<String, String> faces,
                              Map<String, String> clips, Map<String, String> grads, FontSrc fontSrc) {
+        if (doc.hides(n)) return;                 // a layer switched off: a standalone page cannot switch it on
         // ONE clip rule, every node kind alike — see clipOpen. Nothing below ever emits a clip of its own.
         String open = clipOpen(page, n, clips, false);
         sb.append(open);

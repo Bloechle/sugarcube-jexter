@@ -4,7 +4,6 @@ import sugarcube.jexter.core.JxPath;
 import sugarcube.jexter.core.JxRect;
 import sugarcube.jexter.core.JxTransform;
 import sugarcube.jexter.ocd.model.OCDAnnotation;
-import sugarcube.jexter.ocd.model.OCDLayerContent;
 import sugarcube.jexter.ocd.model.OCDBreak;
 import sugarcube.jexter.ocd.model.OCDClip;
 import sugarcube.jexter.ocd.model.OCDDocument;
@@ -173,7 +172,7 @@ public final class OCDRenderer {
     private static void paint(Graphics2D g, OCDNode node, OCDPage page, OCDDocument doc,
                               AffineTransform pageTx, Map<String, BufferedImage> imageCache) {
         // a layer switched off paints nothing — the cover, a raster export and a pixel check alike
-        if (node instanceof OCDLayerContent lc && doc.layer(lc.layerId()) != null && !doc.layer(lc.layerId()).visible()) return;
+        if (doc.hides(node)) return;
         AffineTransform savedT = g.getTransform();
         Shape savedClip = g.getClip();
         Composite savedComposite = g.getComposite();

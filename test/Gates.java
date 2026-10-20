@@ -21,6 +21,9 @@
 //             writers emit maps, in the font's own cmap, to that glyph (a ligature drew an « f » and a gap).
 //   EDITED    a path a viewer moved (Prism's editor composes the move in front of the page flip)
 //             reads back moved — once, it was read back where it started.
+//   LAYERS    a layer switched off is painted and read out by no projection (pdf, epub, md, doctags,
+//             html), a layer left on by every one — once the clean PDF of a privacy check SHOWED a
+//             hidden draft layer, in blue, and every text target read it out.
 //   HOSTILE   broken and malicious variants of the container: refused with context, or read with a
 //             warning — never read in silence, never a leaked file, never an entity expansion; and a
 //             request naming a file of the engine's machine (ConvertOptions.LOCAL) refused.
@@ -115,6 +118,7 @@ public final class Gates {
             gate("COPY",     () -> copies(OCDReader.read(container.toFile())));
             gate("DRAWN",    () -> drawn(model));
             gate("EDITED",   () -> edited(ocd, tmp));
+            gate("LAYERS",   () -> layers(src, model));
             gate("HOSTILE",  () -> hostile(ocd, tmp));
         }
         System.out.println(failed == 0 ? "ALL GATES GREEN: " + checks + " checks on " + args.length + " PDFs" : failed + " GATE(S) FAILED");
@@ -648,6 +652,42 @@ public final class Gates {
 
     private static double pathX(OCDDocument d, String id) {
         return d.page(0).nodes().filter(n -> id.equals(n.id())).findFirst().orElseThrow().bounds().x();
+    }
+
+    // ── LAYERS ───────────────────────────────────────────────────────────────────
+
+    private static List<String> layers(byte[] src, OCDDocument doc) throws Exception {
+        List<String> off = new ArrayList<>(), on = new ArrayList<>();
+        for (OCDPage p : doc.pages())
+            p.nodes().filter(OCDLayerContent.class::isInstance).forEach(l -> {
+                String t = squeeze(OCDIndex.text(l));
+                if (t.length() >= 4) (doc.hides(l) ? off : on).add(t);
+            });
+        if (off.isEmpty() && on.isEmpty()) return ok();
+        List<String> bad = new ArrayList<>();
+        for (String target : List.of("pdf", "epub", "epub-reflow", "md", "doctags", "html")) {
+            byte[] out = Conversion.convert(src, target, Map.of("selectable", "true")).bytes();
+            String text = squeeze(switch (target) {
+                case "pdf" -> { try (PDDocument d = Loader.loadPDF(out)) { yield new org.apache.pdfbox.text.PDFTextStripper().getText(d); } }
+                case "epub", "epub-reflow" -> zipText(out);
+                default -> new String(out, StandardCharsets.UTF_8);
+            });
+            for (String t : off) if (text.contains(t)) bad.add(target + " shows a layer switched off: " + t);
+            for (String t : on) if (!text.contains(t)) bad.add(target + " lost a layer left on: " + t);
+        }
+        return bad;
+    }
+
+    /** Text with every space and markup gap gone: « HIDDEN LAYER » is found however a target spaces it. */
+    private static String squeeze(String s) { return s.replaceAll("<[^>]*>", "").replaceAll("\\s+", ""); }
+
+    private static String zipText(byte[] zip) throws Exception {
+        StringBuilder b = new StringBuilder();
+        try (ZipInputStream z = new ZipInputStream(new java.io.ByteArrayInputStream(zip))) {
+            for (ZipEntry e; (e = z.getNextEntry()) != null; )
+                if (e.getName().endsWith(".xhtml") || e.getName().endsWith(".svg")) b.append(new String(z.readAllBytes(), StandardCharsets.UTF_8));
+        }
+        return b.toString();
     }
 
     // ── HOSTILE ──────────────────────────────────────────────────────────────────
