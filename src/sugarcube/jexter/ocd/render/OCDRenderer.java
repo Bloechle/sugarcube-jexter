@@ -119,6 +119,37 @@ public final class OCDRenderer {
         return img;
     }
 
+    /** The page as it paints over {@code box} — a figure the way the page shows it: every shape and picture
+     *  whose ink meets the box, a text only when {@code keep} takes it (the figure's labels, never the body
+     *  text beside it), a layer switched off nowhere. A group with its own transform, clip or compositing
+     *  goes whole, as it paints. What it paints may reach past the box (a label's last glyphs, a stroke's
+     *  pen): the canvas spans {@link #REACH} more on every side, then is trimmed to the paint. Transparent
+     *  where nothing paints; {@code null} when nothing does. */
+    public static BufferedImage renderRegion(OCDPage page, OCDDocument doc, JxRect box, double dpi,
+                                             java.util.function.Predicate<OCDText> keep) {
+        java.util.List<OCDNode> nodes = new java.util.ArrayList<>();
+        region(page.content(), doc, box, keep, nodes);
+        BufferedImage img = renderNodes(nodes, box.inflate(REACH, REACH), page, doc, dpi);
+        int w = img.getWidth(), h = img.getHeight(), x0 = w, y0 = h, x1 = -1, y1 = -1;
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++)
+            if ((img.getRGB(x, y) >>> 24) != 0) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+        return x1 < 0 ? null : img.getSubimage(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+    }
+
+    /** Page units a figure's paint may reach past the ink the model measures. */
+    private static final double REACH = 24;
+
+    private static void region(java.util.List<OCDNode> in, OCDDocument doc, JxRect box,
+                               java.util.function.Predicate<OCDText> keep, java.util.List<OCDNode> out) {
+        for (OCDNode n : in) {
+            if (doc.hides(n) || n.ink().intersection(box).isEmpty()) continue;
+            if (n instanceof OCDText t) { if (keep.test(t)) out.add(t); }
+            else if (n instanceof OCDGroup g && (g.transform() == null || g.transform().isIdentity()) && !g.hasClip() && !g.compositesAsOne())
+                region(g.children(), doc, box, keep, out);
+            else out.add(n);
+        }
+    }
+
     /**
      * Bake a subset of a page's nodes (e.g. one transparency group's content) onto a TRANSPARENT
      * canvas, cropped to {@code bounds} (page space) at {@code dpi}. The nodes keep their page-space

@@ -53,6 +53,7 @@ public final class Analysis {
         IdStamper.fill(doc);                                                         // mint the paragraph + graphic ids created above — continues each per-kind sequence, never disturbs a referenced id
         if (opts.get(ConvertOptions.STRUCTURE)) {
             buildOutline(doc, opts, pdfTagged);
+            Figures.place(doc);                                                    // the body's pictures → FIGUREs, in reading order (not a tagged PDF's own tree)
             HeadingRoles.project(doc);                                             // best structure → page-level heading roles (all three worlds)
             doc.headingsDetected(true);
         }
@@ -104,6 +105,7 @@ public final class Analysis {
         clearHeadingRoles(doc);
         if (opts.get(ConvertOptions.DETECT_HEADERS)) Furniture.detect(doc);   // running heads/feet → roles (excluded from headings)
         StructureBuilder.build(doc);                                          // FontProfile recurrence → HEADING/PARAGRAPH
+        Figures.place(doc);                                                   // and the body's pictures, as in run
         doc.defaultStructureId("heuristic");
         HeadingRoles.project(doc);                                            // heuristic structure → page roles
         doc.headingsDetected(true);

@@ -269,6 +269,9 @@ Import (`pdfimport`)
 - Pattern fills: a shading pattern's ramp is sampled; grey (128,128,128) is the fallback showing through.
 - Paint the model cannot vectorise (tiling patterns, anything under an ExtGState SMask) goes through ONE
   route, `beyondVectors()` → a crop of `ReferenceRaster`; a masked glyph keeps its run as invisible text.
+  PDFBox draws a tiling pattern's CELL with the same page drawer on a canvas of its own: the raster must
+  draw everything there (`getGraphics() != page`), or the cell's plain fills are skipped and the crop is
+  transparent — every hatched bar of a chart vanished, invisible to PIXELS until fixture `vector_tiling`.
 - Zero-width strokes map to 0.75 pt at import (`PdfStreamEngine.pen()`); clip winding is resolved by
   `Area` at import. An anisotropic CTM strokes the exact outline: PDFBox averages the axes.
 - A run has ONE baseline: a glyph off it by more than 0.01 em starts a new run.
@@ -352,7 +355,15 @@ Analysis (`ocd.analysis`)
 - A paragraph the press cut is joined back by geometry alone (`StructureBuilder.Paragraphs`, both builders):
   last text of its page, its last line the column's full width; first text of the next page, same column,
   not indented. A heading between them keeps them apart. Fixture `doc_page_break`, gate FURNITURE.
-- Figures, tables, captions, lists, code are deferred to `Refiner` — do not re-add a heuristic.
+- Tables, captions, lists, code are deferred to `Refiner` — do not re-add a heuristic. Figures are not:
+  `Figures` places the body's pictures by geometry (doc/ANALYSIS.md 6b), gate FIGURES. Measure a change
+  to it on a corpus AND look at the pictures: the counts hid a chart split in 30 pieces, a figure spread
+  into the next column by a white canvas rectangle, captions baked into the image, a heading banner
+  swallowing its heading. Geometry there is `ink()`, never `bounds()`: a white fill is paper, a stroke
+  reaches half its pen (a straight rule has no area by its bounds and binds nothing).
+- A FIGURE's refs must survive the container: `SvgOcdWriter` dissolves a neutral `OCDGraphic` (identity,
+  no clip, no blend, opaque) into its children, so `OcdMembers` writes the refs to such a graphic as its
+  leaves (`SvgOcdWriter.dissolves`, one predicate) — a ref to it dangled and STABLE/DOCTAGS went red.
 - Word spaces are judged against PDFBox's extractor in BOTH directions: glued (our long words the reference
   never has) and lost (its long words we never produce). A gate change that improves one and is not
   measured on the other has not been measured. The `text_press` fixture and the WORDS gate hold the press

@@ -139,18 +139,21 @@ public final class SvgOcdWriter {
         }
     }
 
-    private static java.util.List<OCDNode> spliceGraphics(java.util.List<OCDNode> in) {
+    static java.util.List<OCDNode> spliceGraphics(java.util.List<OCDNode> in) {
         var out = new java.util.ArrayList<OCDNode>(in.size());
         for (OCDNode n : in) {
-            // A render-neutral OCDGraphic is DISSOLVED, on purpose: its children do NOT hold a
-            // contiguous z range — other content paints between them. Wrapping them in one <g>
-            // would force them into a single depth slot, and a path would paint over text.
-            if (n instanceof OCDGraphic g && g.transform().isIdentity()
-                    && !g.hasClip() && !g.hasBlend() && g.alpha() == 1f)
-                out.addAll(spliceGraphics(g.children()));
+            if (dissolves(n)) out.addAll(spliceGraphics(((OCDGraphic) n).children()));
             else out.add(n);
         }
         return out;
+    }
+
+    /** A render-neutral OCDGraphic is DISSOLVED, on purpose: its children do NOT hold a contiguous z
+     *  range — other content paints between them. Wrapping them in one {@code <g>} would force them into
+     *  a single depth slot, and a path would paint over text. A structure ref to it is written as refs to
+     *  what it held ({@link OcdMembers}), the Cleaner's rule for a spliced wrapper. */
+    static boolean dissolves(OCDNode n) {
+        return n instanceof OCDGraphic g && g.transform().isIdentity() && !g.hasClip() && !g.hasBlend() && g.alpha() == 1f;
     }
 
     private static void node(StringBuilder sb, OCDDocument doc, OCDPage page, OCDNode n, int order,

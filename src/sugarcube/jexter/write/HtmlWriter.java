@@ -181,19 +181,55 @@ public final class HtmlWriter {
         sb.append("</").append(tag).append(">\n");
     }
 
+    /** A figure shows its picture — the media, the image, or what it references DRAWN by the model's own
+     *  renderer (a chart, a diagram: no bitmap to take) — then its captions. Nothing to show, no element:
+     *  an empty {@code <figure>} once stood in every reflowable book for each drawing. */
     private static void figure(OCDStructNode s, OCDDocument doc, OCDIndex ix, StringBuilder sb, Assets assets) {
-        sb.append("<figure>\n");
         String alt = !s.alt().isEmpty() ? s.alt() : s.text();
         OCDMedia media = referencedMedia(s, ix);
-        if (media != null) {
-            sb.append(mediaElement(media, doc, assets));
-        } else {
-            String src = imageSrc(s, doc, ix, assets);
-            if (src != null)
-                sb.append("<img src=\"").append(src).append("\" alt=\"").append(attr(alt)).append("\"/>\n");
+        String picture = "";
+        if (media != null) picture = mediaElement(media, doc, assets);
+        else {
+            // one image is taken as it is; anything more (pieces of a chart, a picture and its labels) is drawn
+            String src = s.refs().size() == 1 ? imageSrc(s, doc, ix, assets) : null;
+            if (src == null) src = drawnSrc(s, doc, ix, assets);
+            if (src != null) picture = "<img src=\"" + src + "\" alt=\"" + attr(alt) + "\"/>\n";
         }
-        for (OCDStructNode c : s.children()) render(c, doc, ix, sb, assets);   // caption(s)
-        sb.append("</figure>\n");
+        StringBuilder captions = new StringBuilder();
+        for (OCDStructNode c : s.children()) render(c, doc, ix, captions, assets);
+        if (picture.isEmpty() && captions.isEmpty()) return;
+        sb.append("<figure>\n").append(picture).append(captions).append("</figure>\n");
+    }
+
+    static final double FIGURE_DPI = 144;    // a drawn figure's resolution: crisp on a phone, a few tens of KB
+
+    /** The region a figure covers (the ink of all it references), drawn as the page paints it — its labels,
+     *  no other text — on white at {@link #FIGURE_DPI}, as a PNG; or {@code null}. */
+    private static String drawnSrc(OCDStructNode s, OCDDocument doc, OCDIndex ix, Assets assets) {
+        java.util.Set<OCDNode> labels = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        sugarcube.jexter.core.JxRect box = sugarcube.jexter.core.JxRect.EMPTY;
+        int page = -1;
+        String first = null;
+        for (OCDStructNode.Ref r : s.refs()) {
+            OCDNode n = ix.node(r.page(), r.nodeId());
+            if (n == null || (page >= 0 && r.page() != page)) continue;
+            page = r.page();
+            if (first == null) first = n.id();
+            box = box.union(n.ink());
+            n.stream().forEach(labels::add);
+        }
+        if (page < 0 || box.isEmpty()) return null;
+        java.awt.image.BufferedImage drawn = sugarcube.jexter.ocd.render.OCDRenderer.renderRegion(doc.page(page), doc, box, FIGURE_DPI, labels::contains);
+        if (drawn == null) return null;
+        int pad = (int) Math.round(FIGURE_DPI / 24);                 // a breath of paper round the drawing: 3 pt
+        java.awt.image.BufferedImage white = new java.awt.image.BufferedImage(drawn.getWidth() + 2 * pad, drawn.getHeight() + 2 * pad, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = white.createGraphics();
+        try { g.setColor(java.awt.Color.WHITE); g.fillRect(0, 0, white.getWidth(), white.getHeight()); g.drawImage(drawn, pad, pad, null); }
+        finally { g.dispose(); }
+        var png = new java.io.ByteArrayOutputStream();
+        try { javax.imageio.ImageIO.write(white, "png", png); } catch (IOException e) { return null; }
+        String name = "figure-" + (page + 1) + "-" + JxName.safe(first) + ".png";
+        return assets != null ? assets.ref(name, png.toByteArray(), "image/png") : dataUri("image/png", png.toByteArray());
     }
 
     private static OCDMedia referencedMedia(OCDStructNode s, OCDIndex ix) {

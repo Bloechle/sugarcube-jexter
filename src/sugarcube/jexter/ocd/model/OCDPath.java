@@ -64,4 +64,14 @@ public final class OCDPath extends OCDNode {
         if (geometry == null) return JxRect.EMPTY;
         return transform.apply(JxRect.of(geometry.bounds()));
     }
+
+    /** What the path inks: a white shape with no stroke is paper, not ink; a stroke reaches half its pen past
+     *  the outline (a hairline half a point), so a straight rule has an area too. */
+    @Override public JxRect ink() {
+        if (!isStroked()) return fillGradient == null && fill == 0xFFFFFFFF ? JxRect.EMPTY : bounds();
+        if (geometry == null) return JxRect.EMPTY;
+        JxRect r = transform.apply(JxRect.of(geometry.bounds()));
+        double half = Math.max(pen.width() / 2, 0.5);
+        return r.inflate(half, half);
+    }
 }

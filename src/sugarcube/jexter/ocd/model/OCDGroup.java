@@ -63,6 +63,12 @@ public non-sealed class OCDGroup extends OCDNode {
         return box;
     }
 
+    @Override public JxRect ink() {
+        JxRect box = JxRect.EMPTY;
+        for (OCDNode c : children) box = box.union(c.ink());
+        return box;
+    }
+
     /** This group then every descendant, pre-order (paint order). */
     @Override public java.util.stream.Stream<OCDNode> stream() {
         return java.util.stream.Stream.concat(java.util.stream.Stream.of(this), children.stream().flatMap(OCDNode::stream));

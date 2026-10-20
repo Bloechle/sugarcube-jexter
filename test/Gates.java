@@ -24,6 +24,9 @@
 //   LAYERS    a layer switched off is painted and read out by no projection (pdf, epub, md, doctags,
 //             html), a layer left on by every one — once the clean PDF of a privacy check SHOWED a
 //             hidden draft layer, in blue, and every text target read it out.
+//   FIGURES   every picture the body shows is a FIGURE of the structure the writers read (a tagged PDF's
+//             own tree aside), and the reflow book draws each one: a <figure> always holds its <img> —
+//             once, 81 of 83 documents with pictures lost every one in the reflowable EPUB.
 //   HOSTILE   broken and malicious variants of the container: refused with context, or read with a
 //             warning — never read in silence, never a leaked file, never an entity expansion; and a
 //             request naming a file of the engine's machine (ConvertOptions.LOCAL) refused.
@@ -119,6 +122,7 @@ public final class Gates {
             gate("DRAWN",    () -> drawn(model));
             gate("EDITED",   () -> edited(ocd, tmp));
             gate("LAYERS",   () -> layers(src, model));
+            gate("FIGURES",  () -> figures(model, src));
             gate("HOSTILE",  () -> hostile(ocd, tmp));
         }
         System.out.println(failed == 0 ? "ALL GATES GREEN: " + checks + " checks on " + args.length + " PDFs" : failed + " GATE(S) FAILED");
@@ -688,6 +692,50 @@ public final class Gates {
                 if (e.getName().endsWith(".xhtml") || e.getName().endsWith(".svg")) b.append(new String(z.readAllBytes(), StandardCharsets.UTF_8));
         }
         return b.toString();
+    }
+
+    // ── FIGURES ──────────────────────────────────────────────────────────────────
+
+    private static List<String> figures(OCDDocument model, byte[] src) throws Exception {
+        List<String> bad = new ArrayList<>();
+        OCDStructure s = model.structureById(model.defaultStructureId());
+        int figs = 0;
+        if (s != null && !"pdf".equals(s.id())) {
+            Set<String> shown = new HashSet<>();
+            figs = figureRefs(s.root(), model, shown);
+            for (int p = 0; p < model.pageCount(); p++) {
+                int page = p;
+                model.page(p).images().filter(im -> !model.hides(im) && !sugarcube.jexter.ocd.analysis.Furniture.isRunning(im))
+                     .filter(im -> Math.max(im.ink().width(), im.ink().height()) >= 24)
+                     .filter(im -> !shown.contains(page + "/" + im.id()))
+                     .forEach(im -> bad.add("page " + (page + 1) + ": picture " + im.id() + " is in no FIGURE"));
+            }
+        }
+        String book = zipText(to(src, "epub-reflow"));
+        int open = 0, drawn = 0;
+        for (int at = book.indexOf("<figure"); at >= 0; at = book.indexOf("<figure", at + 1)) {
+            open++;
+            int end = book.indexOf("</figure>", at);
+            if (end > at && book.substring(at, end).contains("<img")) drawn++;
+        }
+        if (drawn != open) bad.add((open - drawn) + " of " + open + " <figure> without a picture in the reflow book");
+        if (s != null && !"pdf".equals(s.id()) && open < figs) bad.add(figs + " FIGUREs, " + open + " drawn in the reflow book");
+        return bad;
+    }
+
+    /** Count the FIGUREs under {@code n}, and note every node they reach (descendants included) as page/id. */
+    private static int figureRefs(OCDStructNode n, OCDDocument model, Set<String> shown) {
+        int count = 0;
+        if (n.type() == OCDStructNode.Type.FIGURE) {
+            count++;
+            OCDIndex ix = OCDIndex.of(model);
+            for (OCDStructNode.Ref r : n.refs()) {
+                OCDNode node = ix.node(r.page(), r.nodeId());
+                if (node != null) node.stream().forEach(x -> shown.add(r.page() + "/" + x.id()));
+            }
+        }
+        for (OCDStructNode c : n.children()) count += figureRefs(c, model, shown);
+        return count;
     }
 
     // ── HOSTILE ──────────────────────────────────────────────────────────────────

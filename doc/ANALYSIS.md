@@ -131,6 +131,7 @@ Cleaner.clean                          normalize to the shared ink base; mints l
   → OutlineAligner.align    [STRUCTURE] nav is ground truth: re-cut/merge title blocks, before ids
   → IdStamper.fill                     mint the wrapper ids created above
   → buildOutline()          [STRUCTURE] BookmarkStructureBuilder | StructureBuilder (see below)
+  → Figures.place           [STRUCTURE] the body's pictures → FIGUREs, in reading order
   → HeadingRoles.project    [STRUCTURE] best structure → page-level heading roles
   → Refiner.refine               [LLM]  optional, grounded, no-op on failure
 ```
@@ -152,7 +153,7 @@ It groups into four phases:
 |---|---|---|
 | Normalize | Cleaner | clean to a shared ink base; Cleaner mints deterministic leaf ids |
 | Physical layer | Paragrapher (Segmenter + Liner + Spacer), Furniture, GraphicClusterer | reconstruct + freeze lines, segment paragraphs, running furniture, graphics |
-| Logical structure | OutlineAligner, IdStamper(fill), structure builders, HeadingRoles | align on the nav, mint wrapper ids, label text + titles, project heading roles |
+| Logical structure | OutlineAligner, IdStamper(fill), structure builders, Figures, HeadingRoles | align on the nav, mint wrapper ids, label text + titles, project heading roles |
 | Enrich | Refiner | optional LLM refinement |
 
 
@@ -250,8 +251,9 @@ re-segmenting), takes the blocks in the content's order (the reading order `Para
 each into an `OCDStructNode` tree.
 
 **Scope: text + titles only.** This pass emits exactly two element types — **HEADING** and
-**PARAGRAPH** — under a `DOCUMENT` root. Figures, tables, captions, lists and code are *deferred to the
-downstream LLM-refine layer*; the heuristic pass commits only what pure typography can establish.
+**PARAGRAPH** — under a `DOCUMENT` root. Figures are placed next, by geometry (`Figures`, 6b); tables,
+captions, lists and code are *deferred to the downstream LLM-refine layer*; the heuristic pass commits
+only what pure typography and geometry can establish.
 
 - **Headings are typographic, not lexical.** A block is a heading only when `FontProfile` — the
   document-wide style alphabet — ranks its signature (half-point size + whole-block bold) as an
@@ -261,6 +263,31 @@ downstream LLM-refine layer*; the heuristic pass commits only what pure typograp
 
 Recurrence is the load-bearing discriminant: a one-off large decoration or a figure's internal label
 never becomes a heading because its style does not recur.
+
+### 6b. Figures — the body's pictures
+
+A structure built from text alone drops every picture: the reflowable EPUB of a paper lost all its
+figures. `Figures.place` gives each picture the body shows a FIGURE in the `outline` / `heuristic`
+structure (never in a tagged PDF's `pdf` tree: an untagged picture there is an artifact by PDF/UA),
+at the place of the first thing it holds in reading order. Pure geometry, no lexicon:
+
+- **What shows**: a picture or graphic with ink (a white shape is paper, `OCDNode.ink`; a stroke
+  reaches half its pen), at least 24 pt on a side, not running furniture, not repeated on most pages,
+  not a page-sized background under text — and not the frame of a text: a shape that holds body copy,
+  or a heading and nothing else (a banner), is that text's frame.
+- **What is one drawing**: pieces grow together while their ink is within 12 pt *and* the box they
+  would make holds no body text — the XY-Cut idea run bottom-up: a figure is a zone free of body copy.
+  Loose paths bind pieces (an arrow, an axis); a short label touching two pieces binds them, touching
+  one it may be a caption and stays text; last, pieces whose joint zone holds no body text at all are
+  one drawing (a figure on a page of its own, a chart and its legend).
+- **Body or label**: text of 100 characters or more is body copy — unless at least half of what its
+  lines span lies on the drawing (code set on coloured chips is a label).
+- Labels within the drawing (its ink, or overlapping it) join the FIGURE; a paragraph wholly inside is
+  replaced by it. The writers draw a FIGURE of several nodes as the page paints that region
+  (`OCDRenderer.renderRegion`: the shapes and pictures there, its own labels, no other text).
+
+The `FIGURES` gate holds it: every body picture is in a FIGURE, every `<figure>` of the reflow book
+holds its `<img>`.
 
 ### 7. Reading order — `XYCut.order`
 
@@ -489,8 +516,9 @@ confidence; everything else is deferred to the LLM-refine layer or the human.
 - segmentation + reading order — `XY-Cut++`
 - running furniture — recto/verso stack stability (`Furniture`)
 - headings — typographic recurrence (`FontProfile`); everything else is a paragraph
+- figures — pictures the body shows, grown into zones free of body copy (`Figures`)
 
-**Deferred to the LLM-refine layer** — figures, tables, captions, lists and code. The heuristic pass no
+**Deferred to the LLM-refine layer** — tables, captions, lists and code. The heuristic pass no
 longer guesses these: they need either a texture/grid opinion or a lexical pattern that geometry alone
 cannot commit safely, so `Refiner` recovers them downstream (grounded, optional).
 

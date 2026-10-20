@@ -102,6 +102,10 @@ public sealed abstract class OCDNode permits OCDText, OCDPath, OCDImage, OCDGrou
     /** Axis-aligned bounds in page space, derived from content. */
     public abstract JxRect bounds();
 
+    /** The bounds of what shows against the paper: {@link #bounds()}, less the paper-coloured shapes a
+     *  producer lays under a drawing (a white canvas wider than the figure it carries). */
+    public JxRect ink() { return bounds(); }
+
     // ── copy ───────────────────────────────────────────────────────────────────
     /**
      * An independent copy of this node — the whole subtree for a group. Declared here, and abstract,

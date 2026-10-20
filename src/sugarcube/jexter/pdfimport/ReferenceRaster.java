@@ -65,14 +65,24 @@ final class ReferenceRaster extends PDFRenderer {
         return new OnlyBeyondVectors(p);
     }
 
-    /** Draws a paint only when the model cannot ({@link PdfStreamEngine#beyondVectors}), or inside a group or
-     *  a mask. A skipped path still ends — its pending {@code W} clip must apply to what follows. */
+    /** Draws a paint only when the model cannot ({@link PdfStreamEngine#beyondVectors}), or inside a group, a
+     *  mask or a tiling pattern's cell — PDFBox draws a cell on a canvas of its own, and a cell drawn with its
+     *  plain fills skipped tiles nothing. A skipped path still ends — its pending {@code W} clip must apply to
+     *  what follows. */
     private static final class OnlyBeyondVectors extends PageDrawer {
         private int depth;                                      // inside a transparency group or a soft mask
+        private Graphics2D page;                                // the page's canvas: any other is a pattern cell's
 
         OnlyBeyondVectors(PageDrawerParameters p) throws IOException { super(p); }
 
-        private boolean draws(boolean stroking) { return depth > 0 || PdfStreamEngine.beyondVectors(getGraphicsState(), stroking); }
+        @Override public void drawPage(Graphics2D g, org.apache.pdfbox.pdmodel.common.PDRectangle box) throws IOException {
+            page = g;
+            super.drawPage(g, box);
+        }
+
+        private boolean all() { return depth > 0 || getGraphics() != page; }
+
+        private boolean draws(boolean stroking) { return all() || PdfStreamEngine.beyondVectors(getGraphicsState(), stroking); }
 
         @Override public void fillPath(int rule) throws IOException { if (draws(false)) super.fillPath(rule); else endPath(); }
         @Override public void strokePath() throws IOException      { if (draws(true)) super.strokePath(); else endPath(); }
@@ -81,11 +91,11 @@ final class ReferenceRaster extends PDFRenderer {
         }
         @Override public void shadingFill(COSName name) throws IOException { if (draws(false)) super.shadingFill(name); }
         @Override public void drawImage(PDImage image) throws IOException {
-            if (depth > 0 || getGraphicsState().getSoftMask() != null) super.drawImage(image);
+            if (all() || getGraphicsState().getSoftMask() != null) super.drawImage(image);
         }
         @Override protected void showFontGlyph(Matrix m, PDFont font, int code, Vector d) throws IOException {
             // a clipping mode must still add its glyph to the text clip
-            if (depth > 0 || getGraphicsState().getSoftMask() != null || getGraphicsState().getTextState().getRenderingMode().isClip())
+            if (all() || getGraphicsState().getSoftMask() != null || getGraphicsState().getTextState().getRenderingMode().isClip())
                 super.showFontGlyph(m, font, code, d);
         }
         @Override protected void processTransparencyGroup(PDTransparencyGroup group) throws IOException {

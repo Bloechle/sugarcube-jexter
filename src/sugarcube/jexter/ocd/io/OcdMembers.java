@@ -12,6 +12,7 @@ import sugarcube.jexter.ocd.model.OCDPage;
 import sugarcube.jexter.ocd.model.OCDStructNode;
 import sugarcube.jexter.ocd.model.OCDStructure;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Locale;
 
@@ -175,6 +176,7 @@ public final class OcdMembers {
     }
 
     public static String structuresJson(OCDDocument doc) {
+        Map<String, List<String>> dissolved = dissolved(doc);
         JxStringer js = new JxStringer(8192);
         js.obj();
         if (doc.defaultStructureId() != null) js.str("default", doc.defaultStructureId());
@@ -188,7 +190,7 @@ public final class OcdMembers {
             if (s.at() > 0)             js.num("at", s.at());
             if (!s.how().isEmpty())     js.str("how", s.how());
             if (!s.purpose().isEmpty()) js.str("purpose", s.purpose());
-            if (s.root() != null)       struct(js, "root", s.root());
+            if (s.root() != null)       struct(js, "root", s.root(), dissolved);
             js.end();
         }
         js.end();
@@ -196,9 +198,22 @@ public final class OcdMembers {
         return js.toString();
     }
 
-    private static void struct(JxStringer js, OCDStructNode s) { struct(js, null, s); }
+    /** page + id of every graphic the page writer dissolves ({@link SvgOcdWriter#dissolves}) → the ids it
+     *  writes in its place: a ref to it would dangle in the container, so it is written as refs to those. */
+    private static Map<String, List<String>> dissolved(OCDDocument doc) {
+        Map<String, List<String>> out = new java.util.HashMap<>();
+        for (int pi = 0; pi < doc.pageCount(); pi++) {
+            int page = pi;
+            doc.page(pi).nodes().filter(SvgOcdWriter::dissolves).forEach(g -> out.put(refKey(page, g.id()),
+                    SvgOcdWriter.spliceGraphics(((sugarcube.jexter.ocd.model.OCDGraphic) g).children()).stream()
+                            .map(sugarcube.jexter.ocd.model.OCDNode::id).filter(java.util.Objects::nonNull).toList()));
+        }
+        return out;
+    }
 
-    private static void struct(JxStringer js, String key, OCDStructNode s) {
+    private static String refKey(int page, String id) { return page + "\u0000" + id; }
+
+    private static void struct(JxStringer js, String key, OCDStructNode s, Map<String, List<String>> dissolved) {
         (key == null ? js.obj() : js.obj(key)).str("type", s.type().name().toLowerCase(Locale.ROOT));
         if (s.level() > 0)                            js.num("level", (long) s.level());
         if (s.colSpan() > 1)                          js.num("colspan", (long) s.colSpan());
@@ -211,12 +226,13 @@ public final class OcdMembers {
         if (!s.refs().isEmpty()) {
             js.arr("refs");
             for (OCDStructNode.Ref r : s.refs())
-                js.obj().str("page", OCDVocab.pageId(r.page())).str("node", r.nodeId()).end();
+                for (String id : dissolved.getOrDefault(refKey(r.page(), r.nodeId()), List.of(r.nodeId())))
+                    js.obj().str("page", OCDVocab.pageId(r.page())).str("node", id).end();
             js.end();
         }
         if (!s.children().isEmpty()) {
             js.arr("children");
-            for (OCDStructNode c : s.children()) struct(js, c);
+            for (OCDStructNode c : s.children()) struct(js, null, c, dissolved);
             js.end();
         }
         js.end();

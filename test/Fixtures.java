@@ -73,6 +73,7 @@ final class Fixtures {
         FEATURES.put("vector_dash_caps", (Page) Fixtures::dashCaps);
         FEATURES.put("vector_svg_like", (Page) Fixtures::svgLike);
         FEATURES.put("vector_soft_mask", (Whole) Fixtures::softMask);
+        FEATURES.put("vector_tiling", (Page) Fixtures::tiling);
         FEATURES.put("color_rgb", (Page) Fixtures::rgb);
         FEATURES.put("color_cmyk", (Page) Fixtures::cmyk);
         FEATURES.put("color_spot", (Page) Fixtures::spot);
@@ -672,6 +673,28 @@ final class Fixtures {
     }
 
     /** A genuine Separation colour space with a Type 2 tint transform to DeviceCMYK. */
+    /** A hatched bar, as a chart draws one: a coloured tiling pattern (blue cell, white diagonal) fills a
+     *  rectangle. The model cannot vectorise it and crops it from the reference raster — which must draw the
+     *  cell's plain fills, or the bar tiles nothing. */
+    private static void tiling(Doc d, PDPageContentStream cs) throws IOException {
+        org.apache.pdfbox.pdmodel.graphics.pattern.PDTilingPattern hatch = new org.apache.pdfbox.pdmodel.graphics.pattern.PDTilingPattern();
+        hatch.setPaintType(org.apache.pdfbox.pdmodel.graphics.pattern.PDTilingPattern.PAINT_COLORED);
+        hatch.setTilingType(org.apache.pdfbox.pdmodel.graphics.pattern.PDTilingPattern.TILING_CONSTANT_SPACING);
+        hatch.setBBox(new PDRectangle(0, 0, 12, 12));
+        hatch.setXStep(12);
+        hatch.setYStep(12);
+        hatch.setResources(new org.apache.pdfbox.pdmodel.PDResources());
+        try (OutputStream os = hatch.getContentStream().createOutputStream()) {
+            os.write("0.25 0.35 0.95 rg 0 0 12 12 re f 1 1 1 RG 2 w 0 0 m 12 12 l S".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+        }
+        org.apache.pdfbox.cos.COSName name = d.pdf.getPage(d.pdf.getNumberOfPages() - 1).getResources().add(hatch);
+        cs.setNonStrokingColor(new PDColor(name, new org.apache.pdfbox.pdmodel.graphics.color.PDPattern(null)));
+        cs.addRect(30 * MM, H - 160 * MM, 30 * MM, 110 * MM);
+        cs.fill();
+        cs.setNonStrokingColor(Color.BLACK);
+        text(cs, d.sans(), 10, 70 * MM, H - 60 * MM, "A bar filled with a hatched tiling pattern");
+    }
+
     private static void spot(Doc d, PDPageContentStream cs) throws IOException {
         PDSeparation sep = new PDSeparation();
         sep.setColorantName("PANTONE-1655-C");
