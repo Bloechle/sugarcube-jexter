@@ -289,6 +289,10 @@ Model and format (`ocd.model`, `ocd.io`)
   `ocd.model.Pages` remaps all three positional reference kinds at once. Page order is the OPF spine.
 - **`JxTransform` is `(a b c d) = (m00 m10 m01 m11)`**, PDF's order; `toMatrix6`/`fromMatrix6` are the
   only formatters. Realigning the record fixed four silent bugs at once.
+- **A request never names a file of the engine's machine.** Every host turns a query into options with
+  `ConvertOptions.fromRequest`, which refuses `LOCAL` (`addFont`, `addFontChars`); `fromMap` is for the
+  command lines. Over HTTP a path is the SERVER's disk: `addFont=/etc/passwd` was read for whoever asked
+  (the error even gave its size). A new option that takes a path joins `LOCAL`; HOSTILE checks both doors.
 - Text entering the model is XML-clean (`JxText.sanitize`); every XML parse is `JxXml.secureBuilder()`
   (DOCTYPE refused); the input kind is sniffed from content, never a name.
 - Reproducibility: one clock (`JxClock`, `SOURCE_DATE_EPOCH`); `doc.id()` is content-addressed. Test it

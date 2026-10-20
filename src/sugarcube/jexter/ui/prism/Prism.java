@@ -75,7 +75,7 @@ public final class Prism extends WebApp {
 
             // The window is watching: bind the progress channel of THIS conversion to the SSE stream.
             // Per conversion, never global — the engine's concurrency contract is one document per thread.
-            ConvertOptions co = ConvertOptions.fromMap(opts).progress(p -> pushProgress(p.toJson()));
+            ConvertOptions co = ConvertOptions.fromRequest(opts).progress(p -> pushProgress(p.toJson()));
             Conversion.Output out = Conversion.convert(body, to, co);   // PDF, image or OCD-EPUB: the engine sniffs
             pushProgress(new JxProgress(JxProgress.Stage.WRITE, 0, 0, "done").toJson());
             send(x, out);

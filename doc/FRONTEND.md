@@ -20,7 +20,7 @@ that consumer's business, outside this repository.
 | Method | Route | Body / query | Returns |
 |--------|-------|--------------|---------|
 | `POST` | `/api/convert?to=<target>[&<opt>=<val>…]` | a **PDF** (`%PDF`) → import+export · or an **OCD-EPUB** (`PK` zip) → re-export | the artifact bytes (media type + `Content-Disposition` from jexter) |
-| `GET`  | `/api/options` | — | `{ model, options:[ {key,label,help,type,group,def} … ] }` — `model` names the bound language model, `""` when none |
+| `GET`  | `/api/options` | — | `{ model, options:[ {key,label,help,type,group,local,def} … ] }` — `model` names the bound language model, `""` when none; `local` marks an option naming a file of the engine's machine (`ConvertOptions.LOCAL`), which a request may not set (`fromRequest`: a 400) |
 | `GET`  | `/api/targets` | — | `{ targets:[ "svg","pdf","epub","epub-reflow","html","md","doctags","ocd","stages","audit","zones","patch" ] }` — `Conversion.Target`, the only list |
 | `GET`  | `/api/health`  | — | `"ok"` (liveness) |
 

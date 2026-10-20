@@ -22,7 +22,8 @@
 //   EDITED    a path a viewer moved (Prism's editor composes the move in front of the page flip)
 //             reads back moved — once, it was read back where it started.
 //   HOSTILE   broken and malicious variants of the container: refused with context, or read with a
-//             warning — never read in silence, never a leaked file, never an entity expansion.
+//             warning — never read in silence, never a leaked file, never an entity expansion; and a
+//             request naming a file of the engine's machine (ConvertOptions.LOCAL) refused.
 //
 //   node nimbus-jexter.cjs --run=test     the whole run, on any OS: compile src/ and test/, corpus, every gate
 //
@@ -685,6 +686,15 @@ public final class Gates {
         for (String[] v : new String[][] { { "oldver", "\"version\":\"3\"" }, { "nover", "\"v\":\"\"" } }) {
             byte[] edited = meta.replace(ver, v[1]).getBytes(StandardCharsets.UTF_8);
             variants.put(v[0], rezip(good, (n, b) -> n.endsWith("meta.json") ? edited : b));
+        }
+
+        // A request may not name a file of the engine's machine (ConvertOptions.LOCAL): over HTTP it would be
+        // read for whoever asked. The command line may.
+        for (String key : ConvertOptions.LOCAL) {
+            try { ConvertOptions.fromRequest(Map.of(key, "/etc/passwd")); bad.add("a request set " + key); }
+            catch (IllegalArgumentException refused) { /* the expected answer */ }
+            if (!"/etc/passwd".equals(ConvertOptions.fromMap(Map.of(key, "/etc/passwd")).toMap().get(key)))
+                bad.add("the command line lost " + key);
         }
 
         for (var v : variants.entrySet()) {

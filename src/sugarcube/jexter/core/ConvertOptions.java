@@ -4,6 +4,7 @@ package sugarcube.jexter.core;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Locale;
 
 /**
@@ -280,6 +281,11 @@ public final class ConvertOptions {
             GRAPHICS, GENERATE_OUTLINE, RESTRUCTURE_TEXT, RESTRUCTURE_HIERARCHY, REFINE_STRUCTURE, LLM_MODEL,
             NAV_PER_PAGE, PAGE, PAGES, SELECTABLE, DOCTAGS_GRID, DEFAULT_STRUCTURE, REDACT, REDACT_FILL, REDACT_META, MATCH, ADD_FONT, ADD_FONT_CHARS);
 
+    /** The options that name a FILE of the machine running the engine. The command line may set them;
+     *  a request may not ({@link #fromRequest}) — over HTTP that path is the server's disk, never the
+     *  client's, and the file would be read for whoever asked. A browser sends the font's bytes instead. */
+    public static final Set<String> LOCAL = Set.of(ADD_FONT.key(), ADD_FONT_CHARS.key());
+
     // ── values (sparse: only overrides are stored; missing keys fall back to def) ─
     private final Map<String, Object> values = new LinkedHashMap<>();
 
@@ -330,7 +336,8 @@ public final class ConvertOptions {
             JxStringer js = new JxStringer().obj()
                     .str("key", o.key()).str("label", o.label()).str("help", o.help())
                     .str("type", o.type().name().toLowerCase(Locale.ROOT))
-                    .str("group", o.group().name().toLowerCase(Locale.ROOT));
+                    .str("group", o.group().name().toLowerCase(Locale.ROOT))
+                    .bool("local", LOCAL.contains(o.key()));
             switch (o.type()) {
                 case BOOL   -> js.bool("def", Boolean.TRUE.equals(o.def()));
                 case INT    -> js.num("def", o.def() instanceof Number n ? n.longValue() : 0L);
@@ -343,15 +350,28 @@ public final class ConvertOptions {
         return b.append("]}").toString();
     }
 
-    // ── API boundary: string map ⇄ options (Prism /api, PDFInspector) ───────────
+    // ── API boundary: string map ⇄ options (the command lines, the apps, an HTTP request) ─────────
+    /** Every key of the registry found in {@code m}; a value that does not parse names its key. */
     public static ConvertOptions fromMap(Map<String, String> m) {
         ConvertOptions o = new ConvertOptions();
         if (m != null)
             for (Opt<?> opt : ALL) {
                 String raw = m.get(opt.key());
-                if (raw != null) o.values.put(opt.key(), parse(opt.type(), raw));
+                if (raw == null) continue;
+                try { o.values.put(opt.key(), parse(opt.type(), raw)); }
+                catch (NumberFormatException e) {
+                    throw new IllegalArgumentException(opt.key() + ": \"" + raw + "\" is not a number");
+                }
             }
         return o;
+    }
+
+    /** {@link #fromMap} for a request that came over a network: an option of {@link #LOCAL} is refused. */
+    public static ConvertOptions fromRequest(Map<String, String> m) {
+        if (m != null) for (String key : LOCAL)
+            if (m.containsKey(key))
+                throw new IllegalArgumentException(key + " names a file on the machine running the engine: a request cannot set it");
+        return fromMap(m);
     }
 
     /** Every option's effective value (overrides + defaults) — ready to send to a UI. */
