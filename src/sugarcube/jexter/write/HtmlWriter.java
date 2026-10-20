@@ -34,7 +34,7 @@ import sugarcube.jexter.core.JxName;
  * <ul>
  *   <li>{@link #toHtml} — a self-contained standalone HTML document (assets inlined as data URIs);</li>
  *   <li>{@link #body} — the {@code <body>} fragment only, for embedding (e.g. an EPUB chapter);</li>
- *   <li>{@link #chapters} — the body split at top-level headings, for a navigable EPUB spine.</li>
+ *   <li>{@link #chapters} — the body cut into chapters that stand, every heading anchored, for an EPUB spine and its TOC.</li>
  * </ul>
  * The optional {@link Assets} sink lets a caller externalize images/media as packaged resources
  * (returning an href) instead of inlining them; passing {@code null} keeps the self-contained
@@ -51,9 +51,14 @@ public final class HtmlWriter {
         String ref(String name, byte[] data, String mime);
     }
 
-    /** One spine document: a stable {@code id} (also the file base), a {@code title} for the TOC,
-     *  and the rendered {@code <body>} HTML fragment. */
-    public record Chapter(String id, String title, String html) {}
+    /** One spine document: a stable {@code id} (also the file base), a {@code title}, the rendered
+     *  {@code <body>} HTML fragment, and the headings it holds, in order — the table of contents. */
+    public record Chapter(String id, String title, String html, List<Heading> headings) {
+        public Chapter(String id, String title, String html) { this(id, title, html, List.of()); }
+    }
+
+    /** A heading of the book: its level (1..6), its words, and the {@code id} of its {@code <h>} in its chapter. */
+    public record Heading(int level, String title, String anchor) {}
 
     /** Uniform projection: a self-contained standalone HTML document (UTF-8). Whole-document
      *  reflow — export options are accepted for contract uniformity but not consumed. */
@@ -90,9 +95,17 @@ public final class HtmlWriter {
         return sb.toString();
     }
 
-    /** Split the body into chapters at top-level HEADING boundaries (content before the first
-     *  heading, and the no-heading case, become a single "Content" chapter). Each chapter is a
-     *  self-contained body fragment, ready to wrap as one spine document. */
+    /** A chapter shorter than this (characters of text, a picture counting as a full chapter) is no chapter:
+     *  it joins the next one (the last joins the one before). A stamp in the margin, an author line or a
+     *  title read as a heading once each made a spine document of a line. */
+    public static final int MIN_CHAPTER = 400;
+
+    /** The book's chapters. The structure is laid out as one sequence of headings and blocks (a heading's
+     *  section, a section that holds headings, opened); a heading wrapped over two lines is one heading; the
+     *  book is cut at the highest heading level that gives two chapters or more — a document under one
+     *  title is cut at its sections, not left whole — and a chapter too short to stand joins its neighbour.
+     *  Every heading gets an anchor, so the table of contents reaches the deeper levels inside a chapter.
+     *  No heading: one "Content" chapter. */
     public static List<Chapter> chapters(OCDDocument doc, Assets assets) {
         OCDIndex ix = OCDIndex.of(doc);
         var out = new ArrayList<Chapter>();
@@ -102,23 +115,133 @@ public final class HtmlWriter {
             if (!html.isBlank()) out.add(new Chapter("chapter-1", "Content", html));
             return out;
         }
-        var cur = new StringBuilder();
-        String curTitle = null;
-        for (OCDStructNode c : OCDStructNode.flow(body(root).children())) {
-            if (c.type() == OCDStructNode.Type.HEADING && cur.length() > 0) {
-                out.add(new Chapter("chapter-" + (out.size() + 1), curTitle != null ? curTitle : "Content", cur.toString()));
-                cur = new StringBuilder();
-                curTitle = null;
-            }
-            if (c.type() == OCDStructNode.Type.HEADING && curTitle == null) {
-                String t = content(c, ix).strip();
-                curTitle = t.isEmpty() ? "Section" : (t.length() > 120 ? t.substring(0, 120) + "\u2026" : t);
-            }
-            render(c, doc, ix, cur, assets);
+        List<Unit> units = new ArrayList<>();
+        lay(OCDStructNode.flow(body(root).children()), ix, units);
+        units = wrapped(units, ix);
+        int cut = cutLevel(units);
+
+        List<List<Unit>> parts = new ArrayList<>();                 // cut at the chapter-level headings
+        for (Unit u : units) {
+            if (parts.isEmpty() || u.title != null && u.node.headingLevel() <= cut && !parts.getLast().isEmpty()) parts.add(new ArrayList<>());
+            parts.getLast().add(u);
         }
-        if (cur.length() > 0)
-            out.add(new Chapter("chapter-" + (out.size() + 1), curTitle != null ? curTitle : "Content", cur.toString()));
+        for (int i = 0; i < parts.size() && parts.size() > 1; ) {   // too short to stand: join the next (the last, the one before)
+            if (weight(parts.get(i), ix) >= MIN_CHAPTER) { i++; continue; }
+            if (i + 1 < parts.size()) parts.get(i + 1).addAll(0, parts.remove(i));
+            else { parts.get(i - 1).addAll(parts.remove(i)); }
+        }
+
+        int anchors = 0;
+        for (List<Unit> part : parts) {
+            var html = new StringBuilder();
+            var heads = new ArrayList<Heading>();
+            String title = null, at = null;                          // its title: the chapter-level heading
+            int most = -1, here = 0;                                  // with the most to read under it
+            for (Unit u : part) {
+                if (u.title == null) {
+                    here += weight(List.of(u), ix);
+                    render(u.node, doc, ix, html, assets);
+                    continue;
+                }
+                String anchor = "h" + (++anchors);
+                int lv = u.node.headingLevel();
+                html.append("<h").append(lv).append(" id=\"").append(anchor).append("\">").append(text(u.title)).append("</h").append(lv).append(">\n");
+                heads.add(new Heading(lv, u.title, anchor));
+                if (lv <= cut || at == null) {
+                    if (at != null && here > most) { most = here; title = at; }
+                    at = u.title;
+                    here = 0;
+                }
+            }
+            if (html.isEmpty()) continue;
+            if (at != null && here > most) title = at;
+            String name = title == null ? "Content" : title.length() > 120 ? title.substring(0, 120) + "\u2026" : title;
+            out.add(new Chapter("chapter-" + (out.size() + 1), name, html.toString(), heads));
+        }
         return out;
+    }
+
+    /** One piece of the laid-out book: a heading (with its words) or a block rendered whole. */
+    private record Unit(OCDStructNode node, String title) {}
+
+    /** Lay {@code nodes} out in order: a heading, then its section's blocks; a section holding a heading is
+     *  opened; anything else is one block. A heading with no words is left out. */
+    private static void lay(List<OCDStructNode> nodes, OCDIndex ix, List<Unit> out) {
+        for (OCDStructNode c : nodes) {
+            if (c.type() == OCDStructNode.Type.HEADING) {
+                String t = content(c, ix).strip();
+                if (!t.isEmpty()) out.add(new Unit(c, t));
+                List<OCDStructNode> kids = new ArrayList<>();
+                for (OCDStructNode k : c.children()) if (!k.isInline()) kids.add(k);
+                lay(OCDStructNode.flow(kids), ix, out);
+            } else if (c.type() == OCDStructNode.Type.SECTION && holdsHeading(c)) lay(OCDStructNode.flow(c.children()), ix, out);
+            else out.add(new Unit(c, null));
+        }
+    }
+
+    private static boolean holdsHeading(OCDStructNode n) {
+        for (OCDStructNode c : n.children()) if (c.type() == OCDStructNode.Type.HEADING || holdsHeading(c)) return true;
+        return false;
+    }
+
+    /** A heading the press wrapped over two lines reaches here as two: same level, nothing between, the
+     *  second line set right under the first. They are one heading — « docu- » + « ments » is « documents ». */
+    private static List<Unit> wrapped(List<Unit> units, OCDIndex ix) {
+        List<Unit> out = new ArrayList<>();
+        for (Unit u : units) {
+            Unit prev = out.isEmpty() ? null : out.getLast();
+            if (prev != null && prev.title != null && u.title != null && prev.node.headingLevel() == u.node.headingLevel()
+                    && nextLine(ink(prev.node, ix), ink(u.node, ix))) {
+                String a = prev.title, b = u.title;
+                String joined = a.endsWith("-") && !b.isEmpty() && Character.isLowerCase(b.codePointAt(0))
+                        ? a.substring(0, a.length() - 1) + b : a + " " + b;
+                out.set(out.size() - 1, new Unit(prev.node, joined));
+            } else out.add(u);
+        }
+        return out;
+    }
+
+    /** {@code b} is the next line of {@code a}: right under it, in the same column, in the same size (Y-up). */
+    private static boolean nextLine(sugarcube.jexter.core.JxRect a, sugarcube.jexter.core.JxRect b) {
+        if (a == null || b == null || a.isEmpty() || b.isEmpty()) return false;
+        double line = Math.max(a.height(), b.height());
+        boolean column = a.x() < b.right() && b.x() < a.right();
+        boolean size = Math.abs(a.height() - b.height()) <= 0.2 * line;  // one heading is set in one size
+        double gap = a.y() - b.maxY();                                 // a's bottom over b's top
+        return column && size && gap > -line / 2 && gap < 0.6 * line;
+    }
+
+    /** The ink of what a structure node references (its first page), or {@code null}. */
+    private static sugarcube.jexter.core.JxRect ink(OCDStructNode s, OCDIndex ix) {
+        sugarcube.jexter.core.JxRect box = sugarcube.jexter.core.JxRect.EMPTY;
+        int page = -1;
+        for (OCDStructNode.Ref r : s.refs()) {
+            OCDNode n = ix.node(r.page(), r.nodeId());
+            if (n == null || page >= 0 && r.page() != page) continue;
+            page = r.page();
+            box = box.union(n.ink());
+        }
+        return page < 0 ? null : box;
+    }
+
+    /** The highest heading level that cuts the book in two chapters or more; past the deepest, no cut. */
+    private static int cutLevel(List<Unit> units) {
+        int[] count = new int[OCDStructNode.MAX_LEVEL + 1];
+        for (Unit u : units) if (u.title != null) count[u.node.headingLevel()]++;
+        int seen = 0;
+        for (int lv = 1; lv <= OCDStructNode.MAX_LEVEL; lv++) if ((seen += count[lv]) >= 2) return lv;
+        return OCDStructNode.MAX_LEVEL;
+    }
+
+    /** How much a run of units holds to read: its blocks' text, a picture or a table counting as a chapter. */
+    private static int weight(List<Unit> part, OCDIndex ix) {
+        int n = 0;
+        for (Unit u : part) {
+            if (u.title != null) continue;
+            if (u.node.type() == OCDStructNode.Type.FIGURE || u.node.type() == OCDStructNode.Type.TABLE) return MIN_CHAPTER;
+            n += content(u.node, ix).strip().length();
+        }
+        return n;
     }
 
     /** Where the chapters are: the root, or — through a wrapper that only groups (a tagged PDF's Document › Sect,

@@ -330,7 +330,14 @@ Writers (`write`)
   presentation form ﬁ, else the Private Use Area) and the font builders compile `drawCmap()`; gate DRAWN.
 - A heading's INLINE children are its words — already in its title: the structure writers walk only its
   block children (they wrote « 1 What jexter is » twice). Reflow chapters split below a wrapper that only
-  groups (Document › Sect: one chapter « Content » before; TAGS checks the chapter count).
+  groups (Document › Sect: one chapter « Content » before; TAGS checks the TOC reaches every heading).
+- The reflow book (`HtmlWriter.chapters`) lays the tree out flat (a heading's section and a section holding
+  headings opened), joins a heading wrapped over two lines (same level and size, next line: « docu- » +
+  « ments » were two chapters), cuts at the HIGHEST level that gives two chapters (a book under one title is
+  cut at its parts), folds a chapter under `MIN_CHAPTER` characters into its neighbour (a margin stamp, an
+  author line were chapters), anchors every heading and nests the TOC by level (nav and NCX). Gate BOOK,
+  fixtures `doc_chapters` / `doc_chapters_outline`. A fixture of near-identical lines on each page is read
+  as running furniture (stack stability) — give every line its own words.
 - Loose inline nodes at block position (a tagged Div of Spans, one per styled piece — a Typst callout) are
   ONE paragraph to a reader: the structure writers walk containers through `OCDStructNode.flow`, which
   views each run of them as a transient PARAGRAPH. The tree is not changed (TAGS compares it to the source).

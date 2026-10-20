@@ -19,6 +19,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
@@ -146,6 +147,54 @@ public final class EpubPackage {
                 """.formatted(JxText.text(title), JxText.text(title), tocInner, start, start, pageList);
     }
 
+    /** One entry of a table of contents: a heading level, its words, its target. */
+    public record TocEntry(int level, String title, String href) {}
+
+    /** {@code entries} (in reading order) nested by level: an entry holds the deeper ones that follow it. */
+    private record TocNode(TocEntry entry, List<TocNode> kids) {}
+
+    private static List<TocNode> nest(List<TocEntry> entries) {
+        List<TocNode> top = new ArrayList<>();
+        java.util.Deque<TocNode> open = new java.util.ArrayDeque<>();
+        for (TocEntry e : entries) {
+            while (!open.isEmpty() && open.peek().entry().level() >= e.level()) open.pop();
+            TocNode n = new TocNode(e, new ArrayList<>());
+            (open.isEmpty() ? top : open.peek().kids()).add(n);
+            open.push(n);
+        }
+        return top;
+    }
+
+    /** {@code entries} as the nested {@code <li>} of a nav's {@code <ol>}. */
+    public static String tocOl(List<TocEntry> entries) {
+        var sb = new StringBuilder();
+        tocOl(nest(entries), sb, "    ");
+        return sb.toString();
+    }
+
+    private static void tocOl(List<TocNode> nodes, StringBuilder sb, String in) {
+        for (TocNode n : nodes) {
+            sb.append(in).append("<li><a href=\"").append(JxText.attr(n.entry().href())).append("\">").append(JxText.text(n.entry().title())).append("</a>");
+            if (!n.kids().isEmpty()) {
+                sb.append('\n').append(in).append("  <ol>\n");
+                tocOl(n.kids(), sb, in + "    ");
+                sb.append(in).append("  </ol>\n").append(in);
+            }
+            sb.append("</li>\n");
+        }
+    }
+
+    /** {@code entries} as nested navPoints. */
+    public static String ncxPoints(List<TocEntry> entries) {
+        var ncx = new Ncx();
+        ncxPoints(nest(entries), ncx);
+        return ncx.inner();
+    }
+
+    private static void ncxPoints(List<TocNode> nodes, Ncx ncx) {
+        for (TocNode n : nodes) { ncx.open(n.entry().title(), n.entry().href()); ncxPoints(n.kids(), ncx); ncx.close(); }
+    }
+
     /** Nested {@code <ol>} of HEADING nodes; {@code href} maps a heading to its target. Headings
      *  nested under non-heading wrappers are surfaced. */
     public static String tocOl(OCDStructNode node, OCDIndex ix, Function<OCDStructNode, String> href) {
@@ -251,13 +300,18 @@ public final class EpubPackage {
         private final StringBuilder sb = new StringBuilder();
         private final java.util.Map<String, Integer> orderOf = new java.util.LinkedHashMap<>();
         private int n = 0;
-        public Ncx add(String label, String href) {
+        public Ncx add(String label, String href) { return open(label, href).close(); }
+
+        /** A navPoint left open: the points added until {@link #close} nest inside it. */
+        public Ncx open(String label, String href) {
             int po = orderOf.computeIfAbsent(href, h -> orderOf.size() + 1);
             sb.append("    <navPoint id=\"np-").append(++n).append("\" playOrder=\"").append(po).append("\">")
               .append("<navLabel><text>").append(JxText.text(label)).append("</text></navLabel>")
-              .append("<content src=\"").append(href).append("\"/></navPoint>\n");
+              .append("<content src=\"").append(href).append("\"/>\n");
             return this;
         }
+
+        public Ncx close() { sb.append("    </navPoint>\n"); return this; }
         public String inner() { return sb.toString(); }
     }
 

@@ -89,6 +89,8 @@ final class Fixtures {
         FEATURES.put("doc_metadata", (Whole) Fixtures::metadata);
         FEATURES.put("doc_running_heads", (Whole) Fixtures::runningHeads);
         FEATURES.put("doc_page_break", (Whole) Fixtures::pageBreak);
+        FEATURES.put("doc_chapters", (Whole) Fixtures::chapters);
+        FEATURES.put("doc_chapters_outline", (Whole) Fixtures::chaptersOutline);
         FEATURES.put("rich", (Whole) Fixtures::rich);
         FEATURES.put("tagged", (Whole) Fixtures::tagged);
     }
@@ -802,6 +804,72 @@ final class Fixtures {
             text(cs, d.sans(), 14, 20 * MM, H / 2, "CropBox is inset 15mm from MediaBox (red dashes)");
         }
         d.pdf.getPage(0).setCropBox(new PDRectangle(in, in, A4.getWidth() - 2 * in, H - 2 * in));
+    }
+
+    /** A book under one title, as a reflowable book must cut it: the title alone is no chapter, so the cut
+     *  falls at its sections; a subsection is an entry of its section, not a chapter; a section heading
+     *  wrapped over two lines is one heading; a section of one line is too short to stand and joins the
+     *  next. No bookmarks: the headings are the typography's (sizes that recur). */
+    private static void chapters(Doc d) throws IOException {
+        String[] words = ("river stone window garden letter harbour lantern meadow pencil orchard candle bridge winter "
+                + "copper violin market forest ladder mirror thunder basket pepper silver castle feather ribbon "
+                + "anchor marble cotton saddle ember valley tunnel kettle shadow walnut glacier compass").split(" ");
+        Object[][] pages = {
+            { "Title", "A Book Under One Title" },
+            { "Section", "1 The first part" }, { "Body", 6 }, { "Sub", "1.1 Where the river begins" }, { "Body", 4 },
+            { "Page" },
+            { "Section", "2 The second part, whose heading is long enough that the" }, { "Section", "press wrapped it over two lines" },
+            { "Body", 6 }, { "Sub", "2.1 Stones and windows in the old town" }, { "Body", 4 },
+            { "Page" },
+            { "Section", "3 A stub" }, { "Body", 0 },
+            { "Section", "4 The last part" }, { "Body", 6 }, { "Sub", "4.1 Lanterns" }, { "Body", 4 },
+        };
+        PDPageContentStream cs = d.page(A4);
+        float y = H - 30 * MM;
+        int line = 1;
+        try {
+            for (Object[] e : pages) {
+                switch ((String) e[0]) {
+                    case "Page"    -> { cs.close(); cs = d.page(A4); y = H - 30 * MM; }
+                    case "Title"   -> { text(cs, d.sans(), 24, 20 * MM, y, (String) e[1]); y -= 40; }
+                    case "Section" -> { text(cs, d.sans(), 16, 20 * MM, y, (String) e[1]); y -= 20; }
+                    case "Sub"     -> { y -= 6; text(cs, d.sans(), 14, 20 * MM, y, (String) e[1]); y -= 20; }
+                    default        -> {
+                        int n = (Integer) e[1];
+                        if (n == 0) { text(cs, d.sans(), 11, 20 * MM, y, "One line."); y -= 14; }
+                        for (int i = 0; i < n; i++, line++) {                // every line its own words: no two pages alike
+                            StringBuilder t = new StringBuilder(words[(line * 13) % words.length]);
+                            for (int w = 1; w < 11; w++) t.append(' ').append(words[(line * 13 + w * w * 3 + w) % words.length]);
+                            text(cs, d.sans(), 11, 20 * MM, y, t.append('.').toString());
+                            y -= 14;
+                        }
+                        y -= 12;
+                    }
+                }
+            }
+        } finally { cs.close(); }
+    }
+
+    /** {@link #chapters} with its bookmarks, nested as the book is: the title holds the parts, a part its
+     *  detail — the table of contents must keep that nesting, the spine still cut at the parts. */
+    private static void chaptersOutline(Doc d) throws IOException {
+        chapters(d);
+        PDPage p1 = d.pdf.getPage(0), p2 = d.pdf.getPage(1), p3 = d.pdf.getPage(2);
+        var outline = new PDDocumentOutline();
+        PDOutlineItem title = item("A Book Under One Title", p1, H);
+        outline.addLast(title);
+        PDOutlineItem one = item("1 The first part", p1, H), two = item("2 The second part, whose heading is long enough that the press wrapped it over two lines", p2, H);
+        PDOutlineItem four = item("4 The last part", p3, H);
+        title.addLast(one);
+        one.addLast(item("1.1 Where the river begins", p1, H));
+        title.addLast(two);
+        two.addLast(item("2.1 Stones and windows in the old town", p2, H));
+        title.addLast(item("3 A stub", p3, H));
+        title.addLast(four);
+        four.addLast(item("4.1 Lanterns", p3, H));
+        title.openNode();
+        outline.openNode();
+        d.pdf.getDocumentCatalog().setDocumentOutline(outline);
     }
 
     private static void outlineLinks(Doc d) throws IOException {

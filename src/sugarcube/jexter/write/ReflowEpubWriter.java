@@ -4,9 +4,11 @@ import sugarcube.jexter.ocd.io.EpubPackage;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.core.JxZip;
 import sugarcube.jexter.ocd.model.OCDDocument;
+import sugarcube.jexter.ocd.model.OCDStructNode;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -92,18 +94,26 @@ public final class ReflowEpubWriter {
     // ── navigation ─────────────────────────────────────────────────────────────────
 
     private static void nav(JxZip zip, OCDDocument doc, List<HtmlWriter.Chapter> chapters) throws IOException {
-        var toc = new StringBuilder();
-        for (HtmlWriter.Chapter c : chapters)
-            toc.append("    <li><a href=\"").append(c.id()).append(".xhtml\">")
-               .append(text(c.title())).append("</a></li>\n");
         String start = chapters.get(0).id() + ".xhtml";
-        zip.deflated(OPF + "nav.xhtml", EpubPackage.navDoc(EpubPackage.title(doc), toc.toString(), start, ""));
+        zip.deflated(OPF + "nav.xhtml", EpubPackage.navDoc(EpubPackage.title(doc), EpubPackage.tocOl(toc(chapters)), start, ""));
     }
 
     private static void ncx(JxZip zip, OCDDocument doc, String uid, List<HtmlWriter.Chapter> chapters) throws IOException {
-        var ncx = new EpubPackage.Ncx();
-        for (HtmlWriter.Chapter c : chapters) ncx.add(c.title(), c.id() + ".xhtml");
-        zip.deflated(OPF + "toc.ncx", EpubPackage.ncx(uid, EpubPackage.title(doc), ncx.inner()));
+        zip.deflated(OPF + "toc.ncx", EpubPackage.ncx(uid, EpubPackage.title(doc), EpubPackage.ncxPoints(toc(chapters))));
+    }
+
+    /** The table of contents: every heading of the book at its level, reached by its anchor; a chapter with
+     *  no heading is one entry at the top level, under its title. */
+    private static List<EpubPackage.TocEntry> toc(List<HtmlWriter.Chapter> chapters) {
+        int top = OCDStructNode.MAX_LEVEL;
+        for (HtmlWriter.Chapter c : chapters) for (HtmlWriter.Heading h : c.headings()) top = Math.min(top, h.level());
+        List<EpubPackage.TocEntry> out = new ArrayList<>();
+        for (HtmlWriter.Chapter c : chapters) {
+            String file = c.id() + ".xhtml";
+            if (c.headings().isEmpty()) out.add(new EpubPackage.TocEntry(top, c.title(), file));
+            for (HtmlWriter.Heading h : c.headings()) out.add(new EpubPackage.TocEntry(h.level(), h.title(), file + "#" + h.anchor()));
+        }
+        return out;
     }
 
     // ── package: manifest + spine (reflowable) ───────────────────────────────────

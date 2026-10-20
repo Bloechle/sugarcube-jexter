@@ -27,6 +27,9 @@
 //   FIGURES   every picture the body shows is a FIGURE of the structure the writers read (a tagged PDF's
 //             own tree aside), and the reflow book draws each one: a <figure> always holds its <img> —
 //             once, 81 of 83 documents with pictures lost every one in the reflowable EPUB.
+//   BOOK      the reflow book is cut in chapters that stand: none is only a heading, none too short to
+//             read unless it is the whole book, and its table of contents reaches every heading, nested
+//             as the headings are — once a stamp in the margin and half of a wrapped title were chapters.
 //   HOSTILE   broken and malicious variants of the container: refused with context, or read with a
 //             warning — never read in silence, never a leaked file, never an entity expansion; and a
 //             request naming a file of the engine's machine (ConvertOptions.LOCAL) refused.
@@ -123,6 +126,7 @@ public final class Gates {
             gate("EDITED",   () -> edited(ocd, tmp));
             gate("LAYERS",   () -> layers(src, model));
             gate("FIGURES",  () -> figures(model, src));
+            gate("BOOK",     () -> book(pdf.getName(), src));
             gate("HOSTILE",  () -> hostile(ocd, tmp));
         }
         System.out.println(failed == 0 ? "ALL GATES GREEN: " + checks + " checks on " + args.length + " PDFs" : failed + " GATE(S) FAILED");
@@ -471,8 +475,8 @@ public final class Gates {
             if (model.outline().isEmpty()) headingRoles(pdfTree.root(), model, bad);   // no nav to win: the tags decide
             headingWords(pdfTree.root(), OCDIndex.of(model), bad);
             int heads = headings(pdfTree.root());
-            int chapters = sugarcube.jexter.write.HtmlWriter.chapters(model, null).size();
-            if (heads > 1 && chapters < 2) bad.add(heads + " headings, but the reflow book is " + chapters + " chapter");
+            int reached = sugarcube.jexter.write.HtmlWriter.chapters(model, null).stream().mapToInt(c -> c.headings().size()).sum();
+            if (reached < heads) bad.add(heads + " headings, but the reflow book's table of contents reaches " + reached);
             if (pdf.getName().equals("tagged.pdf")) {                // its callout: two loose Spans, one paragraph
                 String md = new String(to(Files.readAllBytes(pdf.toPath()), "md"), StandardCharsets.UTF_8);
                 if (md.lines().noneMatch(l -> l.contains("Un encadre ecrit en deux morceaux")))
@@ -736,6 +740,41 @@ public final class Gates {
         }
         for (OCDStructNode c : n.children()) count += figureRefs(c, model, shown);
         return count;
+    }
+
+    // ── BOOK ─────────────────────────────────────────────────────────────────────
+
+    private static List<String> book(String name, byte[] src) throws Exception {
+        List<String> bad = new ArrayList<>();
+        Map<String, String> files = new TreeMap<>();
+        try (ZipInputStream z = new ZipInputStream(new java.io.ByteArrayInputStream(to(src, "epub-reflow")))) {
+            for (ZipEntry e; (e = z.getNextEntry()) != null; )
+                if (e.getName().endsWith(".xhtml")) files.put(e.getName().substring(e.getName().lastIndexOf('/') + 1), new String(z.readAllBytes(), StandardCharsets.UTF_8));
+        }
+        String nav = files.remove("nav.xhtml");
+        nav = nav.substring(nav.indexOf("epub:type=\"toc\""), nav.indexOf("</nav>"));
+        Set<String> targets = new HashSet<>();
+        var href = java.util.regex.Pattern.compile("href=\"([^\"]+)\"").matcher(nav);
+        while (href.find()) targets.add(href.group(1));
+        var heading = java.util.regex.Pattern.compile("<h[1-6] id=\"([^\"]+)\">");
+        for (var f : files.entrySet()) {
+            String body = f.getValue().substring(f.getValue().indexOf("<main>"));
+            String rest = body.replaceAll("(?s)<h[1-6][^>]*>.*?</h[1-6]>", "");
+            int text = rest.replaceAll("<[^>]*>", "").strip().length();
+            boolean picture = rest.contains("<img") || rest.contains("<table") || rest.contains("<video") || rest.contains("<audio");
+            if (text == 0 && !picture) bad.add(f.getKey() + " is only a heading");
+            else if (files.size() > 1 && text < sugarcube.jexter.write.HtmlWriter.MIN_CHAPTER && !picture) bad.add(f.getKey() + " holds " + text + " characters: too short to stand");
+            var h = heading.matcher(body);
+            while (h.find()) if (!targets.remove(f.getKey() + "#" + h.group(1))) bad.add(f.getKey() + "#" + h.group(1) + " is in no table of contents entry");
+        }
+        targets.removeIf(t -> !t.contains("#") && files.containsKey(t));
+        if (!targets.isEmpty()) bad.add("table of contents entries lead nowhere: " + targets);
+        if (name.startsWith("doc_chapters")) {                  // the book under one title: cut at its parts, details nested
+            if (files.size() != 3) bad.add(files.size() + " chapters, not 3 (the parts, the stub joined to the last)");
+            if (!java.util.regex.Pattern.compile("1 The first part</a>\\s*<ol>\\s*<li><a href=\"[^\"]+\">1\\.1 ").matcher(nav).find())
+                bad.add("1.1 is not nested under 1 in the table of contents");
+        }
+        return bad;
     }
 
     // ── HOSTILE ──────────────────────────────────────────────────────────────────
