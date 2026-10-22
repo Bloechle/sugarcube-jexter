@@ -34,9 +34,9 @@ import java.util.Map;
  * a line with no descender is shorter, not smaller), its baseline that ink's foot above the line's bottom, its width the word's (a horizontal stretch, as the invisible runs have).
  *
  * <p><b>The picture's ink, not the engine's box</b> ({@link #ink}): an engine's box is its own idea of a word —
- * Tesseract hugs the letters, Azure pads them — so the line's height and the word's width are measured in the
+ * Tesseract's hug the letters, another engine's need not — so the line's height and the word's width are measured in the
  * picture, inside the boxes the engine gave: the band of rows its ink fills, the columns a word's ink spans.
- * Measured on Azure's padded boxes, a word set at the box came out too large and every one was refused.
+ * Set at Azure's boxes, the first redrawn PDFs kept every word in its pixels.
  *
  * <p><b>A picture left with no ink is dropped</b> ({@link #inkless}): a page of text, once every word is
  * redrawn, is paper — no reason to carry a photograph of it. A picture with anything left (a logo, a
