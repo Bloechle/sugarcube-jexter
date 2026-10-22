@@ -36,7 +36,7 @@ import java.util.Map;
  * <p><b>The picture's ink, not the engine's box</b> ({@link #ink}): an engine's box is its own idea of a word —
  * Tesseract's hug the letters, another engine's need not — so the line's height and the word's width are measured in the
  * picture, inside the boxes the engine gave: the band of rows its ink fills, the columns a word's ink spans.
- * Set at Azure's boxes, the first redrawn PDFs kept every word in its pixels.
+ * Set at boxes padded by half a line, a word came out too large and kept its pixels (gate READ).
  *
  * <p><b>A picture left with no ink is dropped</b> ({@link #inkless}): a page of text, once every word is
  * redrawn, is paper — no reason to carry a photograph of it. A picture with anything left (a logo, a
