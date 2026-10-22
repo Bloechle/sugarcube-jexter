@@ -173,22 +173,36 @@ public final class ImageImporter {
         BufferedImage img = face == null ? null : JxRaster.decode(bytes, "the frame");
         java.util.Map<Integer, StringBuilder> said = new java.util.HashMap<>();   // engine line → its letters (the redrawn size)
         if (img != null) for (OcrClient.Word word : words) if (word.line() >= 0) said.computeIfAbsent(word.line(), k -> new StringBuilder()).append(word.text());
-        int z = 0, redrawn = 0;
-        for (OcrClient.Word word : words) {
+        // the redrawn reading measures every word in the picture before a single one is erased (Redraw#ink)
+        java.util.Map<Integer, JxRect> inked = new java.util.HashMap<>();   // engine line → its ink down
+        JxRect[][] at = new JxRect[words.size()][];                       // a word → {its ink across, its line's ink down}
+        if (img != null) for (int i = 0; i < words.size(); i++) {
+            OcrClient.Word word = words.get(i);
+            JxRect box = word.line() >= 0 ? lines.get(word.line()) : word.box();
+            JxRect down = word.line() >= 0 ? inked.computeIfAbsent(word.line(), k -> orElse(Redraw.ink(img, box), box)) : orElse(Redraw.ink(img, box), box);
+            JxRect across = Redraw.ink(img, new JxRect(word.box().x(), down.y(), word.box().width(), down.height()));
+            at[i] = new JxRect[]{ across == null ? word.box() : across, down };
+        }
+        Redraw.Tally tally = new Redraw.Tally();
+        int z = 0;
+        for (int i = 0; i < words.size(); i++) {
+            OcrClient.Word word = words.get(i);
             JxRect line = word.line() >= 0 ? lines.get(word.line()) : word.box();
-            OCDText drawn = img == null ? null : Redraw.run(face, word, line,
-                    face.ink((word.line() >= 0 ? said.get(word.line()).toString() : word.text()).codePoints().toArray()), s, ph);
-            if (drawn != null) {
-                layer.add(drawn.fill(Redraw.erase(img, word.box(), line.height())).z(z++));
-                redrawn++;
+            OCDText drawn = img == null ? null : Redraw.run(face, word, at[i][0], at[i][1],
+                    face.ink((word.line() >= 0 ? said.get(word.line()).toString() : word.text()).codePoints().toArray()), s, ph, tally);
+            if (drawn != null) {                    // erased across the engine's box, down the line's ink
+                JxRect down = at[i][1];
+                layer.add(drawn.fill(Redraw.erase(img, new JxRect(word.box().x(), down.y(), word.box().width(), down.height()), down.height())).z(z++));
                 continue;
             }
             OCDText t = run(font, word, line, s, ph);
             if (t != null) layer.add(t.z(z++));
         }
-        if (face != null) JxLog.info(ImageImporter.class, "page " + (index + 1) + ": " + redrawn + " of " + words.size() + " word(s) redrawn");
-        return new Words(layer, redrawn > 0 ? img : null);
+        if (face != null) JxLog.info(ImageImporter.class, "page " + (index + 1) + " (" + ocr.engine() + "), " + words.size() + " word(s): " + tally);
+        return new Words(layer, tally.redrawn > 0 ? img : null);
     }
+
+    private static JxRect orElse(JxRect r, JxRect fallback) { return r != null ? r : fallback; }
 
     /** The erased picture, in the codec it came in: JPEG for a JPEG (quality 0.92, no alpha), PNG otherwise. */
     private static byte[] encode(BufferedImage img, String ext) throws IOException {

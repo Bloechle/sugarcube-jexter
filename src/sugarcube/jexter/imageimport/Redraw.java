@@ -31,7 +31,12 @@ import java.util.Map;
  * (the darker part of its box). The face is Liberation Sans ({@link TtfImporter#standardSans}): the engine
  * says nothing of the face a word was set in, and a sans of Arial's metrics is the least surprising stand-in.
  * Its size is the line's height over the height the face's ink spans for that line's own letters ({@link Face#ink}:
- * a line with no descender is shorter, not smaller), its baseline that ink's foot above the line's bottom, its width the word's box (a horizontal stretch, as the invisible runs have).
+ * a line with no descender is shorter, not smaller), its baseline that ink's foot above the line's bottom, its width the word's (a horizontal stretch, as the invisible runs have).
+ *
+ * <p><b>The picture's ink, not the engine's box</b> ({@link #ink}): an engine's box is its own idea of a word —
+ * Tesseract hugs the letters, Azure pads them — so the line's height and the word's width are measured in the
+ * picture, inside the boxes the engine gave: the band of rows its ink fills, the columns a word's ink spans.
+ * Measured on Azure's padded boxes, a word set at the box came out too large and every one was refused.
  *
  * <p><b>A picture left with no ink is dropped</b> ({@link #inkless}): a page of text, once every word is
  * redrawn, is paper — no reason to carry a photograph of it. A picture with anything left (a logo, a
@@ -54,6 +59,19 @@ final class Redraw {
     static final double MIN_STRETCH = 0.6, MAX_STRETCH = 1.7;
     /** A picture with less of its area as ink than this, once the words are erased, is dropped. */
     static final double INK_LEFT = 0.0015;
+
+    /** Why words kept their pixels, counted for the log: a picture where none was redrawn says which rule refused them. */
+    static final class Tally {
+        int redrawn, doubtful, unknown, stretched;
+        final java.util.List<Double> stretch = new java.util.ArrayList<>();
+
+        @Override public String toString() {
+            double[] v = stretch.stream().mapToDouble(Double::doubleValue).sorted().toArray();
+            return redrawn + " redrawn; kept: " + doubtful + " doubtful, " + unknown + " with a letter the face lacks, "
+                    + stretched + " out of stretch" + (v.length == 0 ? "" : String.format(java.util.Locale.ROOT,
+                    " (stretch min %.2f, median %.2f, max %.2f)", v[0], v[v.length / 2], v[v.length - 1]));
+        }
+    }
 
     /** {@code null} or blank = the first reading; the two names otherwise, anything else refused in those words. */
     static boolean redrawn(String v) {
@@ -111,18 +129,21 @@ final class Redraw {
         int gid(int cp)        { return font.gidOf(cp); }
     }
 
-    /** One word as drawn text, or {@code null} when it must keep its pixels (see the class comment). {@code ink}
-     *  is {@link Face#ink} of the whole line the word was read in. */
-    static OCDText run(Face face, OcrClient.Word word, JxRect line, double[] ink, double s, double pageHeight) throws IOException {
-        if (word.confidence() >= 0 && word.confidence() < MIN_CONFIDENCE) return null;
-        JxRect b = word.box();
+    /** One word as drawn text, or {@code null} when it must keep its pixels (see the class comment). {@code b}
+     *  is the word's ink across, {@code line} its line's ink down (pixels, {@link #ink}); {@code ink} is
+     *  {@link Face#ink} of the whole line the word was read in. */
+    static OCDText run(Face face, OcrClient.Word word, JxRect b, JxRect line, double[] ink, double s, double pageHeight, Tally tally) throws IOException {
+        if (word.confidence() >= 0 && word.confidence() < MIN_CONFIDENCE) { tally.doubtful++; return null; }
         int[] cps = word.text().strip().codePoints().toArray();
-        if (cps.length == 0 || b.width() <= 0 || line.height() <= 0 || !face.has(cps)) return null;
+        if (cps.length == 0 || b.width() <= 0 || line.height() <= 0) return null;
+        if (!face.has(cps)) { tally.unknown++; return null; }
         double fs = line.height() * s / (ink[0] - ink[1]);
         double width = 0;
         for (int cp : cps) width += face.advance(cp) * fs;
         double sx = b.width() * s / width;
-        if (sx < MIN_STRETCH || sx > MAX_STRETCH) return null;
+        tally.stretch.add(sx);
+        if (sx < MIN_STRETCH || sx > MAX_STRETCH) { tally.stretched++; return null; }
+        tally.redrawn++;
         double baseline = pageHeight - (line.y() + line.height()) * s - ink[1] * fs;
         OCDText t = new OCDText(FONT_ID, fs);
         if (word.confidence() >= 0) t.confidence(Math.min(1, word.confidence()));
@@ -142,6 +163,30 @@ final class Redraw {
         int ink = inkWithin(img, x0, y0, x1, y1, paper);
         for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) img.setRGB(x, y, paper);
         return ink;
+    }
+
+    /** The ink inside {@code box} (pixels): the band of rows holding the box's densest row of ink, and the
+     *  columns that band's ink spans — {@code null} when the box holds nothing far darker than its paper. A
+     *  neighbouring line the box reaches into is left out by the band, a padding by the columns. */
+    static JxRect ink(BufferedImage img, JxRect box) {
+        int x0 = clamp((int) Math.floor(box.x()), img.getWidth()), x1 = clamp((int) Math.ceil(box.maxX()), img.getWidth());
+        int y0 = clamp((int) Math.floor(box.y()), img.getHeight()), y1 = clamp((int) Math.ceil(box.maxY()), img.getHeight());
+        if (x1 <= x0 || y1 <= y0) return null;
+        int paper = luma(paperAround(img, x0, y0, x1, y1)), darkest = 255;
+        for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) darkest = Math.min(darkest, luma(img.getRGB(x, y)));
+        if (paper - darkest < 48) return null;
+        int cut = (paper + darkest) / 2;
+        int[] rows = new int[y1 - y0];
+        for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) if (luma(img.getRGB(x, y)) <= cut) rows[y - y0]++;
+        int peak = 0;
+        for (int i = 1; i < rows.length; i++) if (rows[i] > rows[peak]) peak = i;
+        int top = peak, bottom = peak;
+        while (top > 0 && rows[top - 1] > 0) top--;
+        while (bottom < rows.length - 1 && rows[bottom + 1] > 0) bottom++;
+        int left = x1, right = x0 - 1;
+        for (int y = y0 + top; y <= y0 + bottom; y++) for (int x = x0; x < x1; x++)
+            if (luma(img.getRGB(x, y)) <= cut) { left = Math.min(left, x); right = Math.max(right, x); }
+        return new JxRect(left, y0 + top, right - left + 1, bottom - top + 1);
     }
 
     /** Whether less than {@link #INK_LEFT} of the picture is ink — far darker than its own paper — on a

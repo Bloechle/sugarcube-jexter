@@ -42,7 +42,8 @@
 //
 //   READ      once: a picture's words, both readings — invisible over the picture (the picture is the page), or
 //             redrawn: each confident word erased from the picture and drawn as selectable text, a doubtful
-//             word kept in its pixels, a picture left with no ink dropped; an unknown reading refused.
+//             word kept in its pixels, a picture left with no ink dropped; an engine's padded boxes give the
+//             size its snug ones give (the words are measured in the picture); an unknown reading refused.
 //
 //   node nimbus-jexter.cjs --run=test     the whole run, on any OS: compile src/ and test/, corpus, every gate
 //
@@ -913,6 +914,19 @@ public final class Gates {
         sugarcube.jexter.write.PdfWriter.write(b, pdf, sugarcube.jexter.core.ConvertOptions.fromMap(Map.of("selectable", "true")));
         String copied = pdfText(pdf.toByteArray());
         for (String w : text) if (!copied.contains(w)) bad.add("redrawn: \"" + w + "\" cannot be copied from the PDF (" + copied.strip() + ")");
+
+        // an engine that pads its boxes (Azure's are taller than the letters): the words are measured in the
+        // picture, so they come out the size the snug boxes give, not set at the padding (where all were refused)
+        List<sugarcube.jexter.core.OcrClient.Word> padded = new ArrayList<>();
+        for (var w : read.apply(new double[]{0.99, 0.95, 0.9, 0.97})) padded.add(new sugarcube.jexter.core.OcrClient.Word(
+                w.text(), w.box().inflate(8, 14), w.confidence(), w.line()));
+        OCDDocument p = sugarcube.jexter.imageimport.ImageImporter.convert(picture, redrawn, engine(padded));
+        var snug = b.page(0).texts().filter(t -> !t.isInvisible()).toList();
+        var loose = p.page(0).texts().filter(t -> !t.isInvisible()).toList();
+        if (loose.size() != 4) bad.add("redrawn, padded boxes: " + loose.size() + " of 4 words drawn");
+        else for (int i = 0; i < 4; i++)
+            if (Math.abs(loose.get(i).fontSize() / snug.get(i).fontSize() - 1) > 0.03)
+                bad.add("redrawn, padded boxes: \"" + text[i] + "\" set at " + loose.get(i).fontSize() + ", not " + snug.get(i).fontSize());
 
         // redrawn, one word in doubt: it keeps its pixels (and lies invisible over them); the others are erased
         OCDDocument c = sugarcube.jexter.imageimport.ImageImporter.convert(picture, redrawn, doubt);
