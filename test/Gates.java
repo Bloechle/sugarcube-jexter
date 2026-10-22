@@ -40,6 +40,10 @@
 //             4000-pt page, a cyclic outline and tag tree, a page selection repeating a page 3000 times —
 //             and a host whose locale writes its own digits writes the same bytes.
 //
+//   READ      once: a picture's words, both readings — invisible over the picture (the picture is the page), or
+//             redrawn: each confident word erased from the picture and drawn as selectable text, a doubtful
+//             word kept in its pixels, a picture left with no ink dropped; an unknown reading refused.
+//
 //   node nimbus-jexter.cjs --run=test     the whole run, on any OS: compile src/ and test/, corpus, every gate
 //
 // With no PDF named, the corpus is written first into target/corpus by Fixtures (PDFBox, nothing else);
@@ -138,6 +142,7 @@ public final class Gates {
         current = "(once)";
         reported = false;
         gate("BOUNDS",   () -> bounds(tmp));
+        gate("READ",     Gates::read);
         System.out.println(failed == 0 ? "ALL GATES GREEN: " + checks + " checks on " + args.length + " PDFs" : failed + " GATE(S) FAILED");
         System.exit(failed == 0 ? 0 : 1);
     }
@@ -867,6 +872,80 @@ public final class Gates {
 
     /** Small hostile inputs, built here (they are not corpus documents: every other gate would trip on them). Each
      *  once cost the heap or the stack; now each is refused with a reason, or read with what it can bear. */
+    // ── READ ─────────────────────────────────────────────────────────────────────
+
+    /** A page of ink blocks standing for words, read by an engine that answers their boxes: both readings. */
+    private static List<String> read() throws Exception {
+        List<String> bad = new ArrayList<>();
+        int[][] blocks = { {60, 60, 120, 30}, {200, 60, 90, 30}, {310, 60, 140, 30}, {60, 140, 110, 30} };
+        String[] text = { "alpha", "beta", "gamma", "omega" };
+        java.util.function.Function<double[], List<sugarcube.jexter.core.OcrClient.Word>> read = conf -> {
+            List<sugarcube.jexter.core.OcrClient.Word> ws = new ArrayList<>();
+            for (int i = 0; i < blocks.length; i++) ws.add(new sugarcube.jexter.core.OcrClient.Word(text[i],
+                    new sugarcube.jexter.core.JxRect(blocks[i][0], blocks[i][1], blocks[i][2], blocks[i][3]), conf[i], i < 3 ? 0 : 1));
+            return ws;
+        };
+        BufferedImage page = new BufferedImage(520, 240, BufferedImage.TYPE_INT_RGB);
+        var g = page.createGraphics();
+        g.setColor(java.awt.Color.WHITE); g.fillRect(0, 0, 520, 240);
+        g.setColor(java.awt.Color.BLACK);
+        for (int[] b : blocks) g.fillRect(b[0] + 2, b[1] + 2, b[2] - 4, b[3] - 4);
+        g.dispose();
+        ByteArrayOutputStream png = new ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(page, "png", png);
+        byte[] picture = png.toByteArray();
+
+        sugarcube.jexter.core.OcrClient sure = engine(read.apply(new double[]{0.99, 0.95, 0.9, 0.97}));
+        sugarcube.jexter.core.OcrClient doubt = engine(read.apply(new double[]{0.99, 0.95, 0.9, 0.3}));
+        var invisible = sugarcube.jexter.core.ConvertOptions.fromMap(Map.of());
+        var redrawn = sugarcube.jexter.core.ConvertOptions.fromMap(Map.of("ocrText", "redrawn"));
+
+        // the first reading: the picture is the page, every word invisible over it
+        OCDDocument a = sugarcube.jexter.imageimport.ImageImporter.convert(picture, invisible, sure);
+        if (a.page(0).images().count() != 1) bad.add("invisible: the picture is not the page");
+        if (a.page(0).texts().count() != 4 || a.page(0).texts().anyMatch(t -> !t.isInvisible())) bad.add("invisible: a word is not invisible text");
+
+        // redrawn, every word sure: drawn as text, and the picture — nothing but those words — dropped
+        OCDDocument b = sugarcube.jexter.imageimport.ImageImporter.convert(picture, redrawn, sure);
+        if (b.page(0).images().count() != 0) bad.add("redrawn: a picture left with no ink was kept");
+        if (b.page(0).texts().filter(t -> !t.isInvisible()).count() != 4) bad.add("redrawn: not every sure word was drawn");
+        ByteArrayOutputStream pdf = new ByteArrayOutputStream();
+        sugarcube.jexter.write.PdfWriter.write(b, pdf, sugarcube.jexter.core.ConvertOptions.fromMap(Map.of("selectable", "true")));
+        String copied = pdfText(pdf.toByteArray());
+        for (String w : text) if (!copied.contains(w)) bad.add("redrawn: \"" + w + "\" cannot be copied from the PDF (" + copied.strip() + ")");
+
+        // redrawn, one word in doubt: it keeps its pixels (and lies invisible over them); the others are erased
+        OCDDocument c = sugarcube.jexter.imageimport.ImageImporter.convert(picture, redrawn, doubt);
+        var kept = c.page(0).images().findFirst();
+        if (kept.isEmpty()) bad.add("redrawn: the picture of a doubtful word was dropped");
+        else {
+            BufferedImage stored = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(c.image(kept.get().resourceRef())));
+            if ((stored.getRGB(120, 75) & 0xFF) < 200) bad.add("redrawn: a redrawn word's pixels were not erased");
+            if ((stored.getRGB(115, 155) & 0xFF) > 60) bad.add("redrawn: the doubtful word's pixels were erased");
+        }
+        if (c.page(0).texts().filter(t -> !t.isInvisible()).count() != 3) bad.add("redrawn: the doubtful word was drawn, or a sure one was not");
+        // and the redrawn reading is an ordinary container: written, read back, written again the same
+        byte[] ocd = Conversion.convert(c, "ocd", sugarcube.jexter.core.ConvertOptions.fromMap(Map.of())).bytes();
+        if (!Arrays.equals(ocd, to(ocd, "ocd"))) bad.add("redrawn: the container drifts when written again");
+        if (!pdfText(Conversion.convert(ocd, "pdf", Map.of("selectable", "true")).bytes()).contains("gamma"))
+            bad.add("redrawn: the container's PDF lost a drawn word");
+
+        try { sugarcube.jexter.imageimport.ImageImporter.convert(picture, sugarcube.jexter.core.ConvertOptions.fromMap(Map.of("ocrText", "maybe")), sure); bad.add("ocrText=maybe was taken"); }
+        catch (IllegalArgumentException refused) { /* in those words */ }
+        return bad;
+    }
+
+    private static sugarcube.jexter.core.OcrClient engine(List<sugarcube.jexter.core.OcrClient.Word> words) {
+        return new sugarcube.jexter.core.OcrClient() {
+            @Override public List<Word> read(byte[] image, String lang) { return words; }
+            @Override public String engine() { return "gate"; }
+        };
+    }
+
+    private static String pdfText(byte[] pdf) throws Exception {
+        try (PDDocument d = Loader.loadPDF(pdf)) { return new org.apache.pdfbox.text.PDFTextStripper().getText(d); }
+    }
+
     private static List<String> bounds(Path tmp) throws Exception {
         List<String> bad = new ArrayList<>();
         byte[] picture = pdf(new org.apache.pdfbox.pdmodel.common.PDRectangle(200, 200), (d, p) -> {

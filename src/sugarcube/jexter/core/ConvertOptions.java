@@ -77,6 +77,17 @@ public final class ConvertOptions {
                     + "picture, and the recognition layer states the preparation.",
             Type.STRING, "", Group.CONVERSION);
 
+    public static final Opt<String> OCR_TEXT = new Opt<>(
+            "ocrText",
+            "Recognized text",
+            "What becomes of the words the OCR engine reads, when the source is an image: \"invisible\" (the "
+                    + "picture is the page, the words lie over it as invisible text — searchable and selectable, "
+                    + "the document exactly as photographed), or \"redrawn\" (each word read with confidence is "
+                    + "erased from the picture and drawn again as real text in a sans-serif face — sharp at any "
+                    + "zoom and in print; logos, signatures and words read with doubt keep their pixels, and a "
+                    + "picture left with no ink is dropped). A misread word is VISIBLE when redrawn.",
+            Type.STRING, "invisible", Group.CONVERSION);
+
     public static final Opt<String> OCR_LANG = new Opt<>(
             "ocrLang",
             "OCR language",
@@ -276,7 +287,7 @@ public final class ConvertOptions {
 
     /** The single source of truth UIs iterate over, declared in {@link Group} order. */
     public static final List<Opt<?>> ALL = List.<Opt<?>>of(
-            MERGE_GLYPH_CLIPS, RASTERIZE_GROUPS, GROUP_RASTER_DPI, IMAGE_DPI, OCR_PREP, OCR_LANG, RENDER_ANNOTATIONS,
+            MERGE_GLYPH_CLIPS, RASTERIZE_GROUPS, GROUP_RASTER_DPI, IMAGE_DPI, OCR_PREP, OCR_TEXT, OCR_LANG, RENDER_ANNOTATIONS,
             STRUCTURE, DETECT_HEADERS, IGNORE_TAGS,
             GRAPHICS, GENERATE_OUTLINE, RESTRUCTURE_TEXT, RESTRUCTURE_HIERARCHY, REFINE_STRUCTURE, LLM_MODEL,
             NAV_PER_PAGE, PAGE, PAGES, SELECTABLE, DOCTAGS_GRID, DEFAULT_STRUCTURE, REDACT, REDACT_FILL, REDACT_META, MATCH, ADD_FONT, ADD_FONT_CHARS);

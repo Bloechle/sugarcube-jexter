@@ -105,7 +105,7 @@ plus the workflow's client steps (every `src/**/*.js` parses as a module, no tem
 
 The gates (`test/Gates.java`, one JVM, `SOURCE_DATE_EPOCH` pinned by the deck — Gates refuses to run
 without it): REPRO · DOCTAGS · STABLE · MODEL · TIERS · NAV · TAGS · PIXELS · FURNITURE · WORDS · AGAIN ·
-STRADDLE · CLIPS · COPY · DRAWN · EDITED · LAYERS · FIGURES · BOOK · HOSTILE per document, then BOUNDS once,
+STRADDLE · CLIPS · COPY · DRAWN · EDITED · LAYERS · FIGURES · BOOK · HOSTILE per document, then BOUNDS and READ once,
 each described in the file's header. **A change is done
 when they are green; a new defect class gets its check there.** Every check reports through the exit
 code — a gate that prints a report someone greps can be wired never to go red, and two once were.

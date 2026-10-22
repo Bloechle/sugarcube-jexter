@@ -80,6 +80,16 @@ public final class TtfImporter {
         return out;
     }
 
+    /** The sans-serif face PDFBox ships for its own fallback — Liberation Sans Regular (SIL OFL 1.1, free to
+     *  embed), metric-compatible with Arial: the face a recognized word is redrawn in when nothing says which
+     *  face it was set in. Kept here so the resource path, PDFBox's, is known in this package only. */
+    public static byte[] standardSans() throws IOException {
+        try (var in = TtfImporter.class.getResourceAsStream("/org/apache/pdfbox/resources/ttf/LiberationSans-Regular.ttf")) {
+            if (in == null) throw new IOException("Liberation Sans is not on the class path (PDFBox's resources)");
+            return in.readAllBytes();
+        }
+    }
+
     /** A friendly font name (family, else PostScript name, else "Imported"). */
     public static String name(byte[] ttf) {
         try (TrueTypeFont font = new TTFParser().parse(new RandomAccessReadBuffer(ttf))) {

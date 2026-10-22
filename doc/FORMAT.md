@@ -687,6 +687,13 @@ is invented for it — the page, the layer, the run and the paragraph all keep t
   width, and every word of a line the engine read is set at that line's height and baseline, so a line
   reads at one size. A viewer that wants to SEE the reading draws the text from `data-text` in that box —
   the shapes would be a projection, not data, and the format does not store them.
+- **A second reading draws the words** (`ocrText=redrawn`, an import option — no new grammar: every element,
+  attribute and value here is v4's). Each word read with confidence is ERASED from the picture and written
+  as an ordinary visible run (render mode `0`, `data-fill`) in a face whose glyphs do carry outlines (§B6,
+  Liberation Sans); a word read with doubt stays in the picture and in render mode `3`, as above. So in this
+  reading the picture is NOT the source any more: it was edited where words were drawn, and a picture left
+  with no ink is not stored at all. The data says which reading a page holds — a recognition layer with
+  visible runs was redrawn — and a re-reading must start from the original image, never from this picture.
 - **One reading, one layer.** Re-reading a page with another engine, or another preparation, replaces
   the layer and leaves the picture alone. A scanned PDF that arrives with a text layer of its own keeps it where it was, unlabelled:
   the format does not guess who read it.

@@ -96,6 +96,7 @@ public final class ImageImporter {
         double dpi = Math.max(1, opts.get(ConvertOptions.IMAGE_DPI));
         String lang = opts.get(ConvertOptions.OCR_LANG);
         String prep = knownPrep(opts.get(ConvertOptions.OCR_PREP));
+        Redraw.Face face = Redraw.redrawn(opts.get(ConvertOptions.OCR_TEXT)) && ocr != null ? new Redraw.Face() : null;
         OCDDocument doc = new OCDDocument();
         OCDFont font = new OCDFont(FONT_ID).id(FONT_ID).ascent(1 - DESCENT).descent(DESCENT).spaceWidth(ADVANCE);
         glyph(font, ' ');                                   // the word break the analysis re-derives needs a face that maps U+0020
@@ -114,7 +115,7 @@ public final class ImageImporter {
                     JxRaster.check(w, h, "frame " + (f + 1));       // before a pixel is decoded or stored
                     byte[] bytes = asIs ? data : png(reader.read(f));
                     String ext = asIs && fmt.startsWith("jp") ? "jpg" : "png";
-                    doc.add(page(doc, font, bytes, ext, w, h, f, 72.0 / dpi, ocr, lang, prep));
+                    doc.add(page(doc, font, face, bytes, ext, w, h, f, 72.0 / dpi, ocr, lang, prep));
                 }
             } finally {
                 reader.dispose();
@@ -122,41 +123,88 @@ public final class ImageImporter {
         }
         if (doc.pages().isEmpty()) throw new IOException("the image has no frame");
         if (font.glyphCount() > 1) doc.add(font);           // a font only when some page carries words
+        if (face != null && face.font.glyphCount() > 1) doc.add(face.font);   // the redrawn words' face, when some were
         if (ocr != null && doc.pages().stream().anyMatch(p -> p.content().stream().anyMatch(OCDLayerContent.class::isInstance)))
             doc.add(new OCDLayer(LAYER_ID, LAYER_NAME).recognition(new OCDLayer.Recognition(ocr.engine(), prep)).order(doc.layers().size()));
         Analysis.run(doc, opts);
         return doc;
     }
 
-    /** One frame → one page: the image full-page, then one invisible run per recognized word. */
-    private static OCDPage page(OCDDocument doc, OCDFont font, byte[] bytes, String ext, int w, int h,
-                                int index, double s, OcrClient ocr, String lang, String prep) {
+    /** One frame → one page: the image full-page, then one run per recognized word over it — invisible, or,
+     *  with a {@code face} ({@code ocrText=redrawn}), drawn as text where the word was read with confidence
+     *  and erased from the picture ({@link Redraw}); a picture left with no ink is not kept. */
+    private static OCDPage page(OCDDocument doc, OCDFont font, Redraw.Face face, byte[] bytes, String ext, int w, int h,
+                                int index, double s, OcrClient ocr, String lang, String prep) throws IOException {
         double pw = w * s, ph = h * s;
         OCDPage page = new OCDPage(pw, ph);
-        String ref = doc.newImageRef(ext);
-        doc.addImage(ref, bytes);
-        OCDImage im = new OCDImage(ref).pixelSize(w, h);
-        im.transform(new JxTransform(pw, 0, 0, ph, 0, 0)).z(0);
-        page.add(im);
-        if (ocr == null) return page;
+        Words read = ocr == null ? null : words(font, face, bytes, index, s, ocr, lang, prep, ph);
+        byte[] picture = bytes;
+        if (read != null && read.picture() != null) {                       // words were redrawn: the erased picture
+            picture = Redraw.inkless(read.picture()) ? null : encode(read.picture(), ext);
+            if (picture != null && !ext.equals("jpg")) ext = "png";
+        }
+        if (picture != null) {
+            String ref = doc.newImageRef(ext);
+            doc.addImage(ref, picture);
+            OCDImage im = new OCDImage(ref).pixelSize(w, h);
+            im.transform(new JxTransform(pw, 0, 0, ph, 0, 0)).z(0);
+            page.add(im);
+        }
+        if (read != null) page.add(read.content().z(1));
+        return page;
+    }
+
+    /** A page's words, and the picture with the redrawn ones erased ({@code null} when none was redrawn). */
+    private record Words(OCDLayerContent content, BufferedImage picture) {}
+
+    private static Words words(OCDFont font, Redraw.Face face, byte[] bytes, int index, double s,
+                               OcrClient ocr, String lang, String prep, double ph) throws IOException {
         List<OcrClient.Word> words;
         try {
             words = ocr.read(prep == null ? bytes : prepared(bytes, prep), lang);
         } catch (Exception e) {
             JxLog.warn(ImageImporter.class, "OCR failed on page " + (index + 1) + " (" + ocr.engine() + ") \u2014 imported without a text layer", e);
-            return page;
+            return null;
         }
         java.util.Map<Integer, JxRect> lines = new java.util.HashMap<>();   // engine line → its box (pixels)
         for (OcrClient.Word word : words)
             if (word.line() >= 0) lines.merge(word.line(), word.box(), JxRect::union);
         OCDLayerContent layer = new OCDLayerContent(LAYER_ID);              // over the picture: painted after it
-        int z = 0;
+        BufferedImage img = face == null ? null : JxRaster.decode(bytes, "the frame");
+        int z = 0, redrawn = 0;
         for (OcrClient.Word word : words) {
-            OCDText t = run(font, word, word.line() >= 0 ? lines.get(word.line()) : word.box(), s, ph);
+            JxRect line = word.line() >= 0 ? lines.get(word.line()) : word.box();
+            OCDText drawn = img == null ? null : Redraw.run(face, word, line, s, ph);
+            if (drawn != null) {
+                layer.add(drawn.fill(Redraw.erase(img, word.box(), line.height())).z(z++));
+                redrawn++;
+                continue;
+            }
+            OCDText t = run(font, word, line, s, ph);
             if (t != null) layer.add(t.z(z++));
         }
-        page.add(layer.z(1));
-        return page;
+        if (face != null) JxLog.info(ImageImporter.class, "page " + (index + 1) + ": " + redrawn + " of " + words.size() + " word(s) redrawn");
+        return new Words(layer, redrawn > 0 ? img : null);
+    }
+
+    /** The erased picture, in the codec it came in: JPEG for a JPEG (quality 0.92, no alpha), PNG otherwise. */
+    private static byte[] encode(BufferedImage img, String ext) throws IOException {
+        if (!ext.equals("jpg")) return png(img);
+        BufferedImage rgb = img;
+        if (img.getColorModel().hasAlpha() || img.getType() == BufferedImage.TYPE_CUSTOM) {
+            rgb = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_INT_RGB);
+            rgb.getGraphics().drawImage(img, 0, 0, null);
+        }
+        var writer = ImageIO.getImageWritersByFormatName("jpeg").next();
+        var param = writer.getDefaultWriteParam();
+        param.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
+        param.setCompressionQuality(0.92f);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (var ios = ImageIO.createImageOutputStream(out)) {
+            writer.setOutput(ios);
+            writer.write(null, new javax.imageio.IIOImage(rgb, null, null), param);
+        } finally { writer.dispose(); }
+        return out.toByteArray();
     }
 
     /** A word as an invisible run (see the class comment): its own box across, its line's box down —
