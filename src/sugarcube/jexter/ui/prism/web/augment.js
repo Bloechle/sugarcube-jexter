@@ -415,7 +415,7 @@ const EDIT_CSS = '.px-aug{outline:2px solid #33699f;outline-offset:-1px}'
     + 'border-radius:6px 6px 6px 0;cursor:text;white-space:nowrap;max-width:220px;overflow:hidden;'
     + 'text-overflow:ellipsis;box-shadow:0 2px 6px rgba(0,0,0,.4)}'
     + '.px-prev{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;'
-    + 'font:600 $.clamp(11px,3vw,18px)/1.2 system-ui,sans-serif;color:#33699f;background:rgba(51,105,159,.10);'
+    + 'font:600 clamp(11px,3vw,18px)/1.2 system-ui,sans-serif;color:#33699f;background:rgba(51,105,159,.10);'
     + 'border:1px dashed #33699f;border-radius:6px}';
 const ensureEditStyle = (doc) => book.frameCss(doc, 'px-edit-style', EDIT_CSS);
 
@@ -445,7 +445,8 @@ function buildReveal(doc, entry, fill) {
 // baked); the overlay intercepts internal jumps to drive the reader instead.
 const linkLabel = entry => entry.kind === 'url' ? entry.to : `p.${(entry.to | 0) + 1}`;
 function linkHref(srcZip, entry) {
-  if (entry.kind === 'url') return entry.to;
+  // the engine keeps only these schemes (OCDLink.uri): a typed javascript: link would run in every reader
+  if (entry.kind === 'url') return /^\s*(https?|mailto):/i.test(entry.to || '') ? entry.to : '#';
   return relPath(srcZip, pageZip($.clamp(entry.to | 0, 0, state.pages.length - 1)));
 }
 function buildLink(doc, srcZip, entry, fill) {
@@ -472,7 +473,7 @@ function ensureAugCss(doc) {
   st.setAttribute('id', 'px-aug-style');
   st.textContent = '.px-reveal{display:block;cursor:pointer}'
     + '.px-reveal-cover{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;'
-    + 'text-align:center;padding:.4em;box-sizing:border-box;font:600 $.clamp(11px,3.2vw,20px)/1.2 system-ui,sans-serif;'
+    + 'text-align:center;padding:.4em;box-sizing:border-box;font:600 clamp(11px,3.2vw,20px)/1.2 system-ui,sans-serif;'
     + 'color:#fff;background:#33699f;border-radius:6px;transition:opacity .45s ease,transform .45s ease}'
     + '.px-reveal input:checked ~ .px-reveal-cover{opacity:0;pointer-events:none}'
     + '.px-link{display:block;cursor:pointer}'

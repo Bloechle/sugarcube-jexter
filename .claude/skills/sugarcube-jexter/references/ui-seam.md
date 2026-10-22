@@ -15,7 +15,7 @@ open, re-zipped on export).
    (idempotent manifest add — THE manifest authority) · resources `addImage/addMedia/addFont/freeAlias`
    · displayed DOM `page/eachFrame/frameDoc/frameCss/onFrame/refreshPage` · projection `persist/flush`.
 3. **Tools** — ONE `<script>` tag each, over the engine seam `engine.js`: `augment.js`,
-   `analysis.js`, `editor.js`, `redact.js`, `compare.js`, `forms.js`, `pages.js`, plus
+   `analysis.js`, `ocr.js` (dev), `editor.js`, `redact.js`, `compare.js`, `forms.js`, `pages.js`, plus
    `trace.js` / `tts.js` / `gizmo.js`; script order defines tab order, and `experimental:
    true` hides a tab outside dev mode without unloading it. A
    tool: `P.registerTool({id,…,onEnter,onLeave})`, subscribes `P.on('tool'|
@@ -108,8 +108,7 @@ cutting (never cut on remembered line numbers).
   `contentWindow.stage` until stage.js assigns the real object — guard the ONE
   accessor by duck-typing (`typeof s?.relayout === 'function'`), never each
   call site.
-- **One brand asset**: `shared/web/jexter-mark.svg` (the J, distilled from
-  doc/typst/fig, pixel-identical) serves favicon + header + about for all three
+- **One brand asset**: `shared/web/sugarcube-mark.svg` serves favicon + header + about for all three
   apps; `WebApp` probes shared resources against THAT file. Wordmarks stay
   plain (PRISM, PDF Inspector, Jexter) — no `J.` prefix.
 - **Rail/header tabs are segmented pills** (the `.px-seg` language), not
@@ -130,7 +129,8 @@ in the footer). Don't build "a drawer per ribbon action" — no case needs it an
 
 **The ribbon declaration carries CONTROLS as well as commands** (2026-09-07) —
 `P.ribbon(id, groups, help)`, an item being either `{icon, label, title, on, active, disabled}` or
-`{field: 'search'|'color'|'number'|'switch', value, on, live, enter, list, unit, min, max, step}`.
+`{field: 'search'|'text'|'color'|'number'|'select', value, on, live, enter, list, options, unit, min, max, step}`
+(`switch` was removed: see « A BOOLEAN in a ribbon » below).
 Before that, a tool with a setting appended its own markup to the returned slot, and **the chassis
 empties the slot on every declaration** — so the settings were rebuilt FROM THEIR DEFAULTS each time,
 and sat at the far right whatever they configured. Redact's colour was worse still: its own `input`

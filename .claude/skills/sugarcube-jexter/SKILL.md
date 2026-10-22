@@ -408,6 +408,18 @@ Analysis (`ocd.analysis`)
 **Run the bench after ANY client change** — every client defect this project found was invisible to the
 Java gates. The traps that cost the most:
 
+- **A book's script never runs as Prism.** Members are served from Prism's own origin into frames the tools
+  reach into, so a `<script>` in a page ran on open and a `javascript:` link on click, both able to call the
+  app's `/api`. The worker serves every member with `script-src 'none'` (`prism-sw.js` `BOOK_CSP`): the tools
+  drive frames from the parent, which the frame's policy does not touch, and the engine drops a link that is
+  not http/https/mailto besides. Never `sandbox` the page frames instead: the tools need their documents
+  scriptable from outside. Bench `bookscript.mjs`.
+- **A frame is its own document**: a global the chassis gets from qry (`$`, `$.clamp`) is not there in the
+  Inspector's stage frame, which imports qry itself — a find-and-replace of `clamp(` into `$.clamp(` once killed
+  the Inspector's viewer and wrote `font:… $.clamp(…)` into Augment's CSS, inside containers. Read a replace's
+  hits in strings and frames before committing it.
+- **A view mode keys its look on the frame's `<html>`**, never on the page `<svg>`: `persist` writes the svg, and
+  a pick mode's class on it rode into the member (`class="pg-crop-pick"`).
 - **Draw in DOM order, read in `data-order`.** A page is stored in PAINT order; anything that paints,
   hit-tests or measures takes the DOM as it stands, anything that READS (search, read-aloud, Flow,
   extraction) re-sorts first through `ocd.js` `inReadingOrder`. Backwards is silent: only the words

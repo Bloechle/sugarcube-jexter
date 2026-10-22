@@ -201,7 +201,7 @@ The displayed DOM is the source of truth; the epub file is transport. Three laye
    **The ribbon is DECLARED, commands and controls alike** —
    `P.ribbon(id, groups, help)`. A group's items are commands
    (`{icon, label, title, on, active, disabled}`) or controls
-   (`{field: 'search' | 'color' | 'number' | 'select', value, label, options, on, live,
+   (`{field: 'search' | 'text' | 'color' | 'number' | 'select', value, label, options, on, live,
    enter, list, unit, min, max, step}`, built on the command's rhythm: the control where an icon goes,
    its caption where a label goes — a BOOLEAN is a command that stays lit, not a switch), so a setting sits in the group whose commands
    read it instead of at the far right of the row. A control's VALUE comes from

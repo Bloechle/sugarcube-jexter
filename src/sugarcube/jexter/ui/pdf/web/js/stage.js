@@ -15,6 +15,7 @@ const call  = (m, ...a) => { const s = shell(); if (s && typeof s[m] === 'functi
 // The OCD-backed sources display the STORED page SVG verbatim (loadOcd hands each page's
 // markup straight from the OCD-EPUB — the file is the render; there is no client renderer).
 import { loadOcd, pageViewport } from '/shared/js/ocd.js';
+import '/shared/vendor/qry/qry.js';           // $ in THIS frame too ($.clamp): the stage is a document of its own
 
 const MAX_DPI = 600, THUMB_DPI = 24, DPI_STEP = 24;
 

@@ -37,10 +37,17 @@ const cacheName = id => CACHE_PREFIX + id;
 const bookUrl = (id, path) =>
   self.registration.scope + 'epub/' + id + '/' + path.split('/').map(encodeURIComponent).join('/');
 
+// A book is somebody else's file, served from Prism's own origin into frames the tools reach into: a
+// <script> in a page member, an inline handler or a javascript: link once ran AS Prism and could call its
+// /api. Pages are data and carry no script (FORMAT), so every member is served with script off; the tools
+// drive the frames from the parent, which no policy of the frame's touches.
+const BOOK_CSP = "script-src 'none'; object-src 'none'";
+
 const respOf = (path, bytes) => {
   const ext = path.split('.').pop().toLowerCase();
   return new Response(bytes, {
-    headers: { 'Content-Type': TYPE[ext] || 'application/octet-stream', 'Cache-Control': 'no-cache' },
+    headers: { 'Content-Type': TYPE[ext] || 'application/octet-stream', 'Cache-Control': 'no-cache',
+               'Content-Security-Policy': BOOK_CSP },
   });
 };
 

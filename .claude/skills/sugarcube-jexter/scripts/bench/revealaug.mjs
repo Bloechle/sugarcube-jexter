@@ -28,6 +28,6 @@ const member = await page.evaluate(() => {
            runs: (t.match(/data-ocd="run"/g) || []).length };
 });
 const bytes = await bookBytes(page);
-fs.writeFileSync('/tmp/fix/rev.ocd.epub', bytes);
+fs.writeFileSync(`${process.env.BENCH_FIX || '/tmp/fix'}/rev.ocd.epub`, bytes);
 console.log(JSON.stringify({ rec, member, errors }, null, 1));
 await browser.close(); srv.close(); process.exit(0);

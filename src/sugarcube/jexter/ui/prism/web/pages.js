@@ -26,7 +26,7 @@ const P = window.prism;
 const TOOL = 'pages';
 
 const CSS = `
-svg.pg-crop-pick { cursor:crosshair; }
+.pg-crop-pick svg { cursor:crosshair; }
 /* The rectangle is the crop: light enough to read the page through it, outlined clearly enough to
    place an edge. It is what the gizmo grabs, so it takes pointer events — the handles are the
    gizmo's own data-ui chrome and sit above it. */
@@ -313,12 +313,13 @@ function setView(v) {
 
 function styleOn(doc) {
     book.frameCss(doc, 'pg-style', CSS);
-    doc.querySelector('svg[data-ocd="page"]')?.classList.toggle('pg-crop-pick', st.on && st.view === 'page');
+    // on the frame's <html>, never the page <svg>: a view mode sets nothing on content (persist writes the svg)
+    doc.documentElement.classList.toggle('pg-crop-pick', st.on && st.view === 'page');
 }
 
 const clean = (doc) => {
     doc.querySelectorAll('#pg-crop, #pg-style, [data-ui="gz"], [data-ui="gzh"]').forEach(n => n.remove());
-    doc.querySelector('svg')?.classList.remove('pg-crop-pick');
+    doc.documentElement.classList.remove('pg-crop-pick');
 };
 
 /** The four numbers, in points — the other half of "precisely". The gesture puts a box roughly where

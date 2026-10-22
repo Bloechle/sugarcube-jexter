@@ -69,8 +69,8 @@ svg .rd-find { fill:#e5484d; fill-opacity:.18; stroke:#e5484d; stroke-width:1.2;
    gizmo's own data-ui chrome and sit above it. */
 svg .rd-zone { stroke:var(--jx-brand-bright, #5e9bd6); stroke-width:1.2; stroke-dasharray:4 3; vector-effect:non-scaling-stroke; pointer-events:all; cursor:move; }
 svg .rd-band { fill:none; stroke:var(--jx-brand-bright, #5e9bd6); stroke-width:1; stroke-dasharray:3 3; vector-effect:non-scaling-stroke; }
-svg.rd-zone-pick { cursor:crosshair; }
-svg.rd-block-pick [data-ocd="run"], svg.rd-block-pick [data-ocd="paragraph"] { pointer-events:bounding-box; cursor:pointer; }
+.rd-zone-pick svg { cursor:crosshair; }
+.rd-block-pick [data-ocd="run"], .rd-block-pick [data-ocd="paragraph"] { pointer-events:bounding-box; cursor:pointer; }
 /* The candidate under the pointer. SOLID where a placed zone is dashed: one says "this is what a click
    takes", the other "this is what Apply removes" — two states of one shape, told apart without a legend. */
 svg .rd-hov { pointer-events:none; }
@@ -198,15 +198,16 @@ function draw(doc, idx) {
 }
 function styleOn(doc) {
   book.frameCss(doc, 'rd-style', CSS);
-  const svg = doc.querySelector('svg'); if (!svg) return;
-  svg.classList.toggle('rd-zone-pick', st.pick === 'zone'); svg.classList.toggle('rd-block-pick', st.pick === 'block');
+  // on the frame's <html>, never the page <svg>: a view mode sets nothing on content (persist writes the svg)
+  const root = doc.documentElement;
+  root.classList.toggle('rd-zone-pick', st.pick === 'zone'); root.classList.toggle('rd-block-pick', st.pick === 'block');
 }
 // `clean`, not `clear`: the gizmo has a clear() of its own and one name for two things is how a caller
 // picks the wrong one. It takes the handles with it — chrome that outlives its tool answers the pointer
 // under the next one.
 const clean = (doc) => {
   doc.querySelectorAll(`.rd-layer, .rd-hov, #rd-style, #${RV_STYLE}, [data-ui="gz"], [data-ui="gzh"]`).forEach(n => n.remove());
-  doc.querySelector('svg')?.classList.remove('rd-zone-pick', 'rd-block-pick');
+  doc.documentElement.classList.remove('rd-zone-pick', 'rd-block-pick');
 };
 
 /** The pages only — no list, no ribbon, no write. What a colour change costs. Reveal is re-applied

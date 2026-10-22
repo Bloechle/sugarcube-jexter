@@ -22,6 +22,8 @@ cp target/corpus/text_press.pdf /tmp/fix/  # hyphens: the line-final hyphen case
 for f in /tmp/fix/*.pdf; do java -cp "$CP" sugarcube.jexter.Conversion \
                                 "$f" "${f%.pdf}.ocd.epub"; done
 cp /tmp/fix/*.ocd.epub $BENCH_ROOT/site/    # the bench serves the site itself
+cp /tmp/fix/hidden.ocd.epub $BENCH_ROOT/site/fake.ocd.epub      # icons, redactaudit: a leaky document
+cp /tmp/fix/withfont.ocd.epub $BENCH_ROOT/site/legit.ocd.epub   # redactaudit: a clean one
 
 BENCH_ROOT=/tmp/bench BENCH_FIX=/tmp/fix \
 JEXTER_CP_FULL="$OUT:$REPO/lib/*" JAVA_BIN=$JDK21/bin/java \
@@ -50,6 +52,7 @@ sleep 9 && node inspector.mjs
 | scenario | the thing it keeps from breaking |
 |---|---|
 | `sweep` | every command of every tool, clicked with a book and with none: 0 console errors, and **nothing is armed when no document is open** |
+| `bookscript` | a book's own `<script>` and `javascript:` link never run as Prism: the worker serves members with `script-src 'none'` |
 | `leaveclean` | every tool leaves the page as it found it — `data-ui` back to 0, injected stylesheets gone |
 | `leak` | a page dressed with EVERY overlay at once, then exported: no chrome in the container, and it still round-trips |
 | `gestures` | the gizmo on a zone: 8 handles, move, an anchored corner drag, a typed field |

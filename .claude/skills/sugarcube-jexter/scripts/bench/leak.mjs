@@ -30,6 +30,6 @@ const dressed = await page.evaluate(() => {
 });
 // and now what the container would hold
 const bytes = await bookBytes(page);
-fs.writeFileSync('/tmp/bench/exported.ocd.epub', bytes);
+fs.writeFileSync(`${process.env.BENCH_ROOT || '/tmp/bench'}/exported.ocd.epub`, bytes);
 console.log(JSON.stringify({ dressed, bytes: bytes.length, errors }, null, 1));
 await browser.close(); srv.close(); process.exit(0);
