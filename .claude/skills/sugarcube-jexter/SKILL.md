@@ -509,6 +509,13 @@ gh release view v1.1.0 --json assets --jq '.assets[]|[.name,(.size/1048576|floor
 A release left as a DRAFT (its tag deleted and recreated) refuses `--latest`: `gh release edit
 --draft=false --tag …` first, then `--latest`. Never open a commit title with lowercase `jexter`.
 
+**A draft's assets are what was built at its tag, not what the tree says now.** The v1.0.0 draft (built
+from the root commit) carried the private service's name — in `jexter-overview.pdf` and in `backend.js`
+inside the jar — after the tree had been cleaned, and the engine before the 2026-10-22 bounds. It was
+never published: deleted, and 1.1.0 released from `main` instead. Before publishing any release, scan
+EVERY asset for the banner's names (`pdftotext` on the PDF, `unzip` + `grep -ril` on the jar), not only
+the tree. The history keeps the name (a public domain, no secret); it is not rewritten — clones exist.
+
 **jexter is a LIBRARY first.** Moving or renaming a public class breaks consumers on THEIR machine (CI
 compiles jexter, not them): read the private consumer notes (`repo-skills`) before any such move, and
 put the new launch line at the top of any delivery mail. `ConvertOptions` lives in `core`.
