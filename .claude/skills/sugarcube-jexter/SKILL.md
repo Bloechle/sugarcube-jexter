@@ -376,6 +376,10 @@ Analysis (`ocd.analysis`)
 - A bare folio (« 1 », « 3 ») differs from its neighbour in its only character: edit distance calls it
   unstable. `Furniture.counts` reads a line that COUNTS the pages (same shape, one number larger by the page
   offset) as fully stable — self-reference, no lexicon. Folios sat in every reflowable book before.
+- A section that opens every page (« 1. Section 1: terms », « 2. Section 2: terms ») is as stable at the top
+  edge as a running head: it was tagged one and dropped from the reflow book, Markdown, HTML and DocTags — the
+  reader's contents fell back to « Page 1, Page 2 ». A running head is not elevated: a line taller than 1.25×
+  the document's median line ends the run from its edge (`Furniture.ELEVATED`). Fixture `doc_sections`.
 - A paragraph the press cut is joined back by geometry alone (`StructureBuilder.Paragraphs`, both builders):
   last text of its page, its last line the column's full width; first text of the next page, same column,
   not indented. A heading between them keeps them apart. Fixture `doc_page_break`, gate FURNITURE.

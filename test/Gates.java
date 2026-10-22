@@ -10,7 +10,8 @@
 //   TAGS      a tagged PDF's tree lands as the author wrote it, by STANDARD type, no content claimed twice.
 //   PIXELS    the model paints what PDFBox paints (< 1 % of a page off), and the direct renderer agrees
 //             with the model's render (< 0.25 %): a gap there is lost in the model, not in the painting.
-//   FURNITURE running heads and folios stay on the page and out of every structure the writers read.
+//   FURNITURE running heads and folios stay on the page and out of every structure the writers read — and a
+//             section heading at the top of every page, the same words but its number, is no running head.
 //   AGAIN     a second Analysis.run writes the same container, and reading the stages changes nothing.
 //   WORDS     a fixture that declares its text reads it word for word and in order: no space glued, none
 //             invented, no column read across.
@@ -448,6 +449,12 @@ public final class Gates {
             List<String> hits = new ArrayList<>();
             furnitureRefs(st.root(), model, hits);
             if (!hits.isEmpty()) bad.add(st.id() + " reads running furniture: " + hits);
+        }
+        if (current.equals("doc_sections.pdf")) {                    // a section at the top of every page is no running head
+            String md = sugarcube.jexter.write.MarkdownWriter.toMarkdown(model);
+            for (int i = 1; i <= 4; i++)
+                if (!md.contains("Section " + i + ": terms")) bad.add("the heading of section " + i + " was read as a running head");
+            if (md.lines().anyMatch(l -> l.strip().matches("\\d+"))) bad.add("a bare folio is read as text");
         }
         if (current.equals("doc_page_break.pdf")) {                  // a bare folio, and a paragraph the press cut
             String md = sugarcube.jexter.write.MarkdownWriter.toMarkdown(model);

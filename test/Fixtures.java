@@ -89,6 +89,7 @@ final class Fixtures {
         FEATURES.put("doc_metadata", (Whole) Fixtures::metadata);
         FEATURES.put("doc_running_heads", (Whole) Fixtures::runningHeads);
         FEATURES.put("doc_page_break", (Whole) Fixtures::pageBreak);
+        FEATURES.put("doc_sections", (Whole) Fixtures::sections);
         FEATURES.put("doc_chapters", (Whole) Fixtures::chapters);
         FEATURES.put("doc_chapters_outline", (Whole) Fixtures::chaptersOutline);
         FEATURES.put("rich", (Whole) Fixtures::rich);
@@ -923,6 +924,22 @@ final class Fixtures {
                 float y = H - 40 * MM;
                 for (int l = 0; l < 8; l++, y -= 6 * MM)
                     text(cs, d.sans(), 11, 20 * MM, y, "Page " + i + ", line " + (l + 1) + ": the body text that changes on every page.");
+                text(cs, d.sans(), 9, A4.getWidth() / 2, 12 * MM, String.valueOf(i));
+            }
+    }
+
+    /**
+     * A contract whose every page opens on its section: « 1. Section 1: terms and conditions », then « 2. … 2: … »,
+     * at the top edge where a running head would sit, the same words but for the numbers — as stable from page to
+     * page as a running head, but set larger than the text. A heading is elevated; a running head is not.
+     */
+    private static void sections(Doc d) throws IOException {
+        for (int i = 1; i <= 4; i++)
+            try (var cs = d.page(A4)) {
+                text(cs, d.sans(), 18, 20 * MM, H - 25 * MM, i + ". Section " + i + ": terms and conditions");
+                float y = H - 38 * MM;
+                for (int l = 0; l < 10; l++, y -= 6 * MM)
+                    text(cs, d.sans(), 11, 20 * MM, y, "Clause " + i + "." + (l + 1) + ": the parties agree on the terms below.");
                 text(cs, d.sans(), 9, A4.getWidth() / 2, 12 * MM, String.valueOf(i));
             }
     }

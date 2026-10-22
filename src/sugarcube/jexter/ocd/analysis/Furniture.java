@@ -37,6 +37,12 @@ import java.util.Locale;
  * stable, stopping at the first break. On a dense page this stops at the folio, before the footnote block above
  * it.
  *
+ * <p><b>A running head is not elevated.</b> A section that opens every page — « 1. Section 1: terms », then
+ * « 2. Section 2: terms » — sits at the top edge and reads the same from page to page but for its numbers: as
+ * stable as a running head. What sets it apart is its size: a running head is set at the text's size or smaller,
+ * a heading above it. So a line taller than {@value #ELEVATED}× the document's typical line ends the run from
+ * its edge — it and everything inward stay text. Geometry, read off the frozen lines: no font is asked.
+ *
  * <p><b>Non-destructive:</b> it only sets {@link OCDNode#role} on the running text runs, never geometry or paint
  * order, so it is render-neutral. {@link #isRunning} stays the single authority consumed by font-profiling,
  * reading-order and the LLM structurer. Scope is text-only: text-less furniture (a rule, a logo) is graphics,
@@ -50,9 +56,11 @@ public final class Furniture {
     private static final int    STACK     = 2;     // same-side neighbour offset: previous/next page of the same parity
     private static final double SIM_MIN   = 0.60;  // furniture iff mean same-side-neighbour similarity ≥ this
     private static final double CONTIG    = 2.0;   // accumulate inward only while the next line is within this many line-heights
+    private static final double ELEVATED  = 1.25;  // a line this many times the typical line's height is a heading, never furniture
 
-    /** One page's lines (top-first) with their baseline y, line height, and raw comparison string. */
-    private record Page(List<Liner.Line> lines, double[] yc, double[] lh, String[] raw) {}
+    /** One page's lines (top-first) with their baseline y, line height, and raw comparison string; {@code body}
+     *  is the document's typical line height (the median over every page), the same on every page. */
+    private record Page(List<Liner.Line> lines, double[] yc, double[] lh, String[] raw, double body) {}
 
     public static void detect(OCDDocument doc) {
         int pages = doc.pageCount();
@@ -106,6 +114,7 @@ public final class Furniture {
                 int prev = top ? i - 1 : i + 1;                          // the line one step closer to the edge
                 if (Math.abs(pa.yc[prev] - pa.yc[i]) > CONTIG * pa.lh[prev]) break;   // block ended
             }
+            if (pa.lh[i] > ELEVATED * pa.body) break;                     // an elevated line is a heading: the run ends
             if (!furniture(pg, p, top, d)) break;                        // first unstable line ends the run
             run.add(i);
         }
@@ -189,12 +198,20 @@ public final class Furniture {
 
     // ── scan: cluster each page's lines (top-first) and pre-compute baseline y, line height, raw string ──
     private static List<Page> scan(OCDDocument doc) {
-        List<Page> pg = new ArrayList<>(doc.pageCount());
+        List<List<Liner.Line>> all = new ArrayList<>(doc.pageCount());
+        List<Double> heights = new ArrayList<>();
         for (int i = 0; i < doc.pageCount(); i++) {
             List<Liner.Line> ls = lines(doc.page(i));
+            all.add(ls);
+            for (Liner.Line l : ls) heights.add(lineHeight(l));
+        }
+        heights.sort(null);
+        double body = heights.isEmpty() ? 1.0 : heights.get(heights.size() / 2);
+        List<Page> pg = new ArrayList<>(all.size());
+        for (List<Liner.Line> ls : all) {
             double[] yc = new double[ls.size()], lh = new double[ls.size()]; String[] raw = new String[ls.size()];
             for (int j = 0; j < ls.size(); j++) { yc[j] = ls.get(j).yc(); lh[j] = lineHeight(ls.get(j)); raw[j] = raw(lineText(ls.get(j))); }
-            pg.add(new Page(ls, yc, lh, raw));
+            pg.add(new Page(ls, yc, lh, raw, body));
         }
         return pg;
     }
