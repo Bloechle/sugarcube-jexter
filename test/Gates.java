@@ -43,7 +43,8 @@
 //   READ      once: a picture's words, both readings — invisible over the picture (the picture is the page), or
 //             redrawn: each confident word erased from the picture and drawn as selectable text, a doubtful
 //             word kept in its pixels, a picture left with no ink dropped; an engine's padded boxes give the
-//             size its snug ones give (the words are measured in the picture); an unknown reading refused.
+//             size its snug ones give (the words are measured in the picture); the text is set, not pasted: one
+//             size a paragraph, one stretch a line, the spacing absorbing the rest; an unknown reading refused.
 //
 //   node nimbus-jexter.cjs --run=test     the whole run, on any OS: compile src/ and test/, corpus, every gate
 //
@@ -927,6 +928,49 @@ public final class Gates {
         else for (int i = 0; i < 4; i++)
             if (Math.abs(loose.get(i).fontSize() / snug.get(i).fontSize() - 1) > 0.03)
                 bad.add("redrawn, padded boxes: \"" + text[i] + "\" set at " + loose.get(i).fontSize() + ", not " + snug.get(i).fontSize());
+
+        // set, not pasted: one size a paragraph (two lines a few pixels apart in height), one stretch a line (two
+        // words whose boxes want 1.10 and 1.15: the line takes one, the spacing between letters absorbs the rest)
+        // — and a line far below, taller, is a paragraph of its own, at its own size
+        {
+            var ttf = new org.apache.fontbox.ttf.TTFParser().parse(new org.apache.pdfbox.io.RandomAccessReadBuffer(sugarcube.jexter.pdfimport.TtfImporter.standardSans()));
+            var cmap = ttf.getUnicodeCmapLookup();
+            double upm = ttf.getUnitsPerEm();
+            java.util.function.ToDoubleFunction<String> em = w -> w.codePoints().mapToDouble(c -> {
+                try { return ttf.getAdvanceWidth(cmap.getGlyphId(c)) / upm; } catch (java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
+            }).sum();
+            String[][] said = { {"same", "move"}, {"once", "more"}, {"secure"} };
+            int[][] lineAt = { {40, 20}, {66, 21}, {200, 30} };              // y, ink height (px)
+            double[][] want = { {1.10, 1.15}, {1.12, 1.12}, {1.0} };         // the stretch each word's box asks
+            BufferedImage set = new BufferedImage(700, 300, BufferedImage.TYPE_INT_RGB);
+            var gs = set.createGraphics();
+            gs.setColor(java.awt.Color.WHITE); gs.fillRect(0, 0, 700, 300);
+            gs.setColor(java.awt.Color.BLACK);
+            List<sugarcube.jexter.core.OcrClient.Word> ws = new ArrayList<>();
+            for (int l = 0; l < said.length; l++) {
+                int x = 40, y = lineAt[l][0], h = lineAt[l][1];
+                for (int k = 0; k < said[l].length; k++) {
+                    int w = (int) Math.round(em.applyAsDouble(said[l][k]) * h / 0.53 * want[l][k]);
+                    gs.fillRect(x, y, w, h);
+                    ws.add(new sugarcube.jexter.core.OcrClient.Word(said[l][k], new sugarcube.jexter.core.JxRect(x - 2, y - 2, w + 4, h + 4), 0.99, l));
+                    x += w + h;
+                }
+            }
+            gs.dispose();
+            ByteArrayOutputStream setPng = new ByteArrayOutputStream();
+            javax.imageio.ImageIO.write(set, "png", setPng);
+            var drawn = sugarcube.jexter.imageimport.ImageImporter.convert(setPng.toByteArray(), redrawn, engine(ws)).page(0).texts()
+                    .filter(t -> !t.isInvisible()).collect(java.util.stream.Collectors.toMap(t -> t.text().strip(), t -> t, (x, y) -> x));
+            if (!drawn.keySet().containsAll(List.of("same", "move", "once", "more", "secure"))) bad.add("set: not every word drawn " + drawn.keySet());
+            else {
+                if (Math.abs(drawn.get("same").transform().a() - drawn.get("move").transform().a()) > 1e-9)
+                    bad.add("set: the words of one line are stretched apart (" + drawn.get("same").transform().a() + ", " + drawn.get("move").transform().a() + ")");
+                if (drawn.get("same").fontSize() != drawn.get("more").fontSize())
+                    bad.add("set: one paragraph, two sizes (" + drawn.get("same").fontSize() + ", " + drawn.get("more").fontSize() + ")");
+                if (Math.abs(drawn.get("secure").fontSize() / drawn.get("same").fontSize() - 1) < 0.3)
+                    bad.add("set: a taller line far below took the paragraph's size");
+            }
+        }
 
         // redrawn, one word in doubt: it keeps its pixels (and lies invisible over them); the others are erased
         OCDDocument c = sugarcube.jexter.imageimport.ImageImporter.convert(picture, redrawn, doubt);

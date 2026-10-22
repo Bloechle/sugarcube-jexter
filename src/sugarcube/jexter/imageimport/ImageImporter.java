@@ -184,14 +184,51 @@ public final class ImageImporter {
             at[i] = new JxRect[]{ across == null ? word.box() : across, down };
         }
         Redraw.Tally tally = new Redraw.Tally();
+        int n = words.size();
+        Redraw.Fit[] fits = new Redraw.Fit[n];
+        int[] lineOf = new int[n];                                          // a word → its line, in the lists below
+        double[][] inkOf = new double[n][];
+        double[] lineSize = new double[0], paragraphSize = new double[0], stretch = new double[0];   // a line → its …
+        if (img != null) {
+            // one size a paragraph, one stretch a line: the redrawn text reads as set, each word where it was read
+            java.util.Map<Integer, Integer> place = new java.util.HashMap<>();   // engine line → its place in the lists
+            List<JxRect> lineInk = new java.util.ArrayList<>();
+            List<Double> sizes = new java.util.ArrayList<>();
+            for (int i = 0; i < n; i++) {
+                OcrClient.Word word = words.get(i);
+                inkOf[i] = face.ink((word.line() >= 0 ? said.get(word.line()).toString() : word.text()).codePoints().toArray());
+                double size = Redraw.size(at[i][1], inkOf[i], s);
+                Integer l = place.get(word.line() >= 0 ? word.line() : -(i + 1));
+                if (l == null) {
+                    l = lineInk.size();
+                    place.put(word.line() >= 0 ? word.line() : -(i + 1), l);
+                    lineInk.add(at[i][1]);
+                    sizes.add(size);
+                }
+                lineOf[i] = l;
+                fits[i] = Redraw.fit(face, word, at[i][0], size, s, tally);
+            }
+            lineSize = sizes.stream().mapToDouble(Double::doubleValue).toArray();
+            int[] block = Redraw.blocks(lineInk, lineSize, s);
+            paragraphSize = new double[lineSize.length];
+            stretch = new double[lineSize.length];
+            for (int l = 0; l < lineSize.length; l++) {
+                final int b = block[l], line = l;
+                final double[] ls = lineSize;
+                paragraphSize[l] = Redraw.median(java.util.stream.IntStream.range(0, ls.length).filter(k -> block[k] == b).mapToDouble(k -> ls[k]).toArray());
+                final double size = paragraphSize[l];
+                stretch[l] = Redraw.median(java.util.stream.IntStream.range(0, n).filter(i -> lineOf[i] == line && fits[i] != null)
+                        .mapToDouble(i -> at[i][0].width() * s / (fits[i].em() * size)).toArray());
+            }
+        }
         int z = 0;
-        for (int i = 0; i < words.size(); i++) {
+        for (int i = 0; i < n; i++) {
             OcrClient.Word word = words.get(i);
             JxRect line = word.line() >= 0 ? lines.get(word.line()) : word.box();
-            OCDText drawn = img == null ? null : Redraw.run(face, word, at[i][0], at[i][1],
-                    face.ink((word.line() >= 0 ? said.get(word.line()).toString() : word.text()).codePoints().toArray()), s, ph, tally);
-            if (drawn != null) {                    // erased across the engine's box, down the line's ink
+            if (fits[i] != null) {                 // drawn; erased across the engine's box, down the line's ink
+                int l = lineOf[i];
                 JxRect down = at[i][1];
+                OCDText drawn = Redraw.draw(face, word, fits[i], at[i][0], down, inkOf[i], lineSize[l], paragraphSize[l], stretch[l], s, ph);
                 layer.add(drawn.fill(Redraw.erase(img, new JxRect(word.box().x(), down.y(), word.box().width(), down.height()), down.height())).z(z++));
                 continue;
             }

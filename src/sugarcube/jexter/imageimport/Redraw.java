@@ -12,6 +12,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -30,8 +31,14 @@ import java.util.Map;
  * paper around it (the median of a ring just outside); the word is drawn in the median colour of its own ink
  * (the darker part of its box). The face is Liberation Sans ({@link TtfImporter#standardSans}): the engine
  * says nothing of the face a word was set in, and a sans of Arial's metrics is the least surprising stand-in.
- * Its size is the line's height over the height the face's ink spans for that line's own letters ({@link Face#ink}:
- * a line with no descender is shorter, not smaller), its baseline that ink's foot above the line's bottom, its width the word's (a horizontal stretch, as the invisible runs have).
+ * A line's size is its height over the height the face's ink spans for its own letters ({@link Face#ink}: a line
+ * with no descender is shorter, not smaller), its baseline that ink's foot above the line's bottom.
+ *
+ * <p><b>Set, not pasted.</b> Each word sized and stretched to its own box reads as words cut out and glued back:
+ * the sizes and widths a reading measures carry its noise. So the lines of one paragraph ({@link #blocks}, from
+ * the geometry alone) share one size, the median of theirs; the words of one line share one horizontal stretch,
+ * the median of theirs; and each word, still placed where it was read, fills its own width with the spacing
+ * between its letters ({@link #draw}) — the letters keep their shape, the gaps take the difference.
  *
  * <p><b>The picture's ink, not the engine's box</b> ({@link #ink}): an engine's box is its own idea of a word —
  * Tesseract's hug the letters, another engine's need not — so the line's height and the word's width are measured in the
@@ -57,6 +64,10 @@ final class Redraw {
     static final double MIN_CONFIDENCE = 0.8;
     /** The horizontal stretch the face may take to fill a word's box. */
     static final double MIN_STRETCH = 0.6, MAX_STRETCH = 1.7;
+    /** Lines whose sizes differ by less than this (relative) may be one paragraph, set at one size. */
+    static final double SAME_SIZE = 0.15;
+    /** The spacing a word may take between its letters to fill its width, in em of its size. */
+    static final double MAX_TRACKING = 0.1;
     /** A picture with less of its area as ink than this, once the words are erased, is dropped. */
     static final double INK_LEFT = 0.0015;
 
@@ -129,28 +140,82 @@ final class Redraw {
         int gid(int cp)        { return font.gidOf(cp); }
     }
 
-    /** One word as drawn text, or {@code null} when it must keep its pixels (see the class comment). {@code b}
-     *  is the word's ink across, {@code line} its line's ink down (pixels, {@link #ink}); {@code ink} is
-     *  {@link Face#ink} of the whole line the word was read in. */
-    static OCDText run(Face face, OcrClient.Word word, JxRect b, JxRect line, double[] ink, double s, double pageHeight, Tally tally) throws IOException {
+    /** A word the face can redraw: its letters and their natural width at a size of 1 (em). */
+    record Fit(int[] cps, double em) {}
+
+    /** The size a line's ink gives (see the class comment): {@code line} its ink down (pixels), {@code ink}
+     *  {@link Face#ink} of its letters. */
+    static double size(JxRect line, double[] ink, double s) { return line.height() * s / (ink[0] - ink[1]); }
+
+    /** The word, if it may be redrawn, or {@code null} when it must keep its pixels (see the class comment):
+     *  {@code b} is its ink across, {@code size} its line's. */
+    static Fit fit(Face face, OcrClient.Word word, JxRect b, double size, double s, Tally tally) throws IOException {
         if (word.confidence() >= 0 && word.confidence() < MIN_CONFIDENCE) { tally.doubtful++; return null; }
         int[] cps = word.text().strip().codePoints().toArray();
-        if (cps.length == 0 || b.width() <= 0 || line.height() <= 0) return null;
+        if (cps.length == 0 || b.width() <= 0 || size <= 0) return null;
         if (!face.has(cps)) { tally.unknown++; return null; }
-        double fs = line.height() * s / (ink[0] - ink[1]);
-        double width = 0;
-        for (int cp : cps) width += face.advance(cp) * fs;
-        double sx = b.width() * s / width;
+        double em = 0;
+        for (int cp : cps) em += face.advance(cp);
+        double sx = b.width() * s / (em * size);
         tally.stretch.add(sx);
         if (sx < MIN_STRETCH || sx > MAX_STRETCH) { tally.stretched++; return null; }
         tally.redrawn++;
-        double baseline = pageHeight - (line.y() + line.height()) * s - ink[1] * fs;
-        OCDText t = new OCDText(FONT_ID, fs);
+        return new Fit(cps, em);
+    }
+
+    /**
+     * The paragraphs, as the picture shows them: each line (its ink, pixels) joins a block whose last line it
+     * sits under — a gap of at most one em of that line's size (pixels per point {@code s}), half of the shorter one shared across, a size within
+     * {@link #SAME_SIZE} of the block's first — or starts one. Answers each line's block, in the input's order.
+     * Geometry only: the paragraphs the analysis builds come later, over the words drawn here.
+     */
+    static int[] blocks(List<JxRect> lines, double[] sizes, double s) {
+        Integer[] order = new Integer[lines.size()];
+        for (int i = 0; i < order.length; i++) order[i] = i;
+        Arrays.sort(order, java.util.Comparator.comparingDouble(i -> lines.get(i).y()));
+        int[] block = new int[lines.size()];
+        List<int[]> open = new java.util.ArrayList<>();                 // {first line, last line} of each block
+        for (int i : order) {
+            JxRect r = lines.get(i);
+            int join = -1;
+            for (int k = 0; k < open.size() && join < 0; k++) {
+                JxRect last = lines.get(open.get(k)[1]);
+                double shared = Math.min(r.maxX(), last.maxX()) - Math.max(r.x(), last.x());
+                if (r.y() - last.maxY() <= sizes[open.get(k)[1]] / s && r.y() >= last.cy()
+                        && shared >= 0.5 * Math.min(r.width(), last.width())
+                        && Math.abs(sizes[i] / sizes[open.get(k)[0]] - 1) <= SAME_SIZE) join = k;
+            }
+            if (join < 0) { open.add(new int[]{i, i}); join = open.size() - 1; }
+            else open.get(join)[1] = i;
+            block[i] = join;
+        }
+        return block;
+    }
+
+    /**
+     * One word drawn: at {@code size} (its paragraph's), on its own line's baseline ({@code lineSize}, {@code ink}),
+     * stretched as its whole line ({@code stretch}) and spaced to fill its own ink across — the letters of one
+     * line set alike, each word where it was read. A word whose spacing would pass {@link #MAX_TRACKING} (or a
+     * single letter) takes the stretch it alone needs instead.
+     */
+    static OCDText draw(Face face, OcrClient.Word word, Fit f, JxRect b, JxRect line, double[] ink, double lineSize,
+                        double size, double stretch, double s, double pageHeight) {
+        double natural = f.em() * size, width = b.width() * s;
+        double sx = stretch, tracking = f.cps().length > 1 ? (width / stretch - natural) / (f.cps().length - 1) : Double.NaN;
+        if (!(Math.abs(tracking) <= MAX_TRACKING * size)) { sx = width / natural; tracking = 0; }
+        double baseline = pageHeight - line.maxY() * s - ink[1] * lineSize;
+        OCDText t = new OCDText(FONT_ID, size);
         if (word.confidence() >= 0) t.confidence(Math.min(1, word.confidence()));
         t.transform(new JxTransform(sx, 0, 0, 1, b.x() * s, baseline));
         double x = 0;
-        for (int cp : cps) { t.add(face.gid(cp), x, new String(Character.toChars(cp))); x += face.advance(cp) * fs; }
+        for (int cp : f.cps()) { t.add(face.gid(cp), x, new String(Character.toChars(cp))); x += face.advance(cp) * size + tracking; }
         return t;
+    }
+
+    static double median(double[] v) {
+        double[] c = v.clone();
+        Arrays.sort(c);
+        return c.length == 0 ? Double.NaN : c[c.length / 2];
     }
 
     /** Erase the word's box (in the picture's pixels) with the paper around it; answer the ink's colour (argb). */
