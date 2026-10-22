@@ -1,5 +1,6 @@
 package sugarcube.jexter.write;
 
+import sugarcube.jexter.core.JxRaster;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSStream;
@@ -43,6 +44,8 @@ final class PdfImages {
     /** The XObject for one model image: JPEG passes through, PNG is re-encoded as above, anything else
      *  falls back to PDFBox's own reading of the bytes. */
     static PDImageXObject create(PDDocument pdf, byte[] bytes, String name) throws IOException {
+        int[] wh = JxRaster.dims(bytes);                     // every codec below decodes: the header first
+        if (wh != null) JxRaster.check(wh[0], wh[1], "image " + name);
         if (isPng(bytes)) {
             BufferedImage bi = ImageIO.read(new ByteArrayInputStream(bytes));
             if (bi != null && bilevel(bi)) return bilevelImage(pdf, bi);

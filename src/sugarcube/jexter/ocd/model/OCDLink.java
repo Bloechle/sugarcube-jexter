@@ -23,7 +23,18 @@ public final class OCDLink {
     public JxRect  rect()           { return rect; }
     public OCDLink rect(JxRect r)   { this.rect = r; return this; }
     public String  uri()            { return uri; }
-    public OCDLink uri(String v)    { this.uri = v; return this; }
+    /** The external target — kept only when its scheme is {@code http}, {@code https} or {@code mailto}. A link's
+     *  URI comes from the source (a PDF action, a container's anchor) and every projection writes it into an
+     *  {@code href}: a {@code javascript:} URI ran in any viewer that showed the page, so anything else is
+     *  dropped here, once, and the link keeps only an internal destination if it has one. */
+    public OCDLink uri(String v)    {
+        this.uri = v == null || v.isEmpty() || SCHEME.matcher(v.strip()).lookingAt() ? v : null;
+        if (uri == null && v != null && !v.isEmpty())
+            sugarcube.jexter.core.JxLog.warn(OCDLink.class, "link target dropped: only http, https and mailto are written");
+        return this;
+    }
+    private static final java.util.regex.Pattern SCHEME =
+            java.util.regex.Pattern.compile("(?i)(?:https?|mailto):");
     public int     pageIndex()      { return pageIndex; }
     public OCDLink pageIndex(int i) { this.pageIndex = i; return this; }
     public double  y()              { return y; }
@@ -32,6 +43,8 @@ public final class OCDLink {
     public boolean isExternal()     { return uri != null && !uri.isEmpty(); }
     public boolean hasDestination() { return pageIndex >= 0; }
     public boolean hasY()           { return !Double.isNaN(y); }
+    /** Whether the link leads anywhere: a link with neither target is not a link. */
+    public boolean hasTarget()      { return isExternal() || hasDestination(); }
 
     /** A copy. {@link JxRect} is a record, so the rectangle is shared safely. */
     public OCDLink copy() {

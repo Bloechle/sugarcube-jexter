@@ -138,7 +138,7 @@ public final class Conversion {
             if (doc.pages().isEmpty()) throw new IOException("Document has no pages");
             return convert(doc, target, o);
         }
-        File tmp = File.createTempFile("jexter-", ".ocd.epub");
+        File tmp = Files.createTempFile("jexter-", ".ocd.epub").toFile();   // 0600: the caller's document, readable by this process alone
         try {
             Files.write(tmp.toPath(), data);
             // a patch of an OCD-EPUB reads only the pages its zones name (skeleton + those pages): the round trip

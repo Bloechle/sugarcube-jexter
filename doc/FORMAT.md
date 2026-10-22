@@ -218,8 +218,8 @@ failed on it.
 
 1. **Skeleton** — OPF spine → page list; `ocd/` members → meta, outline,
    structures, annots; `pages/fonts.svg` → the complete fonts (identity, weight,
-   metrics, cmap, every glyph — inkless included). Images and media register
-   lazily by name.
+   metrics, cmap, every glyph — inkless included). Images, media and passengers
+   are read with it, each through the bounded door below.
 2. **One page** — parse a single `pages/page-NNN.xhtml` into OCD nodes (used by
    page-at-a-time consumers).
 3. **Full model** — all pages; `write(read(x)) = x` byte-for-byte is the gate.
@@ -229,6 +229,14 @@ the glyph id is the token after the last `-` in the `<use>` href (prefix-agnosti
 `children()` walks content and deliberately skips `<defs>/<style>`; the font parser
 iterates by namespace. Anything the reader does not recognize is ignored, never
 round-tripped blindly — what `write(read(x))` preserves is the MODEL, byte-for-byte.
+
+**Passengers** are the one exception, and a deliberate one: a member under `OEBPS/` that the
+model does not own and the writer does not rebuild — a viewer's sidecar (`prism/augment.json`),
+a house file — is carried verbatim and written back at the same path, declared in the manifest.
+A passenger is DATA: its path is relative and clean (segments of `[A-Za-z0-9._-]`, none starting
+with a dot, so no `..` climbs out of the package), and it is never a document a reader would
+render or run (`html`, `htm`, `xhtml`, `xht`, `svg`, `svgz`, `js`, `mjs`). Anything else is not
+carried, and the reader says how many it left behind (`OCDVocab.isPassenger`).
 
 Input sniffing everywhere in the pipeline: `%PDF` ⇒ import, `PK` ⇒ this
 container. `to=ocd` on a PDF is *open*; on an OCD-EPUB it is *re-export*.
@@ -540,7 +548,15 @@ reader is **liberal but never silent**:
   reach the parser at all.
 - **Path data and JSON are parsed to the end or refused.** A `d` is M/L/H/V/C/Q/Z and numbers — any other
   command or a stray character is refused with its position (a parser that could not advance once looped
-  until the heap was gone); a JSON member nested deeper than 256 levels is refused, never left to the stack.
+  until the heap was gone); a JSON member nested deeper than 256 levels is refused, never left to the stack,
+  and so is a page whose elements nest deeper than 256.
+- **Every member inflates through one bounded door.** The sizes a zip declares are never trusted: the
+  bytes are counted as they inflate, and the read is refused, naming the member, past 256 MB for one
+  member or 1 GB for the whole container (a 1.5 MB container once inflated 1.5 GB of zeros).
+- **A picture is sized from its header before it is decoded**, and refused past 100 million pixels
+  (a 1.5 MB PNG once declared 40000 × 40000).
+- **A link leads to `http`, `https` or `mailto`**, or to a page of the container; any other
+  scheme (`javascript:`, `data:`, `file:`) is dropped from the model, on import and on read alike.
 
 ### What a round-trip preserves
 
@@ -687,6 +703,9 @@ any reader, no script:
   <a href="https://…"><rect …/></a>        <!-- external -->
 </g>
 ```
+
+An external target is `http`, `https` or `mailto` — the model keeps no other scheme (`OCDLink.uri`),
+so no projection can write a `javascript:` href.
 
 ## B6. Fonts — `pages/fonts.svg`, the single representation
 

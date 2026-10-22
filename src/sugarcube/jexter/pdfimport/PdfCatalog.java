@@ -192,10 +192,24 @@ final class PdfCatalog {
     private static void outline(PDDocument pdf, OCDDocument doc) {
         var root = pdf.getDocumentCatalog().getDocumentOutline();
         if (root == null) return;
-        for (var it : root.children()) doc.addOutline(toOutline(it, pdf));
+        var seen = java.util.Collections.<COSDictionary>newSetFromMap(new java.util.IdentityHashMap<>());
+        for (var it : root.children()) {
+            if (!enter(it, seen, 1)) break;               // a /Next chain met twice loops for ever: stop at the repeat
+            doc.addOutline(toOutline(it, pdf, seen, 1));
+        }
     }
 
-    private static OCDOutline toOutline(PDOutlineItem it, PDDocument pdf) {
+    /** The deepest bookmark tree read. An item met twice ({@code /First} pointing back at an ancestor) or nested
+     *  deeper is cut there and reported, never left to the stack — a cyclic outline was a {@code StackOverflowError}. */
+    private static final int MAX_OUTLINE_DEPTH = 256;
+
+    private static boolean enter(PDOutlineItem it, java.util.Set<COSDictionary> seen, int depth) {
+        if (depth <= MAX_OUTLINE_DEPTH && seen.add(it.getCOSObject())) return true;
+        JxLog.warn(PdfCatalog.class, "outline cut: an item met twice or nested past " + MAX_OUTLINE_DEPTH + " levels");
+        return false;
+    }
+
+    private static OCDOutline toOutline(PDOutlineItem it, PDDocument pdf, java.util.Set<COSDictionary> seen, int depth) {
         var o = new OCDOutline(it.getTitle());
         try {
             double[] d = resolve(pdf, it.getDestination(), it.getAction());
@@ -204,7 +218,10 @@ final class PdfCatalog {
         } catch (IOException e) {
             JxLog.debug(PdfCatalog.class, "unreadable outline destination", e);
         }
-        for (var child : it.children()) o.add(toOutline(child, pdf));
+        for (var child : it.children()) {
+            if (!enter(child, seen, depth + 1)) break;
+            o.add(toOutline(child, pdf, seen, depth + 1));
+        }
         return o;
     }
 
@@ -246,7 +263,7 @@ final class PdfCatalog {
                         if (d[0] >= 0) link.pageIndex((int) d[0]);
                         if (!Double.isNaN(d[1])) link.y(d[1]);
                     }
-                    if (link.isExternal() || link.hasDestination()) page.addLink(link);
+                    if (link.hasTarget()) page.addLink(link);
                 } else if (!(an instanceof PDAnnotationWidget)) {
                     var a = markup(an);                      // widgets → handled via the AcroForm tree
                     if (a != null) page.addAnnotation(a);

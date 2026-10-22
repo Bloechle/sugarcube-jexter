@@ -1,5 +1,6 @@
 package sugarcube.jexter.ocd.render;
 
+import sugarcube.jexter.core.JxRaster;
 import sugarcube.jexter.core.JxPath;
 import sugarcube.jexter.core.JxRect;
 import sugarcube.jexter.core.JxTransform;
@@ -20,7 +21,6 @@ import sugarcube.jexter.ocd.model.OCDPage;
 import sugarcube.jexter.ocd.model.OCDPath;
 import sugarcube.jexter.ocd.model.OCDText;
 
-import javax.imageio.ImageIO;
 import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
@@ -37,7 +37,6 @@ import java.awt.geom.Area;
 import java.awt.geom.Rectangle2D;
 import java.awt.geom.Point2D;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -71,8 +70,8 @@ public final class OCDRenderer {
     }
 
     public static BufferedImage render(OCDPage page, OCDDocument doc, double dpi, boolean annotations) {
-        double scale = dpi / 72.0;
         JxRect box = page.effectiveBox();
+        double scale = scale(box, dpi);
         int rot = page.rotation();
         boolean swap = (rot == 90 || rot == 270);
 
@@ -136,6 +135,19 @@ public final class OCDRenderer {
         return x1 < 0 ? null : img.getSubimage(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
     }
 
+    /** The most pixels one canvas may hold — a page, a baked group, a figure: 128 MB of ARGB, an A3 page at
+     *  300 dpi with room to spare. A canvas is sized from the model's geometry and an asked resolution, both of
+     *  which a source controls (a 4000-pt page holding one transparency group is a 1 KB PDF): past the budget
+     *  the resolution comes down, never the memory up. */
+    static final long MAX_CANVAS = 32_000_000L;
+
+    /** Pixels per page unit for {@code box} at {@code dpi}, lowered until the canvas fits {@link #MAX_CANVAS}. */
+    private static double scale(JxRect box, double dpi) {
+        double s = Math.max(1, dpi) / 72.0;
+        double px = Math.ceil(box.width() * s) * Math.ceil(box.height() * s);
+        return px > MAX_CANVAS ? s * Math.sqrt(MAX_CANVAS / px) : s;
+    }
+
     /** Page units a figure's paint may reach past the ink the model measures. */
     private static final double REACH = 24;
 
@@ -163,7 +175,7 @@ public final class OCDRenderer {
      */
     public static BufferedImage renderNodes(java.util.List<OCDNode> nodes, JxRect bounds,
                                             OCDPage page, OCDDocument doc, double dpi) {
-        double scale = dpi / 72.0;
+        double scale = scale(bounds, dpi);
         int w = Math.max(1, (int) Math.ceil(bounds.width() * scale));
         int h = Math.max(1, (int) Math.ceil(bounds.height() * scale));
         BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
@@ -581,7 +593,7 @@ public final class OCDRenderer {
     private static BufferedImage load(byte[] data) {
         if (data == null || data.length == 0) return null;
         try {
-            BufferedImage img = ImageIO.read(new ByteArrayInputStream(data));
+            BufferedImage img = JxRaster.decode(data, "a picture");
             if (img == null || !img.getColorModel().hasAlpha() || img.isAlphaPremultiplied()) return img;
             BufferedImage pre = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_INT_ARGB_PRE);
             Graphics2D g = pre.createGraphics();

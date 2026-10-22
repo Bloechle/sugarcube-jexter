@@ -4,6 +4,7 @@ import sugarcube.jexter.core.JxXml;
 import sugarcube.jexter.core.JxColor;
 import sugarcube.jexter.core.JxJson;
 import sugarcube.jexter.core.JxLog;
+import sugarcube.jexter.core.JxRaster;
 import sugarcube.jexter.core.JxRect;
 import sugarcube.jexter.ocd.model.OCDAnnotation;
 import sugarcube.jexter.ocd.model.OCDDocument;
@@ -23,10 +24,6 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
-import javax.imageio.ImageIO;
-import javax.imageio.ImageReader;
-import javax.imageio.stream.ImageInputStream;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -37,7 +34,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 import static sugarcube.jexter.core.JxJson.bool;
 import static sugarcube.jexter.core.JxJson.has;
 import static sugarcube.jexter.core.JxJson.optArr;
@@ -76,7 +72,7 @@ public final class OCDReader {
 
     // ── Tier 2: full model ──────────────────────────────────────────────────────
     public static OCDDocument read(File file) throws Exception {
-        try (ZipFile zf = new ZipFile(file)) {
+        try (OcdZip zf = new OcdZip(file)) {
             OCDDocument doc = skeleton(zf);
             Map<String, Object> annots = pagesOf(json(zf, JX + "annots.json"));
             int i = 0;
@@ -89,12 +85,12 @@ public final class OCDReader {
 
     // ── Tier 0: members only (no pages) ─────────────────────────────────────────
     public static OCDDocument readMembers(File file) throws Exception {
-        try (ZipFile zf = new ZipFile(file)) { return skeleton(zf); }
+        try (OcdZip zf = new OcdZip(file)) { return skeleton(zf); }
     }
 
     // ── Tier 1: the pocket model — skeleton + one page (0-based) ────────────────
     public static OCDDocument readPage(File file, int index) throws Exception {
-        try (ZipFile zf = new ZipFile(file)) {
+        try (OcdZip zf = new OcdZip(file)) {
             OCDDocument doc = skeleton(zf);
             Map<String, Object> annots = pagesOf(json(zf, JX + "annots.json"));
             List<ZipEntry> pages = pageFiles(zf);
@@ -110,7 +106,7 @@ public final class OCDReader {
     // ── Tier 1b: the pocket model over a SET of pages — the others stay as empty placeholders, so page
     //    indices are the document's (structures, zones and page numbers address the real page) ──────
     public static OCDDocument readPages(File file, java.util.Set<Integer> indices) throws Exception {
-        try (ZipFile zf = new ZipFile(file)) {
+        try (OcdZip zf = new OcdZip(file)) {
             OCDDocument doc = skeleton(zf);
             Map<String, Object> annots = pagesOf(json(zf, JX + "annots.json"));
             int i = 0;
@@ -126,7 +122,7 @@ public final class OCDReader {
 
     /** Number of pages without parsing any (page-document count). */
     public static int pageCount(File file) throws Exception {
-        try (ZipFile zf = new ZipFile(file)) { return pageFiles(zf).size(); }
+        try (OcdZip zf = new OcdZip(file)) { return pageFiles(zf).size(); }
     }
 
     @SuppressWarnings("unchecked")
@@ -136,7 +132,7 @@ public final class OCDReader {
 
     // ── skeleton: meta + outline + structures + fonts + binaries ────────────────
     @SuppressWarnings("unchecked")
-    private static OCDDocument skeleton(ZipFile zf) throws Exception {
+    private static OCDDocument skeleton(OcdZip zf) throws Exception {
         Map<String, Object> meta = json(zf, JX + "meta.json");
         if (meta == null)
             throw new IOException("not an OCD-EPUB: no " + JX + "meta.json member (a foreign EPUB is a book, not a model)");
@@ -151,8 +147,8 @@ public final class OCDReader {
         Map<String, Object> oi = optObj(meta, "outputIntent");
         if (oi != null) {
             byte[] profile = null;
-            ZipEntry pe = has(oi, "profile") ? zf.getEntry(JX + str(oi, "profile", "")) : null;
-            if (pe != null) try (var in = zf.getInputStream(pe)) { profile = in.readAllBytes(); }
+            ZipEntry pe = has(oi, "profile") ? zf.entry(JX + str(oi, "profile", "")) : null;
+            if (pe != null) profile = zf.bytes(pe);
             doc.outputIntent(new sugarcube.jexter.ocd.model.OCDOutputIntent(
                     has(oi, "subtype") ? str(oi, "subtype", "") : "GTS_PDFX", str(oi, "conditionId", ""), str(oi, "condition", ""),
                     str(oi, "info", ""), str(oi, "registry", ""), profile, profile == null ? 0 : JxJson.integer(oi, "components", 0)));
@@ -176,9 +172,8 @@ public final class OCDReader {
             if (has(structures, "default")) doc.defaultStructureId(str(structures, "default", ""));
         }
 
-        var entries = zf.entries();
-        while (entries.hasMoreElements()) {
-            ZipEntry e = entries.nextElement();
+        int refused = 0;
+        for (ZipEntry e : zf.entries()) {
             String name = e.getName();
             if (e.isDirectory()) continue;
             if (name.equals(OPF + "images/cover.jpg") || name.equals(OPF + "images/cover.png")) {
@@ -187,16 +182,21 @@ public final class OCDReader {
                 String key = str(meta, "cover", "");
                 List<ZipEntry> pages = pageFiles(zf);
                 if (key != null && !pages.isEmpty()
-                        && key.equals(OCDVocab.coverKey(zf.getInputStream(pages.get(0)).readAllBytes())))
-                    doc.cover(zf.getInputStream(e).readAllBytes(), key);
+                        && key.equals(OCDVocab.coverKey(zf.bytes(pages.get(0)))))
+                    doc.cover(zf.bytes(e), key);
             } else if (name.startsWith(OPF + "images/"))
-                doc.addImage(name.substring((OPF + "images/").length()), zf.getInputStream(e).readAllBytes());
+                doc.addImage(name.substring((OPF + "images/").length()), zf.bytes(e));
             else if (name.startsWith(OPF + "media/"))
-                doc.addMedia(name.substring((OPF + "media/").length()), zf.getInputStream(e).readAllBytes());
-            else if (isPassenger(name))
-                doc.addPassenger(name.substring(OPF.length()), zf.getInputStream(e).readAllBytes());
+                doc.addMedia(name.substring((OPF + "media/").length()), zf.bytes(e));
+            else if (name.startsWith(OPF) && !OCDVocab.isRebuilt(name.substring(OPF.length()))) {
+                String rel = name.substring(OPF.length());
+                if (OCDVocab.isPassenger(rel)) doc.addPassenger(rel, zf.bytes(e));
+                else refused++;
+            }
         }
-        ZipEntry gl = zf.getEntry(OPF + "pages/fonts.svg");
+        if (refused > 0)
+            JxLog.warn(OCDReader.class, refused + " member(s) not carried: a passenger is data under a clean path, never markup or script");
+        ZipEntry gl = zf.entry(OPF + "pages/fonts.svg");
         if (gl != null) SvgOcdReader.fonts(svgRoot(zf, gl), doc);
         return doc;
     }
@@ -218,11 +218,9 @@ public final class OCDReader {
      *  A container whose spine names no page at all (hand-built, truncated) falls back to name order —
      *  liberal, as the grammar requires — and any page member the spine forgot is appended in name
      *  order rather than dropped: the model must hold every page the container carries. */
-    private static List<ZipEntry> pageFiles(ZipFile zf) {
+    private static List<ZipEntry> pageFiles(OcdZip zf) {
         TreeMap<String, ZipEntry> byName = new TreeMap<>();
-        var entries = zf.entries();
-        while (entries.hasMoreElements()) {
-            ZipEntry e = entries.nextElement();
+        for (ZipEntry e : zf.entries()) {
             String n = e.getName();
             if (!e.isDirectory() && OCDVocab.isPageMember(n))
                 byName.put(n, e);
@@ -238,7 +236,7 @@ public final class OCDReader {
 
     /** The spine, as zip paths: container.xml → the OPF → {@code <itemref>} in order, resolved through
      *  the manifest. Empty when the container states none, which is the caller's cue to fall back. */
-    private static List<String> spine(ZipFile zf) {
+    private static List<String> spine(OcdZip zf) {
         try {
             Element container = xml(zf, "META-INF/container.xml");
             if (container == null) return List.of();
@@ -267,25 +265,26 @@ public final class OCDReader {
         }
     }
 
-    /** One member, parsed with the ONE hardened parser (no DOCTYPE, §A7). Null when absent. */
-    private static Element xml(ZipFile zf, String path) throws Exception {
-        ZipEntry e = zf.getEntry(path);
+    /** One member, parsed with the ONE hardened parser (no DOCTYPE — FORMAT, « What a reader must do with a broken container »). Null when absent. */
+    private static Element xml(OcdZip zf, String path) throws Exception {
+        ZipEntry e = zf.entry(path);
         if (e == null) return null;
-        try (java.io.InputStream in = zf.getInputStream(e)) {
+        try (java.io.InputStream in = zf.open(e)) {
             return JxXml.secureBuilder().parse(in).getDocumentElement();
         }
     }
 
     /** Page {@code number} (1-based): its SVG-OCD, then its annotations and fields from {@code annots.json}. */
-    private static OCDPage page(ZipFile zf, OCDDocument doc, ZipEntry entry, int number, Map<String, Object> annots) throws Exception {
+    private static OCDPage page(OcdZip zf, OCDDocument doc, ZipEntry entry, int number, Map<String, Object> annots) throws Exception {
         OCDPage page = SvgOcdReader.page(svgRoot(zf, entry), doc);
         Map<String, Object> pe = annots == null ? null : optObj(annots, OCDVocab.pageId(number - 1));
         if (pe != null) applyAnnots(pe, page);
         return page;
     }
 
-    private static Element svgRoot(ZipFile zf, ZipEntry e) throws Exception {
-        Document xd = JxXml.secureBuilder().parse(zf.getInputStream(e));   // untrusted zip → hardened parse
+    private static Element svgRoot(OcdZip zf, ZipEntry e) throws Exception {
+        Document xd;
+        try (java.io.InputStream in = zf.open(e)) { xd = JxXml.secureBuilder().parse(in); }   // untrusted zip → hardened parse
         NodeList svgs = xd.getElementsByTagNameNS("http://www.w3.org/2000/svg", "svg");
         if (svgs.getLength() == 0) throw new IOException("no <svg> in " + e.getName());
         return (Element) svgs.item(0);
@@ -433,24 +432,12 @@ public final class OCDReader {
     private static void fillImageDims(List<OCDNode> nodes, OCDDocument doc) {
         for (OCDNode n : nodes) {
             if (n instanceof OCDImage im && im.pixelWidth() == 0) {
-                int[] wh = imageDims(doc.image(im.resourceRef()));
+                int[] wh = JxRaster.dims(doc.image(im.resourceRef()));
                 if (wh != null) im.pixelSize(wh[0], wh[1]);
             } else if (n instanceof OCDGroup g) {
                 fillImageDims(g.children(), doc);
             }
         }
-    }
-    private static int[] imageDims(byte[] bytes) {
-        if (bytes == null) return null;
-        try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
-            var readers = ImageIO.getImageReaders(iis);
-            if (readers.hasNext()) {
-                ImageReader r = readers.next();
-                try { r.setInput(iis); return new int[]{ r.getWidth(0), r.getHeight(0) }; }
-                finally { r.dispose(); }
-            }
-        } catch (Exception ignore) {}
-        return null;
     }
 
     private static OCDAnnotation.Markup markupOf(String s) {
@@ -460,25 +447,15 @@ public final class OCDReader {
         try { return OCDFormField.Field.valueOf(s.toUpperCase(Locale.US)); } catch (Exception e) { return OCDFormField.Field.OTHER; }
     }
 
-    private static Map<String, Object> json(ZipFile zf, String name) throws Exception {
-        ZipEntry e = zf.getEntry(name);
+    private static Map<String, Object> json(OcdZip zf, String name) throws Exception {
+        ZipEntry e = zf.entry(name);
         if (e == null) return null;
-        return JxJson.asObj(JxJson.parse(new String(zf.getInputStream(e).readAllBytes(), StandardCharsets.UTF_8)));
+        return JxJson.asObj(JxJson.parse(new String(zf.bytes(e), StandardCharsets.UTF_8)));
     }
     private static JxRect rect(Object v) {
         List<?> l = (List<?>) v;
         return new JxRect(((Number) l.get(0)).doubleValue(), ((Number) l.get(1)).doubleValue(),
                 ((Number) l.get(2)).doubleValue(), ((Number) l.get(3)).doubleValue());
-    }
-    /** Is this entry a member the model does not own — a viewer sidecar, a house file — that must
-     *  travel through a round trip untouched? Everything the writer REBUILDS is excluded: rebuilding it
-     *  and carrying the old copy would write it twice, and the two would drift. */
-    private static boolean isPassenger(String name) {
-        if (!name.startsWith(OPF) || name.endsWith("/")) return false;
-        String rel = name.substring(OPF.length());
-        if (rel.isEmpty() || rel.startsWith("pages/") || rel.startsWith("images/") || rel.startsWith("media/")
-            || rel.startsWith("ocd/")) return false;                       // rebuilt from the model
-        return !rel.equals("nav.xhtml") && !rel.equals("toc.ncx") && !rel.endsWith(".opf");
     }
 
 }

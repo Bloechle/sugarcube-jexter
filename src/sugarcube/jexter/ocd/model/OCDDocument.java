@@ -3,6 +3,7 @@ package sugarcube.jexter.ocd.model;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -105,7 +106,7 @@ public final class OCDDocument {
 
     private static String fresh(String prefix, String ext, Map<String, byte[]> taken, java.util.function.IntSupplier next) {
         String ref;
-        do ref = String.format("%s_%04d.%s", prefix, next.getAsInt(), ext); while (taken.containsKey(ref));
+        do ref = String.format(Locale.ROOT, "%s_%04d.%s", prefix, next.getAsInt(), ext); while (taken.containsKey(ref));
         return ref;
     }
 

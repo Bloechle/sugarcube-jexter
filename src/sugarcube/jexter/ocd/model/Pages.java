@@ -87,11 +87,17 @@ public final class Pages {
 
     /** Parse a 1-based page spec — {@code "1,4-6,2,+"}: ranges, repetition, {@code +} for a blank
      *  page. Open ranges are accepted ({@code "3-"} = to the end), and a descending one reverses
-     *  ({@code "6-1"}). The spec states the RESULT, so it needs no order of operations. */
+     *  ({@code "6-1"}). The spec states the RESULT, so it needs no order of operations.
+     *
+     *  <p>The result holds at most twice the document, or 1000 pages for a short one: repetition is a
+     *  feature, and a request of 9 KB ({@code "1-,1-,…"}) once turned a 1-page document into a 3000-page,
+     *  152 MB PDF. */
     public static List<Slot> parse(String spec, int pageCount) {
         List<Slot> out = new ArrayList<>();
         if (spec == null || spec.isBlank()) return out;
+        int max = maxPages(pageCount);
         for (String raw : spec.split(",")) {
+            if (out.size() > max) throw tooMany(max);
             String t = raw.trim();
             if (t.isEmpty()) continue;
             if (t.equals("+")) { out.add(Slot.blank(null)); continue; }
@@ -102,7 +108,18 @@ public final class Pages {
             if (lo <= hi) for (int i = lo; i <= hi; i++) out.add(Slot.of(i - 1));
             else          for (int i = lo; i >= hi; i--) out.add(Slot.of(i - 1));
         }
+        if (out.size() > max) throw tooMany(max);
         return out;
+    }
+
+    /** The most pages a selection of a {@code pageCount}-page document may hold: twice the document, and never
+     *  less than {@value #MIN_CEILING}. */
+    private static int maxPages(int pageCount) { return Math.max(MIN_CEILING, 2 * pageCount); }
+    private static final int MIN_CEILING = 1000;
+
+    private static IllegalArgumentException tooMany(int max) {
+        return new IllegalArgumentException("page spec: more than " + max + " pages (a selection holds at most twice "
+                + "the document, or " + MIN_CEILING + ")");
     }
 
     private static int one(String s, int pageCount) {

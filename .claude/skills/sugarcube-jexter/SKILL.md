@@ -104,8 +104,9 @@ plus the workflow's client steps (every `src/**/*.js` parses as a module, no tem
   resource. Before a release, look at what `src/` holds that the compiler never saw.
 
 The gates (`test/Gates.java`, one JVM, `SOURCE_DATE_EPOCH` pinned by the deck — Gates refuses to run
-without it): REPRO · DOCTAGS · STABLE · MODEL · TIERS · NAV · TAGS · PIXELS · FURNITURE · AGAIN ·
-STRADDLE · CLIPS · COPY · DRAWN · EDITED · LAYERS · HOSTILE, each described in the file's header. **A change is done
+without it): REPRO · DOCTAGS · STABLE · MODEL · TIERS · NAV · TAGS · PIXELS · FURNITURE · WORDS · AGAIN ·
+STRADDLE · CLIPS · COPY · DRAWN · EDITED · LAYERS · FIGURES · BOOK · HOSTILE per document, then BOUNDS once,
+each described in the file's header. **A change is done
 when they are green; a new defect class gets its check there.** Every check reports through the exit
 code — a gate that prints a report someone greps can be wired never to go red, and two once were.
 
@@ -243,6 +244,20 @@ A change that REMOVES content must prove it invisible — every reference engine
 the ink measurement shows a gain, not a trade. Measured both ways: a node clipped to NO area is dropped
 (0.94 % → 0.05 % ghost ink, nothing lost); a node whose clip lies elsewhere on the page is kept (dropping
 it erased 0.36 % of real ink — its bounds are in a baked group's frame).
+
+Hostile input (the bounds are the card's; these are the traps behind them)
+- **A size a file STATES is never an allocation**: a zip's entry sizes, a PNG's header, a PDF image's
+  `/Width`, a page box × an asked dpi. Count what arrives (`OcdZip`), or check before decoding (`JxRaster`),
+  or lower the resolution (`OCDRenderer.MAX_CANVAS`) — and never decode to learn a size.
+- **PDFBox buffers a filtered stream whole before a pixel is drawn**, so subsampling a huge PDF image does not
+  save the heap: an image past `JxRaster.MAX_PIXELS` is refused at the `Do` (PDFBox logs it and the page goes
+  on without it). A deflate bomb in a FONT or ICC stream is still PDFBox's to decode — open, unmeasured.
+- **A walk over a source's tree is a walk over a graph**: an identity set and a depth, and a sibling loop stops
+  at the first repeat (a `/Next` chain met twice iterates for ever).
+- **An `Error` is not an `Exception`**: a host that catches `Exception` lets a `StackOverflowError` or an OOM
+  through its handler. A new bound turns the `Error` into a refusal with a reason.
+- **A check that never went red has measured nothing**: every BOUNDS/HOSTILE check was run against the engine
+  before its fix (`git stash push -- src`, compile, run Gates on one PDF) and failed there.
 
 Import (`pdfimport`)
 - A glyph is blank when the FONT says so (`OCDGlyph.isSpace()`, no outline), never when `toUnicode`

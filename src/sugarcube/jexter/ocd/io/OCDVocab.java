@@ -3,6 +3,9 @@ package sugarcube.jexter.ocd.io;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * The OCD serialization vocabulary shared by the OCD-EPUB writers and {@link OCDReader}: the format version, the
@@ -38,8 +41,12 @@ public final class OCDVocab {
      *  <p>THREE digits, deliberately. Order is stated by the SPINE — {@code OCDReader} reads it — never by
      *  these names, which is what a 1001-page book proved: at three digits {@code page-1000} sorts between
      *  {@code page-100} and {@code page-101}. Widening the pad would rename every member of every big
-     *  container for a case the spine already answers. */
-    public static String pageFile(int oneBased) { return String.format("page-%03d", oneBased); }
+     *  container for a case the spine already answers.
+     *
+     *  <p>{@code Locale.ROOT}: a host whose default locale writes its own digits (Arabic, Persian) would
+     *  otherwise name the member {@code page-٠٠١} — other bytes, another {@code doc.id}, links that no longer
+     *  parse. */
+    public static String pageFile(int oneBased) { return String.format(Locale.ROOT, "page-%03d", oneBased); }
 
     /** A page as the package names it, relative to {@link #OPF}: {@code 1 → "pages/page-001.xhtml"}. */
     public static String pageHref(int oneBased) { return "pages/" + pageFile(oneBased) + ".xhtml"; }
@@ -68,6 +75,31 @@ public final class OCDVocab {
             return "sha256:" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(page1));
         } catch (NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
     }
+
+    /** Is {@code rel} (a path under {@link #OPF}) a member the model does not own, carried verbatim through a
+     *  round trip — a viewer's sidecar ({@code prism/augment.json}), a house file? Everything the writer REBUILDS
+     *  is not: carrying the old copy beside the rebuilt one would write it twice, and the two would drift.
+     *
+     *  <p>And a passenger is DATA, nothing else. The engine re-signs what it carries, so it carries only a clean
+     *  relative path — segments of {@code [A-Za-z0-9._-]}, none starting with a dot, so no {@code ..} can climb
+     *  out of the package — and never a document a reader would render or run (markup, SVG, script): no
+     *  JavaScript is ever embedded in an EPUB this engine writes, not even one it was handed. */
+    public static boolean isPassenger(String rel) {
+        if (isRebuilt(rel) || !PASSENGER_PATH.matcher(rel).matches()) return false;
+        int dot = rel.lastIndexOf('.');
+        return dot < 0 || !ACTIVE.contains(rel.substring(dot + 1).toLowerCase(Locale.ROOT));
+    }
+
+    /** Is {@code rel} (a path under {@link #OPF}) a member the writer rebuilds from the model — or read as the
+     *  model's own (pages, images, media, {@code ocd/})? Everything else under the package is a passenger
+     *  candidate. */
+    public static boolean isRebuilt(String rel) {
+        return rel.isEmpty() || rel.endsWith("/") || rel.startsWith("pages/") || rel.startsWith("images/")
+            || rel.startsWith("media/") || rel.startsWith("ocd/")
+            || rel.equals("nav.xhtml") || rel.equals("toc.ncx") || rel.endsWith(".opf");
+    }
+    private static final Pattern PASSENGER_PATH = Pattern.compile("(?:[A-Za-z0-9_-][A-Za-z0-9._-]*/)*[A-Za-z0-9_-][A-Za-z0-9._-]*");
+    private static final Set<String> ACTIVE = Set.of("html", "htm", "xhtml", "xht", "svg", "svgz", "js", "mjs");
 
     /** Inverse of {@link #pageId}: {@code "p1" → 0}. Returns -1 when absent/malformed. */
     public static int pageIndex(String s) {

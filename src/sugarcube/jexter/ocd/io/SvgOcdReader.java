@@ -138,7 +138,7 @@ final class SvgOcdReader {
                 lk.pageIndex(target);
                 if (a.hasAttribute("data-y")) lk.y(dbl(a.getAttribute("data-y"), Double.NaN));
             } else lk.uri(href == null ? "" : href);
-            page.addLink(lk);
+            if (lk.hasTarget()) page.addLink(lk);
         }
     }
 
@@ -159,7 +159,18 @@ final class SvgOcdReader {
     }
 
     // ── SVG-OCD walk ─────────────────────────────────────────────────────────────
+
+    /** The deepest a page may nest its elements — the cap the JSON members have ({@code JxJson.MAX_DEPTH}): a
+     *  page is untrusted input, and 20 000 nested {@code <g>} were a {@code StackOverflowError}. */
+    private static final int MAX_DEPTH = sugarcube.jexter.core.JxJson.MAX_DEPTH;
+    private int depth;
+
     private void walk(Element el, OCDGroup parent, String wrapClip) {
+        if (++depth > MAX_DEPTH) throw new IllegalArgumentException("page nests elements deeper than " + MAX_DEPTH + " levels");
+        try { walkIn(el, parent, wrapClip); } finally { depth--; }
+    }
+
+    private void walkIn(Element el, OCDGroup parent, String wrapClip) {
         String tag = el.getLocalName();
         String ocd = el.getAttribute("data-ocd");
         switch (tag) {

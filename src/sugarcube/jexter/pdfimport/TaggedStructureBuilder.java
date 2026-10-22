@@ -40,20 +40,34 @@ public final class TaggedStructureBuilder {
         Map<COSDictionary, Integer> pageIndex = new HashMap<>();
         int i = 0;
         for (PDPage p : pdf.getPages()) pageIndex.put(p.getCOSObject(), i++);
-        Tree t = new Tree(pageIndex, mcidByPage);
+        Tree t = new Tree(pageIndex, mcidByPage, java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>()));
 
         OCDStructNode rootStruct = new OCDStructNode(OCDStructNode.Type.DOCUMENT);
         for (Object kid : root.getKids())
-            if (kid instanceof PDStructureElement e) rootStruct.add(t.element(e, -1, false));
+            if (kid instanceof PDStructureElement e && t.enter(e, 1)) rootStruct.add(t.element(e, -1, false, 1));
         doc.addStructure(new OCDStructure("pdf", "PDF (tagged)", OCDStructure.Source.PDF)
                 .by("TaggedStructureBuilder").at(JxClock.millis()).how("PDF/UA tag tree").root(rootStruct));
     }
 
-    private record Tree(Map<COSDictionary, Integer> pageIndex, Map<Integer, Map<Mcid, List<OCDNode>>> mcidByPage) {
+    /** The deepest tag tree read; a real one is a few levels deep. A tree is attacker-controlled input: deeper,
+     *  or an element met twice (a kid that is its own ancestor), is cut there and reported, never left to the
+     *  stack — a cyclic tree was a {@code StackOverflowError}. */
+    static final int MAX_DEPTH = 256;
+
+    private record Tree(Map<COSDictionary, Integer> pageIndex, Map<Integer, Map<Mcid, List<OCDNode>>> mcidByPage,
+                        java.util.Set<COSDictionary> seen) {
+
+        /** Whether element {@code e} may be read at {@code depth}: first meeting, within {@link #MAX_DEPTH}. */
+        boolean enter(PDStructureElement e, int depth) {
+            if (depth <= MAX_DEPTH && seen.add(e.getCOSObject())) return true;
+            sugarcube.jexter.core.JxLog.warn(TaggedStructureBuilder.class,
+                    "tag tree cut: an element met twice or nested past " + MAX_DEPTH + " levels");
+            return false;
+        }
 
         /** An element, typed by its STANDARD type: a producer's own types (Word's, InDesign's) reach one through
          *  the RoleMap, which {@code getStandardStructureType} follows — the raw type made them all OTHER. */
-        OCDStructNode element(PDStructureElement e, int inheritedPage, boolean inText) {
+        OCDStructNode element(PDStructureElement e, int inheritedPage, boolean inText, int depth) {
             String type = e.getStandardStructureType();
             OCDStructNode.Type kind = mapType(type);
             // Inside a heading, a paragraph or a caption, a grouping element (Div, Sect…) groups nothing: the block
@@ -65,18 +79,19 @@ public final class TaggedStructureBuilder {
                        : e.getActualText() != null ? e.getActualText() : e.getTitle();
             if (alt != null)             s.alt(alt);
             if (e.getLanguage() != null) s.lang(e.getLanguage());
-            kids(s, e, pageOf(e.getPage(), pageIndex, inheritedPage), inText || TEXT_BLOCKS.contains(kind));
+            kids(s, e, pageOf(e.getPage(), pageIndex, inheritedPage), inText || TEXT_BLOCKS.contains(kind), depth);
             return s;
         }
 
         /** The element's kids into {@code s}. An {@code LBody} is not a node of its own: its content IS the
          *  item's body, beside the item's label — kept as an ITEM, it nested an item in an item and the
          *  writers lost the body or wrote {@code <li>} in {@code <li>}. */
-        void kids(OCDStructNode s, PDStructureElement e, int page, boolean inText) {
+        void kids(OCDStructNode s, PDStructureElement e, int page, boolean inText, int depth) {
             for (Object kid : e.getKids()) {
                 if (kid instanceof PDStructureElement child) {
-                    if ("LBody".equals(child.getStandardStructureType())) kids(s, child, pageOf(child.getPage(), pageIndex, page), inText);
-                    else s.add(element(child, page, inText));
+                    if (!enter(child, depth + 1)) continue;
+                    if ("LBody".equals(child.getStandardStructureType())) kids(s, child, pageOf(child.getPage(), pageIndex, page), inText, depth + 1);
+                    else s.add(element(child, page, inText, depth + 1));
                 } else if (kid instanceof PDMarkedContentReference mcr) {
                     COSStream stm = mcr.getCOSObject().getCOSStream(STM);
                     refs(s, pageOf(mcr.getPage(), pageIndex, page), new Mcid(stm, mcr.getMCID()));

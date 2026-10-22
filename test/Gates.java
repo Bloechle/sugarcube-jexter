@@ -31,8 +31,14 @@
 //             read unless it is the whole book, and its table of contents reaches every heading, nested
 //             as the headings are — once a stamp in the margin and half of a wrapped title were chapters.
 //   HOSTILE   broken and malicious variants of the container: refused with context, or read with a
-//             warning — never read in silence, never a leaked file, never an entity expansion; and a
-//             request naming a file of the engine's machine (ConvertOptions.LOCAL) refused.
+//             warning — never read in silence, never a leaked file, never an entity expansion, never a
+//             nesting left to the stack; a passenger is data under a clean path, never markup, script or a
+//             path out of the package; a link leads only to http, https or mailto; and a request naming a
+//             file of the engine's machine (ConvertOptions.LOCAL) refused.
+//   BOUNDS    once, not per PDF: a small hostile input costs bounded memory — a zip bomb in a container, a
+//             picture declaring 40000² pixels (in a container and in a PDF), a transparency group on a
+//             4000-pt page, a cyclic outline and tag tree, a page selection repeating a page 3000 times —
+//             and a host whose locale writes its own digits writes the same bytes.
 //
 //   node nimbus-jexter.cjs --run=test     the whole run, on any OS: compile src/ and test/, corpus, every gate
 //
@@ -129,6 +135,9 @@ public final class Gates {
             gate("BOOK",     () -> book(pdf.getName(), src));
             gate("HOSTILE",  () -> hostile(ocd, tmp));
         }
+        current = "(once)";
+        reported = false;
+        gate("BOUNDS",   () -> bounds(tmp));
         System.out.println(failed == 0 ? "ALL GATES GREEN: " + checks + " checks on " + args.length + " PDFs" : failed + " GATE(S) FAILED");
         System.exit(failed == 0 ? 0 : 1);
     }
@@ -791,6 +800,7 @@ public final class Gates {
         edits.put("badfont", s -> s.replaceFirst("data-font=\"[^\"]*\"", "data-font=\"NoSuchFont\""));
         edits.put("badclip", s -> once(s, "url(#c", "url(#zz"));
         edits.put("badpath", s -> s.replaceFirst("(<path id=\"[^\"]+\"[^>]*? d=\"M[^\"]*)\"", "$1 L1 1#\""));   // once looped forever
+        edits.put("deepsvg", s -> last(s, "</svg>", "<g>".repeat(20_000) + "</g>".repeat(20_000) + "</svg>"));   // once a StackOverflowError
 
         Set<String> optional = Set.of("badclip", "badpath");
         List<String> bad = new ArrayList<>();
@@ -833,7 +843,184 @@ public final class Gates {
             boolean pass = verdict.startsWith("refused") || warnable && verdict.startsWith("warned");
             if (!pass) bad.add(v.getKey() + ": " + verdict);
         }
+
+        // Passengers: the sidecar travels; markup, script and a path out of the package never do (once both were
+        // written back into a container the engine signs).
+        Path carried = tmp.resolve("hostile-passengers.ocd.epub");
+        Files.write(carried, withMembers(good, Map.of("OEBPS/prism/augment.json", "{}", "OEBPS/evil.xhtml", "<script/>",
+                "OEBPS/../../escape.txt", "x", "OEBPS/.hidden", "x")));
+        Set<String> kept = OCDReader.read(carried.toFile()).passengers().keySet();
+        if (!kept.equals(Set.of("prism/augment.json"))) bad.add("passengers carried: " + kept);
+
+        // A link leads only to http, https or mailto: a javascript: href once ran in every viewer of the page.
+        Path linked = tmp.resolve("hostile-jslink.ocd.epub");
+        Files.write(linked, onPage(good, s -> last(s, "</svg>", "<g data-ocd=\"links\"><a href=\"javascript:alert(1)\">"
+                + "<rect x=\"0\" y=\"0\" width=\"9\" height=\"9\"/></a></g></svg>")));
+        for (OCDLink l : OCDReader.read(linked.toFile()).page(0).links())
+            if (l.uri() != null && !l.uri().startsWith("http")) bad.add("a link kept " + l.uri());
         return bad;
+    }
+
+    // ── BOUNDS ───────────────────────────────────────────────────────────────────
+
+    /** Small hostile inputs, built here (they are not corpus documents: every other gate would trip on them). Each
+     *  once cost the heap or the stack; now each is refused with a reason, or read with what it can bear. */
+    private static List<String> bounds(Path tmp) throws Exception {
+        List<String> bad = new ArrayList<>();
+        byte[] picture = pdf(new org.apache.pdfbox.pdmodel.common.PDRectangle(200, 200), (d, p) -> {
+            var img = org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory.createFromImage(d, new BufferedImage(8, 8, BufferedImage.TYPE_INT_RGB));
+            try (var cs = new org.apache.pdfbox.pdmodel.PDPageContentStream(d, p)) { cs.drawImage(img, 20, 20, 100, 100); }
+        });
+        byte[] ocd = to(picture, "ocd");
+
+        // 300 MB of zeros in a 300 KB member: once an OutOfMemoryError, now refused by the container's door.
+        Path bomb = tmp.resolve("bounds-bomb.ocd.epub");
+        Files.write(bomb, withZeros(ocd, "OEBPS/extra/bomb.bin", 300L << 20));
+        String verdict = readHostile(bomb.toFile());
+        if (!verdict.startsWith("refused")) bad.add("zip bomb: " + verdict);
+
+        // A picture just past the budget (10001², 300 MB decoded from 300 KB): refused before a pixel is decoded.
+        byte[] wide = png(10_001, 10_001);
+        byte[] huge = rezip(ocd, (n, b) -> n.contains("/images/img_") ? wide : b);
+        if (Arrays.equals(huge, ocd)) bad.add("the picture fixture stored no image member");
+        else refused(bad, "a container's 10001² picture exported to pdf", () -> to(huge, "pdf"));
+
+        // The same in a PDF: the dictionary states the size, a few bytes back it.
+        survives(bad, "a PDF image declaring 40000²", () -> to(pdf(new org.apache.pdfbox.pdmodel.common.PDRectangle(200, 200), (d, p) -> {
+            var s = d.getDocument().createCOSStream();
+            try (var o = s.createRawOutputStream()) { o.write(new byte[16]); }
+            s.setItem(org.apache.pdfbox.cos.COSName.TYPE, org.apache.pdfbox.cos.COSName.XOBJECT);
+            s.setItem(org.apache.pdfbox.cos.COSName.SUBTYPE, org.apache.pdfbox.cos.COSName.IMAGE);
+            s.setInt(org.apache.pdfbox.cos.COSName.WIDTH, 40_000);
+            s.setInt(org.apache.pdfbox.cos.COSName.HEIGHT, 40_000);
+            s.setInt(org.apache.pdfbox.cos.COSName.BITS_PER_COMPONENT, 8);
+            s.setItem(org.apache.pdfbox.cos.COSName.COLORSPACE, org.apache.pdfbox.cos.COSName.DEVICEGRAY);
+            var img = new org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject(new org.apache.pdfbox.pdmodel.common.PDStream(s), null);
+            try (var cs = new org.apache.pdfbox.pdmodel.PDPageContentStream(d, p)) { cs.drawImage(img, 20, 20, 100, 100); }
+        }), "ocd"));
+
+        // A transparency group on a 4000-pt page, baked at 300 dpi: once 2.7 billion pixels from a 1 KB PDF.
+        survives(bad, "a group on a 4000-pt page", () -> to(pdf(new org.apache.pdfbox.pdmodel.common.PDRectangle(4000, 4000), (d, p) -> {
+            var form = new org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject(d);
+            form.setBBox(new org.apache.pdfbox.pdmodel.common.PDRectangle(4000, 4000));
+            var group = new org.apache.pdfbox.cos.COSDictionary();
+            group.setItem(org.apache.pdfbox.cos.COSName.S, org.apache.pdfbox.cos.COSName.TRANSPARENCY);
+            form.getCOSObject().setItem(org.apache.pdfbox.cos.COSName.GROUP, group);
+            try (var o = form.getContentStream().createOutputStream()) {
+                o.write("0 0 1 rg 0 0 3000 3000 re f 1 0 0 rg 1000 1000 3000 3000 re f".getBytes(StandardCharsets.US_ASCII));
+            }
+            var gs = new org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState();
+            gs.setNonStrokingAlphaConstant(0.5f);
+            try (var cs = new org.apache.pdfbox.pdmodel.PDPageContentStream(d, p)) { cs.setGraphicsStateParameters(gs); cs.drawForm(form); }
+        }), "ocd"));
+
+        // An outline item that is its own child, a tag that is its own kid: once a StackOverflowError each.
+        survives(bad, "a cyclic outline and tag tree", () -> to(pdf(new org.apache.pdfbox.pdmodel.common.PDRectangle(200, 200), (d, p) -> {
+            var outline = new org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline();
+            var item = new PDOutlineItem();
+            item.setTitle("loop");
+            outline.addLast(item);
+            item.getCOSObject().setItem(org.apache.pdfbox.cos.COSName.FIRST, item);
+            item.getCOSObject().setItem(org.apache.pdfbox.cos.COSName.LAST, item);
+            d.getDocumentCatalog().setDocumentOutline(outline);
+            var root = new org.apache.pdfbox.pdmodel.documentinterchange.logicalstructure.PDStructureTreeRoot();
+            var el = new PDStructureElement("P", root);
+            el.getCOSObject().setItem(org.apache.pdfbox.cos.COSName.K, el);
+            root.appendKid(el);
+            d.getDocumentCatalog().setStructureTreeRoot(root);
+            var mark = new org.apache.pdfbox.pdmodel.documentinterchange.logicalstructure.PDMarkInfo();
+            mark.setMarked(true);
+            d.getDocumentCatalog().setMarkInfo(mark);
+        }), "md"));
+
+        // Repetition is a feature, a 3000-fold one is not: 9 KB of request once made a 152 MB PDF of one page.
+        refused(bad, "a selection of 3000 copies of one page", () -> Pages.parse("1-,".repeat(3000), 1));
+
+        // A host whose locale writes its own digits writes the same container (once page-۰۰۱, and images that
+        // collapsed onto one name).
+        Locale was = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.forLanguageTag("fa"));
+            if (!Arrays.equals(ocd, to(picture, "ocd"))) bad.add("a Persian locale changed the container's bytes");
+        } finally { Locale.setDefault(was); }
+        return bad;
+    }
+
+    private interface Build { void on(PDDocument d, PDPage p) throws Exception; }
+
+    /** A one-page PDF of {@code size}, built by {@code b}. */
+    private static byte[] pdf(org.apache.pdfbox.pdmodel.common.PDRectangle size, Build b) throws Exception {
+        try (PDDocument d = new PDDocument()) {
+            PDPage p = new PDPage(size);
+            d.addPage(p);
+            b.on(d, p);
+            var out = new ByteArrayOutputStream();
+            d.save(out);
+            return out.toByteArray();
+        }
+    }
+
+    private interface Run { Object run() throws Exception; }
+
+    /** {@code r} must be refused (an exception), never accepted, never a crash. */
+    private static void refused(List<String> bad, String what, Run r) {
+        try { r.run(); bad.add(what + ": accepted"); }
+        catch (Exception expected) { /* the answer */ }
+        catch (Error e) { bad.add(what + ": " + e); }
+    }
+
+    /** {@code r} must come back, whatever it keeps. */
+    private static void survives(List<String> bad, String what, Run r) {
+        try { r.run(); } catch (Exception | Error e) { bad.add(what + ": " + e); }
+    }
+
+    /** A black {@code w × h} PNG, 8-bit RGB, written row by row so it never exists decoded here. */
+    private static byte[] png(int w, int h) throws Exception {
+        var idat = new ByteArrayOutputStream();
+        try (var z = new DeflaterOutputStream(idat)) { byte[] row = new byte[1 + 3 * w]; for (int y = 0; y < h; y++) z.write(row); }
+        var buf = new ByteArrayOutputStream();
+        var out = new java.io.DataOutputStream(buf);
+        out.write(new byte[] { (byte) 0x89, 'P', 'N', 'G', 13, 10, 26, 10 });
+        chunk(out, "IHDR", java.nio.ByteBuffer.allocate(13).putInt(w).putInt(h).put((byte) 8).put((byte) 2).array());
+        chunk(out, "IDAT", idat.toByteArray());
+        chunk(out, "IEND", new byte[0]);
+        return buf.toByteArray();
+    }
+
+    private static void chunk(java.io.DataOutputStream out, String type, byte[] data) throws Exception {
+        byte[] t = type.getBytes(StandardCharsets.US_ASCII);
+        var crc = new CRC32();
+        crc.update(t);
+        crc.update(data);
+        out.writeInt(data.length);
+        out.write(t);
+        out.write(data);
+        out.writeInt((int) crc.getValue());
+    }
+
+    /** The same container with a member of {@code n} zeros added, deflated as it is written. */
+    private static byte[] withZeros(byte[] zip, String name, long n) throws Exception {
+        var out = new ByteArrayOutputStream();
+        try (var zi = new ZipInputStream(new java.io.ByteArrayInputStream(zip)); var zo = new ZipOutputStream(out)) {
+            for (ZipEntry e; (e = zi.getNextEntry()) != null; ) { zo.putNextEntry(new ZipEntry(e.getName())); zo.write(zi.readAllBytes()); }
+            zo.putNextEntry(new ZipEntry(name));
+            byte[] zeros = new byte[1 << 20];
+            for (long left = n; left > 0; left -= zeros.length) zo.write(zeros, 0, (int) Math.min(zeros.length, left));
+        }
+        return out.toByteArray();
+    }
+
+    /** The same container with {@code extra} members added (name → text). */
+    private static byte[] withMembers(byte[] zip, Map<String, String> extra) throws Exception {
+        var out = new ByteArrayOutputStream();
+        try (var zi = new ZipInputStream(new java.io.ByteArrayInputStream(zip)); var zo = new ZipOutputStream(out)) {
+            for (ZipEntry e; (e = zi.getNextEntry()) != null; ) { zo.putNextEntry(new ZipEntry(e.getName())); zo.write(zi.readAllBytes()); }
+            for (var e : new TreeMap<>(extra).entrySet()) {
+                zo.putNextEntry(new ZipEntry(e.getKey()));
+                zo.write(e.getValue().getBytes(StandardCharsets.UTF_8));
+            }
+        }
+        return out.toByteArray();
     }
 
     /** "refused: …", "warned: …", "crashed: …", "LEAK …" or "silent". A read that never returns fails too. */
@@ -889,6 +1076,11 @@ public final class Gates {
 
     private static String once(String s, String old, String now) {
         int i = s.indexOf(old);
+        return i < 0 ? s : s.substring(0, i) + now + s.substring(i + old.length());
+    }
+
+    private static String last(String s, String old, String now) {
+        int i = s.lastIndexOf(old);
         return i < 0 ? s : s.substring(0, i) + now + s.substring(i + old.length());
     }
 

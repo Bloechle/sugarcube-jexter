@@ -1,5 +1,6 @@
 package sugarcube.jexter.pdfimport;
 
+import sugarcube.jexter.core.JxRaster;
 import org.apache.pdfbox.contentstream.PDFGraphicsStreamEngine;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSDictionary;
@@ -450,8 +451,9 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         return true;
     }
 
-    /** The pixels per page unit for a raster of {@code w × h} page units: ~2, capped at {@value #RASTER_BUDGET}
-     *  pixels so a huge region cannot blow up memory — the one budget of every raster the import makes. */
+    /** The pixels per page unit for a crop of the reference raster of {@code w × h} page units: ~2, capped at
+     *  {@value #RASTER_BUDGET} pixels so a huge region cannot blow up memory. What the import renders from the
+     *  MODEL (a baked group) is bounded by the renderer's own canvas budget, {@code OCDRenderer.MAX_CANVAS}. */
     static double rasterScale(double w, double h) {
         double scale = 2.0;
         long px = (long) Math.ceil(w * scale) * (long) Math.ceil(h * scale);
@@ -570,6 +572,9 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
             ref = doc.newImageRef("jpg");
             doc.addImage(ref, jpeg);
         } else {
+            // PDF states the size in the dictionary, and a few bytes of deflate can back 40000 × 40000 pixels: PDFBox
+            // buffers the whole decoded stream before a pixel is drawn, so the size is checked BEFORE decoding.
+            JxRaster.check(pdImage.getWidth(), pdImage.getHeight(), pdImage.isStencil() ? "a stencil mask" : "an image");
             BufferedImage bi = pdImage.isStencil()
                     ? pdImage.getStencilImage(new java.awt.Color(fillArgb(), true))
                     : decoded(pdImage);

@@ -89,7 +89,7 @@ public final class OcdEpubWriter {
                 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
                 <head>
                 <meta charset="utf-8"/>
-                <title>Page %d</title>
+                <title>Page %s</title>
                 <meta name="viewport" content="width=%s, height=%s"/>
                 </head>
                 <body style="margin:0;padding:0">

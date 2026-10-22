@@ -1,5 +1,6 @@
 package sugarcube.jexter.font;
 
+import sugarcube.jexter.core.JxRaster;
 import sugarcube.jexter.core.JxJson;
 import sugarcube.jexter.core.JxName;
 import sugarcube.jexter.core.JxPath;
@@ -8,12 +9,10 @@ import sugarcube.jexter.trace.TraceOptions;
 import sugarcube.jexter.trace.TracedShape;
 import sugarcube.jexter.trace.Tracer;
 
-import javax.imageio.ImageIO;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Area;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Base64;
 import java.util.List;
@@ -144,7 +143,7 @@ public final class Foundry {
         if (dataUrl == null || dataUrl.isBlank()) return null;
         int comma = dataUrl.indexOf(',');
         String b64 = comma >= 0 ? dataUrl.substring(comma + 1) : dataUrl;
-        return ImageIO.read(new ByteArrayInputStream(Base64.getDecoder().decode(b64.trim())));
+        return JxRaster.decode(Base64.getDecoder().decode(b64.trim()), "a drawn glyph");
     }
 
     private static String orDefault(String v, String def) { return v == null || v.isBlank() ? def : v; }

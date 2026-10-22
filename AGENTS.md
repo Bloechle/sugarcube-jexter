@@ -97,7 +97,8 @@ Skill < this card < the source: a disagreement is a signal — fix the skill in 
 - **Test** — `node nimbus-jexter.cjs --run=test` (what CI runs, any OS): compiles into `target/classes`, then
   `test/Gates.java` writes the fixture corpus into `target/corpus` (`test/Fixtures.java`, PDFBox only) and gates it — REPRO, DOCTAGS, STABLE, MODEL, TIERS,
   NAV, TAGS, PIXELS (the model's render against PDFBox's and against the direct render), LAYERS, AGAIN (a second analysis
-  changes nothing), FURNITURE, STRADDLE, CLIPS, COPY, DRAWN, WORDS, EDITED, FIGURES, BOOK, HOSTILE, one JVM, ~40 s. A red STABLE names the container: `test/ContainerDiff.java` shows
+  changes nothing), FURNITURE, STRADDLE, CLIPS, COPY, DRAWN, WORDS, EDITED, FIGURES, BOOK, HOSTILE, and once BOUNDS,
+  one JVM, ~40 s. A red STABLE names the container: `test/ContainerDiff.java` shows
   which member moved. A change is done when this is green; a new defect class gets its check here.
   JDK 21 is the gate, and CI also compiles under JDK 25 (its lints are stricter) — which is what `nimbus --run=jar` uses on a
   machine with a newer JDK. JDK 23+ added `dangling-doc-comments`, which no `@SuppressWarnings` can reach and JDK 21
@@ -119,5 +120,14 @@ Skill < this card < the source: a disagreement is a signal — fix the skill in 
   never `HttpServer.createContext`): foreign `Host`, foreign `Origin` or a cross-site fetch → 403, methods other
   than GET/HEAD/POST → 405, bodies through `body(x)` (512 MB cap → 413). Any web page can POST to 127.0.0.1;
   these routes read files by path and bind an LLM key. `nimbus-jexter.cjs` guards its `/run` the same way.
+- **Hostile input costs bounded memory, by construction** — the engine runs behind a public service, and each
+  bound below was a small file that took the heap or the stack. A container's members inflate through ONE door,
+  `ocd.io.OcdZip` (256 MB a member, 1 GB a container, counted as they inflate); a picture is sized from its
+  header before it is decoded, `core.JxRaster` (100 million pixels); a canvas the renderer allocates comes down in
+  resolution past `OCDRenderer.MAX_CANVAS` (32 million pixels: a baked group, a page, a figure); a tag tree, an
+  outline and a page's elements nest at most 256 deep, a node met twice ends the walk; a page selection holds at
+  most twice the document (1000 for a short one); a redaction search runs at most 10 s. A link keeps only
+  `http`, `https` or `mailto` (`OCDLink.uri`), and a passenger is data under a clean path, never markup or script
+  (`OCDVocab.isPassenger`). A new bound gets its BOUNDS or HOSTILE check, proved red on the code before it.
 - A path that paints nothing is **not written**: its operators with no painting operator survive `Q` as the current path, and the next `S` strokes them.
 - **The three web apps are qry 3, vendored** (`ui/shared/web/vendor/qry/`: `qry.js`, `qry-web.js`, `qry-app.js`, `qry-ui.css`, copied as they are — refresh with Qry's `nimbus-qry.cjs --run=vendor --app --to=<that dir>`, which copies those four). A module imports the APP tier, `/shared/vendor/qry/qry-app.js` (it re-exports `qry-web.js`, the website tier) — never `qry-web.js` directly. Native `<dialog>` (`makeDialog`; a side panel is `.qry-dialog.sheet`), popover menus (`makeMenu`), `.qry-seg` radios, `.qry-switch` checkboxes — no web components. Icons are qry's ONE workflow (Qry 962154e): the set is `/shared/js/icons.js`, a module that ONLY calls `icons.add({ name: '<inner 24×24 SVG>' })` (Lucide's drawings, ISC — `vendor/LICENSE-lucide.txt`) and that each app's entry module imports first; the markup is `<i data-icon="name"></i>`, drawn by qry's `icons.watch()` — which `boot()` starts — as soon as it enters the document and redrawn when `data-icon` changes; in a string, `icon(name, { size, label, class })`. The `<i>` STAYS and an `<svg class="qry-icon">` goes inside it: qry-ui.css makes the `<i>` `display: contents` (the svg is the box, as when the `<i>` was replaced); `sugarcube.css` sets `.qry-icon` to 1.15em on the baseline; a size or colour rule targets `X .qry-icon` (a child rule `X > i > .qry-icon`), never the `<i>`, never `svg`. An unknown name draws qry's dashed square and logs ONE console.error — the benches fail on it (the skill's `scripts/bench/icons.mjs`). Server-sent streams (the `/api/alive` heartbeat, the F2 log, the conversion progress) are qry's `makeEvents`; zips stay fflate (Prism unzips books to binary members, synchronously too — qry's `zip()` writes only). The look is `/shared/sugarcube.css` — an app's sheet never restates the brand.

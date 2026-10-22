@@ -1,5 +1,6 @@
 package sugarcube.jexter.redact;
 
+import sugarcube.jexter.core.JxRaster;
 import sugarcube.jexter.core.JxColor;
 import sugarcube.jexter.core.JxPath;
 import sugarcube.jexter.core.JxPoint;
@@ -25,7 +26,6 @@ import java.awt.Graphics2D;
 import java.awt.geom.Area;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -163,6 +163,7 @@ public final class Redactor {
      */
     public static Report match(OCDDocument doc, String regex) {
         Pattern p = Pattern.compile(regex);
+        long deadline = System.nanoTime() + MATCH_BUDGET_NANOS;
         List<Finding> out = new ArrayList<>();
         int no = 0;
         for (OCDPage page : doc.pages()) {
@@ -180,11 +181,36 @@ public final class Redactor {
                         sb.append(u);
                     }
                 }
-                Matcher m = p.matcher(sb);
+                Matcher m = p.matcher(new Timed(sb, deadline));
                 while (m.find()) if (m.end() > m.start()) spans(unit, at, m, no, out);
             }
         }
         return new Report(no, out);
+    }
+
+    /** How long a search may run over a whole document. The pattern comes from the request, and Java's regex
+     *  backtracks: {@code (.*a){12}x} takes 11 s on thirty characters and doubles with each repeat, holding a
+     *  conversion slot all the while. A real search of a thousand pages takes well under a second. */
+    private static final long MATCH_BUDGET_NANOS = 10_000_000_000L;
+
+    /** The text as the matcher reads it, and the clock it reads it against: past the deadline the search is
+     *  refused. The matcher has no timeout of its own; every character it reads passes through here. */
+    private static final class Timed implements CharSequence {
+        private final CharSequence text;
+        private final long deadline;
+        private int reads;
+
+        Timed(CharSequence text, long deadline) { this.text = text; this.deadline = deadline; }
+
+        @Override public char charAt(int i) {
+            if ((++reads & 0xFFF) == 0 && System.nanoTime() > deadline)
+                throw new IllegalArgumentException("the search pattern ran past " + MATCH_BUDGET_NANOS / 1_000_000_000L
+                        + " s — refused (a pattern that backtracks without end)");
+            return text.charAt(i);
+        }
+        @Override public int length() { return text.length(); }
+        @Override public CharSequence subSequence(int from, int to) { return new Timed(text.subSequence(from, to), deadline); }
+        @Override public String toString() { return text.toString(); }
     }
 
     /** The text units of a content tree: each paragraph as its runs in order ({@code null} marks a line break),
@@ -359,7 +385,7 @@ public final class Redactor {
     /** Paint the zone into the image bytes — fresh PNG, fresh ref — so the pixels are gone, not hidden. */
     private static OCDImage paint(OCDDocument doc, OCDImage im, JxRect zone, int fill, Touched t) throws IOException {
         byte[] src = doc.image(im.resourceRef());
-        BufferedImage img = src == null ? null : ImageIO.read(new ByteArrayInputStream(src));
+        BufferedImage img = src == null ? null : JxRaster.decode(src, "image " + im.resourceRef());
         if (img == null) throw new IOException("cannot decode image " + im.resourceRef() + " for redaction");
         Rectangle2D px = pixels(zone, im.transform().inverse(), img.getWidth(), img.getHeight());
         if (px.isEmpty()) return im;

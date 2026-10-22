@@ -1,5 +1,6 @@
 package sugarcube.jexter.imageimport;
 
+import sugarcube.jexter.core.JxRaster;
 import sugarcube.jexter.core.ConvertOptions;
 import sugarcube.jexter.core.JxLog;
 import sugarcube.jexter.core.JxRect;
@@ -110,6 +111,7 @@ public final class ImageImporter {
                 boolean asIs = frames == 1 && (fmt.equals("png") || fmt.startsWith("jp"));
                 for (int f = 0; f < frames; f++) {
                     int w = reader.getWidth(f), h = reader.getHeight(f);
+                    JxRaster.check(w, h, "frame " + (f + 1));       // before a pixel is decoded or stored
                     byte[] bytes = asIs ? data : png(reader.read(f));
                     String ext = asIs && fmt.startsWith("jp") ? "jpg" : "png";
                     doc.add(page(doc, font, bytes, ext, w, h, f, 72.0 / dpi, ocr, lang, prep));
@@ -207,7 +209,7 @@ public final class ImageImporter {
      *  whose shadows are wider than the window and taken for ink). {@code zigzag-gray} has no despeckle
      *  (the reading it has always named); {@code zigzag-gray-despeckle} takes ZigZag's automatic one. */
     static byte[] prepared(byte[] frame, String prep) throws IOException {
-        BufferedImage img = ImageIO.read(new ByteArrayInputStream(frame));
+        BufferedImage img = JxRaster.decode(frame, "the frame");
         if (img == null) throw new IOException("unreadable frame");
         ZigZag.Options o = new ZigZag.Options();
         o.mode = "gray";
