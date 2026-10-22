@@ -1249,7 +1249,7 @@ of the smaller path's own size — so a large, spread-out schematic coalesces in
 graphic while neighbouring drawings never chain, where a fixed tolerance would do neither.
 
 A graphic is a *model* entity and never reaches the serialized page. Its paths are contiguous
-in the content array, but they do **not** occupy a contiguous range of paint order: on a press
+in the content array, but they do *not* occupy a contiguous range of paint order: on a press
 cover, one drawing's children carry z 287, 225, 255 and 316 while neighbouring content paints at
 131, 196, 283 and 221 — other ink is laid down between them. A page writes its children in paint
 order, so nesting those paths inside one `<g>` would force them into a single depth slot and a
