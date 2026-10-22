@@ -171,10 +171,13 @@ public final class ImageImporter {
             if (word.line() >= 0) lines.merge(word.line(), word.box(), JxRect::union);
         OCDLayerContent layer = new OCDLayerContent(LAYER_ID);              // over the picture: painted after it
         BufferedImage img = face == null ? null : JxRaster.decode(bytes, "the frame");
+        java.util.Map<Integer, StringBuilder> said = new java.util.HashMap<>();   // engine line → its letters (the redrawn size)
+        if (img != null) for (OcrClient.Word word : words) if (word.line() >= 0) said.computeIfAbsent(word.line(), k -> new StringBuilder()).append(word.text());
         int z = 0, redrawn = 0;
         for (OcrClient.Word word : words) {
             JxRect line = word.line() >= 0 ? lines.get(word.line()) : word.box();
-            OCDText drawn = img == null ? null : Redraw.run(face, word, line, s, ph);
+            OCDText drawn = img == null ? null : Redraw.run(face, word, line,
+                    face.ink((word.line() >= 0 ? said.get(word.line()).toString() : word.text()).codePoints().toArray()), s, ph);
             if (drawn != null) {
                 layer.add(drawn.fill(Redraw.erase(img, word.box(), line.height())).z(z++));
                 redrawn++;

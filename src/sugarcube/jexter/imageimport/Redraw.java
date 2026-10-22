@@ -30,8 +30,8 @@ import java.util.Map;
  * paper around it (the median of a ring just outside); the word is drawn in the median colour of its own ink
  * (the darker part of its box). The face is Liberation Sans ({@link TtfImporter#standardSans}): the engine
  * says nothing of the face a word was set in, and a sans of Arial's metrics is the least surprising stand-in.
- * Its size is the line's height over the height the face's ink spans ({@link #INK}), its baseline the face's descent above the
- * line's bottom, its width the word's box (a horizontal stretch, as the invisible runs have).
+ * Its size is the line's height over the height the face's ink spans for that line's own letters ({@link Face#ink}:
+ * a line with no descender is shorter, not smaller), its baseline that ink's foot above the line's bottom, its width the word's box (a horizontal stretch, as the invisible runs have).
  *
  * <p><b>A picture left with no ink is dropped</b> ({@link #inkless}): a page of text, once every word is
  * redrawn, is paper — no reason to carry a photograph of it. A picture with anything left (a logo, a
@@ -48,9 +48,6 @@ final class Redraw {
     static final String FONT_ID = "OCR-Sans";
     /** Liberation Sans's vertical metrics, in em (hhea: 1854 and −434 over 2048). */
     static final double ASCENT = 0.905, DESCENT = 0.212;
-    /** The height its INK spans, from an ascender's top to a descender's foot ('d' 0.729, 'g' −0.210): what an
-     *  engine's line box measures — it hugs the letters, not the face's ascent and descent. */
-    static final double INK = 0.94;
     /** Below this confidence a word keeps its pixels. */
     static final double MIN_CONFIDENCE = 0.8;
     /** The horizontal stretch the face may take to fill a word's box. */
@@ -95,21 +92,38 @@ final class Redraw {
         }
 
         double advance(int cp) { return advance.get(cp); }
+
+        /** {top, foot} of the ink the face gives {@code cps} (em, foot ≤ 0): an engine's line box hugs the letters
+         *  it holds, so a line with no descender ("delivered The") is shorter than one with them ("quickly") and
+         *  must not come out a smaller size. Both reach at least the x-height and the baseline. */
+        double[] ink(int[] cps) throws IOException {
+            has(cps);
+            double top = 0.52, foot = 0;
+            for (int cp : cps) {
+                Integer gid = font.gidOf(cp);
+                var g = gid == null ? null : font.glyph(gid);
+                if (g == null || g.isSpace()) continue;
+                top = Math.max(top, g.bounds().maxY());
+                foot = Math.min(foot, g.bounds().minY());
+            }
+            return new double[]{top, foot};
+        }
         int gid(int cp)        { return font.gidOf(cp); }
     }
 
-    /** One word as drawn text, or {@code null} when it must keep its pixels (see the class comment). */
-    static OCDText run(Face face, OcrClient.Word word, JxRect line, double s, double pageHeight) throws IOException {
+    /** One word as drawn text, or {@code null} when it must keep its pixels (see the class comment). {@code ink}
+     *  is {@link Face#ink} of the whole line the word was read in. */
+    static OCDText run(Face face, OcrClient.Word word, JxRect line, double[] ink, double s, double pageHeight) throws IOException {
         if (word.confidence() >= 0 && word.confidence() < MIN_CONFIDENCE) return null;
         JxRect b = word.box();
         int[] cps = word.text().strip().codePoints().toArray();
         if (cps.length == 0 || b.width() <= 0 || line.height() <= 0 || !face.has(cps)) return null;
-        double fs = line.height() * s / INK;
+        double fs = line.height() * s / (ink[0] - ink[1]);
         double width = 0;
         for (int cp : cps) width += face.advance(cp) * fs;
         double sx = b.width() * s / width;
         if (sx < MIN_STRETCH || sx > MAX_STRETCH) return null;
-        double baseline = pageHeight - (line.y() + line.height()) * s + DESCENT * fs;
+        double baseline = pageHeight - (line.y() + line.height()) * s - ink[1] * fs;
         OCDText t = new OCDText(FONT_ID, fs);
         if (word.confidence() >= 0) t.confidence(Math.min(1, word.confidence()));
         t.transform(new JxTransform(sx, 0, 0, 1, b.x() * s, baseline));
