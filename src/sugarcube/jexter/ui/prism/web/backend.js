@@ -16,13 +16,11 @@ async function artifact(path, { method = 'POST', body, onStep } = {}) {
     const step = onStep || (() => {});
     const { res, streamed } = await send(API + path, method, body, step);
     if (!res.ok) throw new Error((await res.text().catch(() => '')) || `HTTP ${res.status}`);
-    const cd = res.headers.get('content-disposition') || '';
-    const m = /filename="?([^"]+)"?/.exec(cd);
     const blob = streamed ? await res.blob() : await download(res, step);
     return {
         blob,
         bytes: new Uint8Array(await blob.arrayBuffer()),
-        filename: m ? m[1] : '',
+        filename: fileNameOf(res.headers.get('content-disposition')),
         mediaType: res.headers.get('content-type') || '',
     };
 }
@@ -109,3 +107,10 @@ export const logStreamUrl = '/api/log';
 
 // The front opens an EventSource on this while a conversion runs: {stage,done,total,detail}.
 export const progressUrl = '/api/progress';
+
+/** The file name a Content-Disposition carries: the exact UTF-8 one (RFC 5987) first, else the plain one. */
+export function fileNameOf(cd) {
+    const exact = /filename\*=UTF-8''([^;]+)/i.exec(cd || '');
+    if (exact) try { return decodeURIComponent(exact[1]); } catch { /* a malformed escape: take the plain name */ }
+    return /filename="?([^";]+)"?/i.exec(cd || '')?.[1] || '';
+}

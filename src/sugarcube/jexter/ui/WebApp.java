@@ -13,6 +13,7 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -41,9 +42,10 @@ import java.util.Locale;
  *
  * <p><b>Every route goes through one guard</b> ({@link #guarded}). Binding 127.0.0.1 keeps other machines
  * out, not other web pages: any site the user visits can POST to a local port, and a DNS-rebinding page
- * can even read the answer. These apps read files by path, fetch URLs and bind an LLM key, so a request is
+ * can even read the answer. These apps convert whatever they are sent and bind an LLM key, so a request is
  * served only when its {@code Host} names this server, its {@code Origin} (when sent) is this server, and
- * the browser does not flag it cross-site.
+ * the browser does not flag it cross-site — and its options go through {@code ConvertOptions.fromRequest},
+ * which refuses the ones naming a file of this machine.
  *
  * <pre>  java &lt;App&gt; [--port N] [--web DIR] [--serve]</pre>
  * Opens a Chromium app window by default; {@code --serve} (alias {@code --no-open})
@@ -346,6 +348,7 @@ public abstract class WebApp {
         if (root == null) return null;
         Path file = root.resolve(rel).normalize();
         if (!file.startsWith(root) || !Files.isRegularFile(file)) return null;
+        if (!file.toRealPath().startsWith(root.toRealPath())) return null;   // a link inside web/ never leads out of it
         return Files.readAllBytes(file);
     }
 
@@ -372,6 +375,16 @@ public abstract class WebApp {
         x.sendResponseHeaders(status, body.length == 0 ? -1 : body.length);
         try (OutputStream os = x.getResponseBody()) { os.write(body); }
     }
+    /** The {@code Content-Disposition} of a file sent back — the one place it is spelled. A name can come from the
+     *  request (the uploaded file's), so it is never pasted between quotes: an ASCII fallback with every other
+     *  character replaced, and the real name in RFC 5987's {@code filename*}. Once {@code a"; filename*=…} chose
+     *  the download's name for whoever wrote the request. */
+    protected static String disposition(boolean inline, String filename) {
+        String ascii = filename.replaceAll("[^A-Za-z0-9._ -]", "_");
+        String utf8 = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20").replace("*", "%2A");
+        return (inline ? "inline" : "attachment") + "; filename=\"" + ascii + "\"; filename*=UTF-8''" + utf8;
+    }
+
     protected static void json(HttpExchange x, String body) throws IOException {
         send(x, 200, "application/json; charset=utf-8", body.getBytes(StandardCharsets.UTF_8));
     }

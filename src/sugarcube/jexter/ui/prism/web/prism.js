@@ -19,6 +19,7 @@ import { on, emit } from './events.js';
 import { registerTool, setTool, ribbon, keyFor, currentTool, devMode, setDevMode } from './tools.js';
 import { logLine, toggleLog, installLogCapture, wireConsole } from './console.js';
 import { wireSearch, clearSearch, clearAllHl, markRect, fold } from './search.js';
+import { fileNameOf } from './backend.js';
 
 // The chassis draws thumbnails, so it speaks the two shared authorities: `book` for "which member is
 // page i", `shots` for "a small picture of it". They are imported DYNAMICALLY, in main(), and that is
@@ -102,13 +103,6 @@ async function main() {
       openEpub(await res.arrayBuffer(), fileNameOf(res.headers.get('content-disposition')) || src.split('/').pop());
     } catch (e) { toast(`Could not fetch "${src}": ${e.message}`, { tone: 'danger' }); }
   }
-}
-
-/** The file name a Content-Disposition carries: the exact UTF-8 one (RFC 5987) first, else the plain one. */
-function fileNameOf(cd) {
-  const exact = /filename\*=UTF-8''([^;]+)/i.exec(cd || '');
-  if (exact) try { return decodeURIComponent(exact[1]); } catch { /* a malformed escape: take the plain name */ }
-  return /filename="?([^";]+)"?/i.exec(cd || '')?.[1] || '';
 }
 
 /* -- Service Worker: the client-side server ------------------------- */

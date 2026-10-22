@@ -832,6 +832,8 @@ public final class Gates {
             catch (IllegalArgumentException refused) { /* the expected answer */ }
             if (!"/etc/passwd".equals(ConvertOptions.fromMap(Map.of(key, "/etc/passwd")).toMap().get(key)))
                 bad.add("the command line lost " + key);
+            try { Conversion.convert(good, "ocd", Map.of(key, "/etc/passwd")); bad.add("the Map form of convert took " + key); }
+            catch (IllegalArgumentException refused) { /* the Map form is a request's */ }
         }
 
         for (var v : variants.entrySet()) {

@@ -315,7 +315,9 @@ Model and format (`ocd.model`, `ocd.io`)
 - **A request never names a file of the engine's machine.** Every host turns a query into options with
   `ConvertOptions.fromRequest`, which refuses `LOCAL` (`addFont`, `addFontChars`); `fromMap` is for the
   command lines. Over HTTP a path is the SERVER's disk: `addFont=/etc/passwd` was read for whoever asked
-  (the error even gave its size). A new option that takes a path joins `LOCAL`; HOSTILE checks both doors.
+  (the error even gave its size) — once by Prism, then by Jexter's own route, which passed its query to the
+  `Map` form of `Conversion.convert`. So the `Map` forms read options AS A REQUEST'S, and a command line that may
+  name a file builds `fromMap` itself. A new option that takes a path joins `LOCAL`; HOSTILE checks every door.
 - Text entering the model is XML-clean (`JxText.sanitize`); every XML parse is `JxXml.secureBuilder()`
   (DOCTYPE refused); the input kind is sniffed from content, never a name.
 - Reproducibility: one clock (`JxClock`, `SOURCE_DATE_EPOCH`); `doc.id()` is content-addressed. Test it

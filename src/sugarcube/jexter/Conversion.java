@@ -111,14 +111,16 @@ public final class Conversion {
         return doc;
     }
 
-    /** Same, taking the {@code String}-map form used across the {@code /api} boundary. */
+    /** Same, taking the {@code String}-map form a request carries — so read as one: an option naming a file of
+     *  this machine ({@link ConvertOptions#LOCAL}) is refused. A command line that may name one builds its
+     *  options with {@link ConvertOptions#fromMap} and calls the {@link ConvertOptions} form. */
     public static Output convert(OCDDocument doc, String target, Map<String, String> options) throws IOException {
-        return convert(doc, target, ConvertOptions.fromMap(options));
+        return convert(doc, target, ConvertOptions.fromRequest(options));
     }
 
-    /** Convert raw PDF bytes: import (with the same options) then export. */
+    /** Convert raw bytes (PDF, image or OCD-EPUB): import, then export — options read as a request's, as above. */
     public static Output convert(byte[] data, String target, Map<String, String> options) throws IOException {
-        return convert(data, target, ConvertOptions.fromMap(options));
+        return convert(data, target, ConvertOptions.fromRequest(options));
     }
 
     /** Same, with the options already built — the form a host uses when it binds a

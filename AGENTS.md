@@ -118,8 +118,11 @@ Skill < this card < the source: a disagreement is a signal — fix the skill in 
 - **Invisible text is text.** A run in render mode 3 (a scan's OCR layer) is written by every text projection as real text with no ink — `PdfWriter` in BOTH modes as `Tr 3`, `SvgWriter` at zero opacity. Dropping it repaints the page identically and silently de-OCRs it: no pixel gate can see that, only `pdftotext` can.
 - **The local apps serve only themselves.** `WebApp` registers every route through one guard (`routes(Routes)`,
   never `HttpServer.createContext`): foreign `Host`, foreign `Origin` or a cross-site fetch → 403, methods other
-  than GET/HEAD/POST → 405, bodies through `body(x)` (512 MB cap → 413). Any web page can POST to 127.0.0.1;
-  these routes read files by path and bind an LLM key. `nimbus-jexter.cjs` guards its `/run` the same way.
+  than GET/HEAD/POST → 405, bodies through `body(x)` (512 MB cap → 413). Any web page can POST to 127.0.0.1,
+  and these routes convert what they are sent and bind an LLM key. A static file is served only when its REAL
+  path is inside the web root (a link inside `web/` never leads out), a download is named by `WebApp.disposition`
+  (RFC 5987, never a request's name between quotes), and a request's options go through `fromRequest` — the
+  `Map` forms of `Conversion.convert` read them that way. `nimbus-jexter.cjs` guards its `/run` the same way.
 - **Hostile input costs bounded memory, by construction** — the engine runs behind a public service, and each
   bound below was a small file that took the heap or the stack. A container's members inflate through ONE door,
   `ocd.io.OcdZip` (256 MB a member, 1 GB a container, counted as they inflate); a picture is sized from its

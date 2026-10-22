@@ -99,7 +99,7 @@ public final class Prism extends WebApp {
     // ── the artifact back ──
     private static void send(HttpExchange x, Conversion.Output o) throws IOException {
         x.getResponseHeaders().set("Content-Type", o.mediaType());
-        x.getResponseHeaders().set("Content-Disposition", (o.inline() ? "inline" : "attachment") + "; filename=\"" + o.filename() + "\"");
+        x.getResponseHeaders().set("Content-Disposition", disposition(o.inline(), o.filename()));
         x.getResponseHeaders().set("Cache-Control", "no-store");
         byte[] d = o.bytes();
         x.sendResponseHeaders(200, d.length);

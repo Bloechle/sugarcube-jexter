@@ -71,7 +71,7 @@ public final class Jexter extends WebApp {
         Map<String, String> m = new LinkedHashMap<>();
         opts.toMap().forEach((k, v) -> m.put(k, String.valueOf(v)));
         m.put("selectable", String.valueOf(selectable));
-        writeAtomic(out.toPath(), Conversion.convert(doc, "pdf", m).bytes());
+        writeAtomic(out.toPath(), Conversion.convert(doc, "pdf", ConvertOptions.fromMap(m)).bytes());   // the command line's own options
         return doc;
     }
 
@@ -162,7 +162,8 @@ public final class Jexter extends WebApp {
             byte[] body = body(x);
             if (body.length == 0) { error(x, new IllegalArgumentException("empty body — upload a PDF")); return; }
 
-            Conversion.Output out = Conversion.convert(body, "pdf", opts);   // import to OCD + re-export as normalized PDF
+            // import to OCD + re-export as normalized PDF; a request may not name a file of this machine (addFont)
+            Conversion.Output out = Conversion.convert(body, "pdf", ConvertOptions.fromRequest(opts));
             byte[] d = out.bytes();
             // Report what actually happened. The UI's whole promise is «a clean, selectable PDF», and
             // «normalized ✓» is not evidence — page count and the size delta are. The page count comes
@@ -176,7 +177,7 @@ public final class Jexter extends WebApp {
                 x.getResponseHeaders().set("X-Jexter-Pages", String.valueOf(chk.getNumberOfPages()));
             } catch (Exception ignore) { /* the bytes are still valid output; the count is a nicety */ }
             x.getResponseHeaders().set("Content-Type", out.mediaType());
-            x.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"" + outName(name) + "\"");
+            x.getResponseHeaders().set("Content-Disposition", disposition(false, outName(name)));
             x.getResponseHeaders().set("Cache-Control", "no-store");
             x.sendResponseHeaders(200, d.length);
             try (OutputStream os = x.getResponseBody()) { os.write(d); }
