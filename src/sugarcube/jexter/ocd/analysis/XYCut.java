@@ -343,10 +343,14 @@ public final class XYCut {
     }
 
     /** A Y profile with the screens laid in: each adds the width it covers of the region, over the height it
-     *  covers of it — so no row cut runs through a photo, while the column cut never sees it. */
+     *  covers of it — so no row cut runs through a photo, while the column cut never sees it. A screen that
+     *  holds the whole region is the ground the text is set on (a page's background, a tinted panel): it
+     *  covers every row alike, so it screens none — counted, it raised the floor under every valley, and a
+     *  page on a coloured background had no row cut left: a grid of cells was read row by row across them. */
     private static Axis screened(Axis ax, JxRect region, List<JxRect> screens) {
         float[] p = ax.hist();
         for (JxRect r : screens) {
+            if (r.contains(region)) continue;
             double w = Math.min(r.right(), region.right()) - Math.max(r.x(), region.x());
             double y0 = Math.max(r.y(), region.y()), y1 = Math.min(r.maxY(), region.maxY());
             if (w <= 0 || y1 <= y0) continue;

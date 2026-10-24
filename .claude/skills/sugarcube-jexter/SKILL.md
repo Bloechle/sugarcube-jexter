@@ -430,7 +430,10 @@ Analysis (`ocd.analysis`)
   over a whole press page, three columns on shared baselines gave a median gap of 0, and every block of two
   lines — a title on two lines first — was cut in two: half of the « two headings in a row » of a run of annual
   reports. A lone gap is then scaled to its lines' size (a title set solid at 60 pt over 8.5 pt body). The
-  `doc_three_columns` fixture is red on the old measure. What is left of those pairs is a grid of short
+  `doc_three_columns` fixture is red on the old measure. A screen that holds the whole region (a page's coloured
+  ground) screens no row: counted, it raised the floor under every valley, a contents grid lost every row cut
+  and was read line by line across its cells (`doc_grid_background`). Declared WORDS end on a whole word
+  followed by a space: « grid, » or « trade, » never match « grid » — three fixtures of this session paid for it. What is left of those pairs is a grid of short
   titles side by side read row by row (a contents page), not a leading.
 - A line-final hyphen is judged by the document's own words (`OCDIndex` `Vocabulary`, mirrored by `ocd.js`
   `keepsHyphen` for read-aloud and search — the bench `hyphens.mjs` fails when they drift): the compound

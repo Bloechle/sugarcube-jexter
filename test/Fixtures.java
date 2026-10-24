@@ -92,6 +92,7 @@ final class Fixtures {
         FEATURES.put("doc_magazine", (Whole) Fixtures::magazine);
         FEATURES.put("doc_columns_page_break", (Whole) Fixtures::columnsPageBreak);
         FEATURES.put("doc_three_columns", (Whole) Fixtures::threeColumns);
+        FEATURES.put("doc_grid_background", (Whole) Fixtures::gridBackground);
         FEATURES.put("doc_sections", (Whole) Fixtures::sections);
         FEATURES.put("doc_chapters", (Whole) Fixtures::chapters);
         FEATURES.put("doc_chapters_outline", (Whole) Fixtures::chaptersOutline);
@@ -1122,6 +1123,50 @@ final class Fixtures {
             for (int c = 0; c < 3; c++)
                 for (int i = 0; i < cols[c].length; i++)
                     if (!cols[c][i].isEmpty()) text(cs, f, 8, 20 * MM + c * (w + 5 * MM), top - i * lead, cols[c][i]);
+        }
+    }
+
+    /**
+     * A contents page on a coloured ground: the whole page is a tinted rectangle, a title runs across the top
+     * beside a page number (so it is no heading over the rest alone),
+     * a note stands in a narrow column on the left, and a grid of two rows of two cells — a number, a title of
+     * one or two lines, a short description — fills the right. The ground covers every row alike; counted as a
+     * screen, it left no row to cut, and the grid was read line by line across its cells.
+     */
+    private static void gridBackground(Doc d) throws IOException {
+        PDFont f = d.sans();
+        String[][] cells = {
+            { "18", "Working together", "for a missing child", "A child disappears near a village and", "the police of two countries search for", "him together until he is found." },
+            { "24", "Silent witnesses", "", "Fingerprints and DNA profiles bring a", "murderer to trial after months of work", "in the laboratory." },
+            { "38", "Faces for the victims", "", "Police and charities work hand in hand", "to recognise the victims of human", "trafficking on the street." },
+            { "40", "A shameless trade", "in human beings", "In the present migration crisis, the", "smugglers run a very lucrative trade,", "alone or within criminal networks." } };
+        WORDS.put("doc_grid_background", List.of(                              // the note first, then each cell whole
+            "A note on the left runs down beside the first two rows of the",
+            "Working together for a missing child", "A child disappears near a village and the police of two countries search for him together",
+            "A shameless trade in human beings", "In the present migration crisis, the smugglers run a very lucrative"));   // by rows or by columns
+        try (var cs = d.page(A4)) {
+            cs.setNonStrokingColor(new Color(186, 206, 216));                    // the ground: the whole page
+            cs.addRect(0, 0, A4.getWidth(), A4.getHeight());
+            cs.fill();
+            cs.setNonStrokingColor(Color.BLACK);
+            text(cs, f, 36, 15 * MM, H - 30 * MM, "Contents of the year");
+            text(cs, f, 20, 150 * MM, H - 28 * MM, "4");                        // a page number in the title's band
+            String[] note = { "A note on the left runs", "down beside the first two", "rows of the grid, the way", "a foreword sits beside", "the contents of a report", "and reads before them.",
+                              "It is long enough to stand", "beside both rows at once." };
+            for (int i = 0; i < note.length; i++) text(cs, f, 8, 15 * MM, H - 60 * MM - i * 10, note[i]);
+            float cw = 62 * MM, gut = 4 * MM, x0 = 62 * MM, rowH = 45 * MM;
+            for (int k = 0; k < 4; k++) {
+                float x = x0 + (k % 2) * (cw + gut), y = H - 60 * MM - (k / 2) * rowH;
+                String[] c = cells[k];
+                cs.setStrokingColor(new Color(90, 110, 125));                    // the rule over the cell
+                cs.moveTo(x, y + 14);
+                cs.lineTo(x + cw, y + 14);
+                cs.stroke();
+                text(cs, f, 20, x - 1, y - 12, c[0]);
+                text(cs, f, 10, x + 9 * MM, y - 4, c[1]);
+                if (!c[2].isEmpty()) text(cs, f, 10, x + 9 * MM, y - 16, c[2]);
+                for (int i = 3; i < c.length; i++) text(cs, f, 7, x + 9 * MM, y - 30 - (i - 3) * 9, c[i]);
+            }
         }
     }
 

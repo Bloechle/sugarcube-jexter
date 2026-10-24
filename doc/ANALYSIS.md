@@ -504,7 +504,9 @@ leaves) — a graphic spans across the text and bridges the whitespace valleys, 
 So the architecture is principled, not incidental: **graphics are clustered separately
 (`GraphicClusterer`) and placed by spatial overlap**, while `XY-Cut++` runs on text only. The single
 clean cutter owns the text; the graphic path owns the drawings; `StructureBuilder` joins them. In the
-ORDER a graphic counts once, and only as a screen: it never cuts a column, and no row cut runs through it. This is
+ORDER a graphic counts once, and only as a screen: it never cuts a column, and no row cut runs through it — unless
+it holds the whole region being cut: that is the ground the text is set on (a page's background, a tinted panel),
+which covers every row alike and so screens none (counted, a coloured page had no row cut left). This is
 why the analysis is not one monolithic "cut everything" routine.
 
 
