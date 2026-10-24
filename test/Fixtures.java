@@ -97,6 +97,7 @@ final class Fixtures {
         FEATURES.put("rich", (Whole) Fixtures::rich);
         FEATURES.put("tagged", (Whole) Fixtures::tagged);
         FEATURES.put("tagged_empty", (Whole) Fixtures::taggedEmpty);
+        FEATURES.put("tagged_partial", (Whole) Fixtures::taggedPartial);
     }
 
     /** Writes every fixture into {@code dir}; returns their paths in a stable order. */
@@ -160,6 +161,9 @@ final class Fixtures {
 
     /** Words a fixture paints where no engine shows them: the WORDS gate fails when any is read. */
     static final Map<String, List<String>> ABSENT = new LinkedHashMap<>();
+
+    /** Fixtures whose tag tree is no structure of the text (it marks nothing, or too little): read as untagged. */
+    static final Set<String> UNTAGGED = Set.of("tagged_empty", "tagged_partial");
 
     /**
      * Press setting, as a newspaper producer writes it: no space glyph anywhere, every word placed by a TJ
@@ -1205,6 +1209,41 @@ final class Fixtures {
         d.pdf.getDocumentCatalog().setStructureTreeRoot(root);
         WORDS.put("tagged_empty", List.of("A tree that tags nothing",
             "The words on this page are marked by no element of the tag tree, so they are read as the text of an untagged page."));
+    }
+
+    /**
+     * A tree that tags one caption of a page of text: a layout program tagging only the objects an export
+     * happened to mark. The rest of the page is the document — read by the heuristic, the caption with it.
+     */
+    private static void taggedPartial(Doc d) throws IOException {
+        String[] body = { "Most of this page is text that no element of the tag tree marks,",
+                          "set in a column like any article, line after line, as an",
+                          "untagged page would be, and read all the same as its text." };
+        try (var cs = d.page(A4)) {
+            text(cs, d.sans(), 18, 20 * MM, H - 30 * MM, "A tree that tags one caption");
+            for (int i = 0; i < body.length; i++) text(cs, d.sans(), 10, 20 * MM, H - 45 * MM - i * 12, body[i]);
+            COSDictionary props = new COSDictionary();
+            props.setInt(COSName.MCID, 0);
+            cs.beginMarkedContent(COSName.P, PDPropertyList.create(props));
+            text(cs, d.sans(), 8, 20 * MM, H - 80 * MM, "Caption.");
+            cs.endMarkedContent();
+        }
+        PDPage page = d.pdf.getPage(0);
+        page.setStructParents(0);
+        var root = new PDStructureTreeRoot();
+        var top = new PDStructureElement("Document", root);
+        root.appendKid(top);
+        var p = new PDStructureElement("P", top);
+        p.setPage(page);
+        p.appendKid(0);
+        top.appendKid(p);
+        var tree = new PDNumberTreeNode(PDParentTreeValue.class);
+        COSArray kids = new COSArray();
+        kids.add(p);
+        tree.setNumbers(Map.of(0, new PDParentTreeValue(kids)));
+        root.setParentTree(tree);
+        d.pdf.getDocumentCatalog().setStructureTreeRoot(root);
+        WORDS.put("tagged_partial", List.of("A tree that tags one caption", String.join(" ", body)));
     }
 
     private static void tagged(Doc d) throws IOException {

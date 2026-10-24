@@ -60,8 +60,9 @@ immediately; otherwise the heuristic is the fallback. The heuristic can also be 
 Bookmarks whose titles match no text at all (a layout program's file names, one per spread) are
 navigation only: they build no `outline` structure, and the heuristic takes over — a block reached by
 its position alone is a guess with nothing under it. A title with no word (« 4 », « 1-19 ») is never
-matched as text. Likewise a tag tree that marks no content (a skeleton written with tagging off) builds
-no `pdf` structure.
+matched as text. Likewise a tag tree that marks less than half of the text (a skeleton written with
+tagging off, or a few objects an export happened to tag) builds no `pdf` structure: the page is read as
+untagged.
 
 **The navigation is ground truth, not a lexicon.** A bookmark title is a string *quoted from the page
 itself*, so wherever the geometric segmentation disagrees with it, the navigation wins:

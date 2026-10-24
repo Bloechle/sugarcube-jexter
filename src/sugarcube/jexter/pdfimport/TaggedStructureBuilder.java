@@ -14,12 +14,15 @@ import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDNode;
 import sugarcube.jexter.ocd.model.OCDStructNode;
 import sugarcube.jexter.ocd.model.OCDStructure;
+import sugarcube.jexter.ocd.model.OCDText;
 import sugarcube.jexter.pdfimport.PdfStreamEngine.Mcid;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Ground-truth structure ingestion: builds the {@link OCDStructNode} tree directly
@@ -35,9 +38,10 @@ public final class TaggedStructureBuilder {
 
     private static final COSName STM = COSName.getPDFName("Stm");     // the content stream an MCR's MCID lives in
 
-    /** Lift the tag tree into the {@code pdf} structure — only when it marks some content: a tree that tags
-     *  nothing (a layout program writes its skeleton with tagging off, an empty Document › Sect) is no
-     *  structure, and stood in front of the heuristic with an empty one: every text target came out blank.
+    /** Lift the tag tree into the {@code pdf} structure — only when it marks at least {@link #MIN_COVERAGE} of the
+     *  document's text. A tree that tags nothing (a layout program's skeleton, written with tagging off) or a few
+     *  objects of a long document (what an export happened to mark) is no structure of the text: lifted, it won
+     *  over the heuristic and every text target came out blank, or holding a few captions.
      *  @return whether a {@code pdf} structure was added */
     public static boolean build(OCDDocument doc, PDStructureTreeRoot root, PDDocument pdf,
                                 Map<Integer, Map<Mcid, List<OCDNode>>> mcidByPage) {
@@ -49,15 +53,31 @@ public final class TaggedStructureBuilder {
         OCDStructNode rootStruct = new OCDStructNode(OCDStructNode.Type.DOCUMENT);
         for (Object kid : root.getKids())
             if (kid instanceof PDStructureElement e && t.enter(e, 1)) rootStruct.add(t.element(e, -1, false, 1));
-        if (!marks(rootStruct)) return false;
+        if (coverage(doc, rootStruct) < MIN_COVERAGE) return false;
         doc.addStructure(new OCDStructure("pdf", "PDF (tagged)", OCDStructure.Source.PDF)
                 .by("TaggedStructureBuilder").at(JxClock.millis()).how("PDF/UA tag tree").root(rootStruct));
         return true;
     }
 
-    /** Whether {@code n} or anything under it marks content. */
-    private static boolean marks(OCDStructNode n) {
-        return !n.refs().isEmpty() || n.children().stream().anyMatch(TaggedStructureBuilder::marks);
+    /** The least share of the document's text (in glyphs) a tag tree must mark to be its structure. */
+    static final double MIN_COVERAGE = 0.5;
+
+    /** The share of the document's glyphs that the tree's elements mark (the runs they reach). */
+    private static double coverage(OCDDocument doc, OCDStructNode root) {
+        Set<String> marked = new HashSet<>();
+        collect(root, marked);
+        long all = 0, in = 0;
+        for (int p = 0; p < doc.pageCount(); p++)
+            for (OCDText t : doc.page(p).texts().toList()) {
+                all += t.count();
+                if (marked.contains(p + "/" + t.id())) in += t.count();
+            }
+        return all == 0 ? 0 : (double) in / all;
+    }
+
+    private static void collect(OCDStructNode n, Set<String> marked) {
+        for (OCDStructNode.Ref r : n.refs()) marked.add(r.page() + "/" + r.nodeId());
+        for (OCDStructNode c : n.children()) collect(c, marked);
     }
 
     /** The deepest tag tree read; a real one is a few levels deep. A tree is attacker-controlled input: deeper,

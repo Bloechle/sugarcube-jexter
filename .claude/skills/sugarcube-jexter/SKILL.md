@@ -397,10 +397,12 @@ Analysis (`ocd.analysis`)
 - Bookmarks whose titles match no text (file names) build no `outline` structure: anchored by position
   alone they stood in front of every heading the text has (BOOK, fixture `doc_magazine`). A title with no
   word (« 4 ») is never matched as text: « contains » found it in any paragraph holding the digit.
-- **A tag tree that marks nothing is no structure.** A layout program writes `Document › Sect` with
-  tagging off (no `/MarkInfo /Marked`); taken as PDF/UA it won over the heuristic and EVERY text target of
-  a 56-page report came out empty — no error, a 1-byte Markdown. `TaggedStructureBuilder.build` adds the
-  `pdf` structure only when the tree marks content (TAGS, fixture `tagged_empty`).
+- **A tag tree that marks little of the text is no structure.** A layout program writes `Document › Sect`
+  with tagging off, or tags a few objects of a long document (no `/MarkInfo /Marked` either way); taken as
+  PDF/UA it won over the heuristic and EVERY text target came out empty — no error, a 1-byte Markdown — or
+  held a few captions. `TaggedStructureBuilder.build` adds the `pdf` structure only when the tree marks at
+  least half of the glyphs (`MIN_COVERAGE`; TAGS, fixtures `tagged_empty`, `tagged_partial`, the list
+  `Fixtures.UNTAGGED`). The 14 tagged PDFs of the wild corpus kept their trees.
 - A paragraph cut by a column break joins like one cut by a page break (`continuesBeside`); "full" is the
   paragraph's own shortest wrapped line (ragged text), and a one-line block never runs on (a label, a
   number, a contents entry: two side by side were each "full"). Fixtures `doc_magazine`,
