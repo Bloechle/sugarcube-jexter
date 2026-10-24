@@ -426,6 +426,12 @@ Analysis (`ocd.analysis`)
   gate that only reads words passes a page read row by row across its columns. Three shapes hid the
   columns: a proto-line cut at 1 em of the LARGER run (a newspaper gutter is ≈ 1 em), a photo or box over
   the gutter (only text cuts the order), a title set tight over a two-column list (`XYCut.headed`).
+- A leading is measured where it runs: between the lines of ONE leaf (`Segmenter.bodyLeading`). Measured
+  over a whole press page, three columns on shared baselines gave a median gap of 0, and every block of two
+  lines — a title on two lines first — was cut in two: half of the « two headings in a row » of a run of annual
+  reports. A lone gap is then scaled to its lines' size (a title set solid at 60 pt over 8.5 pt body). The
+  `doc_three_columns` fixture is red on the old measure. What is left of those pairs is a grid of short
+  titles side by side read row by row (a contents page), not a leading.
 - A line-final hyphen is judged by the document's own words (`OCDIndex` `Vocabulary`, mirrored by `ocd.js`
   `keepsHyphen` for read-aloud and search — the bench `hyphens.mjs` fails when they drift): the compound
   written whole keeps it, the word written whole drops it, else lowercase → rejoined, capital → kept; never a

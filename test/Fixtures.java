@@ -91,6 +91,7 @@ final class Fixtures {
         FEATURES.put("doc_page_break", (Whole) Fixtures::pageBreak);
         FEATURES.put("doc_magazine", (Whole) Fixtures::magazine);
         FEATURES.put("doc_columns_page_break", (Whole) Fixtures::columnsPageBreak);
+        FEATURES.put("doc_three_columns", (Whole) Fixtures::threeColumns);
         FEATURES.put("doc_sections", (Whole) Fixtures::sections);
         FEATURES.put("doc_chapters", (Whole) Fixtures::chapters);
         FEATURES.put("doc_chapters_outline", (Whole) Fixtures::chaptersOutline);
@@ -981,7 +982,8 @@ final class Fixtures {
      * text (the page holds a « 4 » all the same). Page 1: a
      * display line set over its photograph, two columns set ragged with a paragraph cut at the foot of the
      * first, the second column's next paragraph set over another photograph, and a note on a translucent
-     * panel (a transparency group at 90 %: baked). Page 2: the article's title and its first paragraph.
+     * panel (a transparency group at 90 %: baked). Page 2: the article's title, two lines set solid at 30 pt over a
+     * body of 10 pt, and its first paragraph.
      */
     private static void magazine(Doc d) throws IOException {
         PDFont f = d.sans();
@@ -1046,7 +1048,8 @@ final class Fixtures {
         try (var cs = d.page(A4)) {
             second = d.pdf.getPage(1);
             text(cs, f, 10, -150 * MM, top, "The neighbour page, past the edge.");
-            text(cs, f, 30, x1, H - 40 * MM, "The archive at night");
+            text(cs, f, 30, x1, H - 30 * MM, "The archive");                   // a title on two lines, set solid
+            text(cs, f, 30, x1, H - 30 * MM - 30, "at night");
             String[] body = { "Every city keeps a memory of paper, and this", "one keeps it in the cellars of a house that",
                               "has seen 4 centuries of clerks come and go and", "will see a few more." };
             for (int i = 0; i < body.length; i++) text(cs, f, 10, x1, H - 55 * MM - i * lead, body[i]);
@@ -1094,6 +1097,32 @@ final class Fixtures {
                         if (!lines[i].isEmpty()) text(cs, f, 10, c == 0 ? x1 : x2, top - i * lead, lines[i]);
                 }
             }
+    }
+
+    /**
+     * A press page: a title on two lines set solid at 28 pt across the page, then three columns of 8 pt on the
+     * same baselines, a paragraph of two lines closing the middle one. Over the whole page the lines of the
+     * three columns share their baselines, so a leading measured across them is 0 — and every block of two
+     * lines, the title first, was judged by it and cut in two.
+     */
+    private static void threeColumns(Doc d) throws IOException {
+        PDFont f = d.sans();
+        float lead = 10, top = H - 70 * MM, w = 58 * MM;
+        WORDS.put("doc_three_columns", List.of(
+            "The night shift of the city archive",
+            "A short paragraph of two lines closes the middle column"));
+        String[][] cols = {
+            { "The archive keeps its doors shut after six,", "but the work goes on in the back rooms where", "the clerks sort the boxes that came in during", "the day, number them and carry them down to", "the cellars on a trolley that squeaks at every", "turn of the long corridor under the hall." },
+            { "Nobody has oiled the trolley for years, and", "the clerks like it that way: they hear each", "other coming from the far end of the cellar.", "",
+              "A short paragraph of two lines closes the", "middle column of the page." },
+            { "At midnight the last box is down, the lamps", "go out one by one, and the night watchman", "takes his first round through the empty", "rooms, his torch on the shelves, his keys", "on a ring at his belt, until the morning", "when the first readers knock at the door." } };
+        try (var cs = d.page(A4)) {
+            text(cs, f, 28, 20 * MM, H - 30 * MM, "The night shift of");
+            text(cs, f, 28, 20 * MM, H - 30 * MM - 28, "the city archive");
+            for (int c = 0; c < 3; c++)
+                for (int i = 0; i < cols[c].length; i++)
+                    if (!cols[c][i].isEmpty()) text(cs, f, 8, 20 * MM + c * (w + 5 * MM), top - i * lead, cols[c][i]);
+        }
     }
 
     private static void metadata(Doc d) throws IOException {

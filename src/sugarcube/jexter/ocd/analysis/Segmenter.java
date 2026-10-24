@@ -123,10 +123,10 @@ public final class Segmenter {
         //    column stands as its own unit for XY-Cut. Ink-only — spaces are not derived yet.
         List<Line> protos = lines(doc, runs);
         if (protos.isEmpty()) return List.of();
-        double bodyLeading = bodyLeading(protos);                      // the region's settled leading
+        double bodySize = JxNum.median(protos.stream().mapToDouble(l -> l.size).toArray());   // ... and the size it is set for
         java.util.IdentityHashMap<Line, JxRect> bnd = new java.util.IdentityHashMap<>();
         for (Line l : protos) bnd.put(l, l.bounds);
-        List<Block> out = new ArrayList<>();
+        List<List<Line>> leaves = new ArrayList<>();
         // ② one SOTA XY-Cut+ over the proto-lines (columns, L-shape, valleys — same engine as reading order)
         for (List<Line> leaf : XYCut.segment(protos, bnd::get)) {
             // ③ rebuild the leaf's clean lines from its runs — band only, no column split (there are no
@@ -139,9 +139,12 @@ public final class Segmenter {
                 if (freeze) Spacer.freeze(doc, cl.runs());        // freeze the line: order + word spaces, sealed once
                 clean.add(line(doc, cl.runs()));                  // Line.text is now built from spaced runs
             }
-            // ④ split the leaf's lines into blocks by typography (size / weight) and leading
-            splitLeaf(doc, clean, page, bodyLeading, out);
+            leaves.add(clean);
         }
+        double bodyLeading = bodyLeading(leaves);                      // the region's settled leading
+        // ④ split each leaf's lines into blocks by typography (size / weight) and leading
+        List<Block> out = new ArrayList<>();
+        for (List<Line> leaf : leaves) splitLeaf(doc, leaf, page, bodyLeading, bodySize, out);
         absorbDust(doc, out);                                        // absorb stray dust blocks into their container
         return out;
     }
@@ -162,7 +165,7 @@ public final class Segmenter {
      *  passed to {@link #interlineSplit}, which recursively cuts it at an abnormal vertical gap — the leading
      *  signal segmented the way XY-Cut segments a column gap, so two same-style paragraphs set off only by a
      *  wider leading are separated, and every sub-paragraph is judged against its own rhythm. */
-    private static void splitLeaf(OCDDocument doc, List<Line> leaf, int page, double bodyLeading, List<Block> out) {
+    private static void splitLeaf(OCDDocument doc, List<Line> leaf, int page, double bodyLeading, double bodySize, List<Block> out) {
         // phase 1 — hard cuts (typography + leading markers) partition the leaf into same-style segments
         List<List<Line>> segments = new ArrayList<>();
         List<Line> seg = null; Line prev = null;
@@ -179,7 +182,7 @@ public final class Segmenter {
         }
         // phase 2 — recursive interline split inside each segment (1-D XY-cut on the leading signal)
         for (List<Line> s : segments)
-            for (List<Line> para : interlineSplit(s, bodyLeading)) {
+            for (List<Line> para : interlineSplit(s, bodyLeading, bodySize)) {
                 Block b = new Block(); b.page = page; b.lines.addAll(para); finish(doc, b); out.add(b);
             }
     }
@@ -190,33 +193,39 @@ public final class Segmenter {
      *  not masked by its own half pulling the reference up); cut if it stands out by more than
      *  {@link #INTERLINE_JUMP} of the line height, then recurse on each side so every sub-paragraph is
      *  judged against its own rhythm. A lone gap (a one-line sub-paragraph has no local rhythm yet) is
-     *  judged against {@code leafLeading}, the leaf-wide median — this keeps the very first gap splittable. */
-    private static List<List<Line>> interlineSplit(List<Line> lines, double leafLeading) {
+     *  judged against {@code leafLeading}, the leaf-wide median — this keeps the very first gap splittable —
+     *  scaled to the lines' own size when they are larger than the body ({@code bodySize}): a title set solid
+     *  at 30 pt over a 10 pt body has a 30 pt leading, and judged against the body's 12 pt it fell in two. */
+    private static List<List<Line>> interlineSplit(List<Line> lines, double leafLeading, double bodySize) {
         int n = lines.size();
         if (n < 2) return List.of(lines);
         double[] gaps = new double[n - 1]; int imax = 0;
         for (int i = 0; i < n - 1; i++) { gaps[i] = lines.get(i).yc - lines.get(i + 1).yc; if (gaps[i] > gaps[imax]) imax = i; }
-        double ref = JxNum.medianExcept(gaps, imax, leafLeading);
         double sz  = Math.max(lines.get(imax).size, lines.get(imax + 1).size);
+        double ref = JxNum.medianExcept(gaps, imax, bodySize > 0 ? leafLeading * Math.max(1, sz / bodySize) : leafLeading);
         if (gaps[imax] - ref <= INTERLINE_JUMP * sz) return List.of(lines);   // homogeneous rhythm → keep whole
         List<List<Line>> r = new ArrayList<>();
-        r.addAll(interlineSplit(new ArrayList<>(lines.subList(0, imax + 1)), leafLeading));
-        r.addAll(interlineSplit(new ArrayList<>(lines.subList(imax + 1, n)), leafLeading));
+        r.addAll(interlineSplit(new ArrayList<>(lines.subList(0, imax + 1)), leafLeading, bodySize));
+        r.addAll(interlineSplit(new ArrayList<>(lines.subList(imax + 1, n)), leafLeading, bodySize));
         return r;
     }
 
 
-    /** The region's settled leading: the median consecutive baseline gap over its lines (top→down).
+    /** The region's settled leading: the median baseline gap between consecutive lines OF ONE LEAF (top→down).
      *  This is the dominant body leading; judging every gap against it — rather than against a running
      *  in-block spacing that only exists from the second gap on — lets an inter-paragraph gap split even
-     *  when it opens a leaf (the common case for short legal sub-paragraphs). 0 for a single line. */
-    private static double bodyLeading(List<Line> lines) {
-        if (lines.size() < 2) return 0;
-        List<Line> s = new ArrayList<>(lines);
-        s.sort((a, b) -> Double.compare(b.yc, a.yc));                 // top→down (Y-up: higher baseline first)
-        double[] g = new double[s.size() - 1];
-        for (int i = 1; i < s.size(); i++) g[i - 1] = s.get(i - 1).yc - s.get(i).yc;
-        return JxNum.median(g);
+     *  when it opens a leaf (the common case for short legal sub-paragraphs). Measured inside the leaves: over
+     *  the whole region, lines of side-by-side columns share their baselines, the median gap came out 0, and
+     *  every two-line block was cut in two — a title of two lines read as two headings. 0 when no leaf has
+     *  two lines. */
+    private static double bodyLeading(List<List<Line>> leaves) {
+        List<Double> g = new ArrayList<>();
+        for (List<Line> leaf : leaves)
+            for (int i = 1; i < leaf.size(); i++) {
+                double d = leaf.get(i - 1).yc - leaf.get(i).yc;
+                if (d > 0) g.add(d);
+            }
+        return g.isEmpty() ? 0 : JxNum.median(g.stream().mapToDouble(Double::doubleValue).toArray());
     }
     /** Absorb "dust" blocks — a stray accent, mark or fragment isolated as its own tiny block — into the
      *  smallest block whose bounds contain them. Guarded: never folds an enumerator lead (list markers

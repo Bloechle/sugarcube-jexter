@@ -473,6 +473,7 @@ public final class Gates {
             String md = sugarcube.jexter.write.MarkdownWriter.toMarkdown(model);
             if (md.lines().noneMatch(l -> l.contains("keeps the night watch over the shelves"))) bad.add("the paragraph the column break cut is still two");
             if (md.lines().anyMatch(l -> l.contains("comes.") && l.contains("The reading room"))) bad.add("an indented paragraph was joined to the one before");
+            if (md.lines().noneMatch(l -> l.startsWith("#") && l.contains("The archive at night"))) bad.add("a title set on two lines is two headings");
         }
         if (current.equals("doc_page_break.pdf")) {                  // a bare folio, and a paragraph the press cut
             String md = sugarcube.jexter.write.MarkdownWriter.toMarkdown(model);

@@ -409,7 +409,11 @@ A geometric leaf is a tight unit (the whitespace has already done its work), so 
 are typographic and vertical. Within a leaf, a new block opens on a **size jump** (≥ 1.20×), a **weight
 (bold) change**, an **enumerator lead** (a >1 em head-gap after a leading token — `a.`, `b.`, `Art. N`)
 or a **raised lead-number** (an alinéa/footnote ¹²³); then a recursive **interline** split cuts each
-segment at an abnormal leading gap. Size and weight are the discriminants — **font name is deliberately
+segment at an abnormal leading gap. A segment of two lines has one gap and no rhythm of its own: it is
+judged against the region's leading, measured between the lines OF EACH LEAF (over the whole region the
+lines of side-by-side columns share their baselines, the median gap came out 0, and every two-line block —
+a title on two lines first — was cut in two), scaled up to the lines' size when they are larger than the
+body (a title set solid at 60 pt over an 8.5 pt body has a 60 pt leading). Size and weight are the discriminants — **font name is deliberately
 not a cut signal** (an italic emphasis word or a subset-font glyph mid-sentence would over-segment a
 paragraph). This is what separates a heading line from the body it sits against, so `FontProfile` can
 label each. Over-segmentation is the safe bias: a marker opens its own block, and because every line was
