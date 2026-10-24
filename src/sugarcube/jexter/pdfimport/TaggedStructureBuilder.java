@@ -35,8 +35,12 @@ public final class TaggedStructureBuilder {
 
     private static final COSName STM = COSName.getPDFName("Stm");     // the content stream an MCR's MCID lives in
 
-    public static void build(OCDDocument doc, PDStructureTreeRoot root, PDDocument pdf,
-                             Map<Integer, Map<Mcid, List<OCDNode>>> mcidByPage) {
+    /** Lift the tag tree into the {@code pdf} structure — only when it marks some content: a tree that tags
+     *  nothing (a layout program writes its skeleton with tagging off, an empty Document › Sect) is no
+     *  structure, and stood in front of the heuristic with an empty one: every text target came out blank.
+     *  @return whether a {@code pdf} structure was added */
+    public static boolean build(OCDDocument doc, PDStructureTreeRoot root, PDDocument pdf,
+                                Map<Integer, Map<Mcid, List<OCDNode>>> mcidByPage) {
         Map<COSDictionary, Integer> pageIndex = new HashMap<>();
         int i = 0;
         for (PDPage p : pdf.getPages()) pageIndex.put(p.getCOSObject(), i++);
@@ -45,8 +49,15 @@ public final class TaggedStructureBuilder {
         OCDStructNode rootStruct = new OCDStructNode(OCDStructNode.Type.DOCUMENT);
         for (Object kid : root.getKids())
             if (kid instanceof PDStructureElement e && t.enter(e, 1)) rootStruct.add(t.element(e, -1, false, 1));
+        if (!marks(rootStruct)) return false;
         doc.addStructure(new OCDStructure("pdf", "PDF (tagged)", OCDStructure.Source.PDF)
                 .by("TaggedStructureBuilder").at(JxClock.millis()).how("PDF/UA tag tree").root(rootStruct));
+        return true;
+    }
+
+    /** Whether {@code n} or anything under it marks content. */
+    private static boolean marks(OCDStructNode n) {
+        return !n.refs().isEmpty() || n.children().stream().anyMatch(TaggedStructureBuilder::marks);
     }
 
     /** The deepest tag tree read; a real one is a few levels deep. A tree is attacker-controlled input: deeper,

@@ -96,6 +96,7 @@ final class Fixtures {
         FEATURES.put("doc_chapters_outline", (Whole) Fixtures::chaptersOutline);
         FEATURES.put("rich", (Whole) Fixtures::rich);
         FEATURES.put("tagged", (Whole) Fixtures::tagged);
+        FEATURES.put("tagged_empty", (Whole) Fixtures::taggedEmpty);
     }
 
     /** Writes every fixture into {@code dir}; returns their paths in a stable order. */
@@ -971,7 +972,8 @@ final class Fixtures {
 
     /**
      * A magazine spread, as a layout program exports it: each page carries the whole spread, the other half
-     * beyond its edge; the bookmarks are the layout's file names, naming nothing in the text. Page 1: a
+     * beyond its edge; the bookmarks are the layout's file names and spread numbers, naming nothing in the
+     * text (the page holds a « 4 » all the same). Page 1: a
      * display line set over its photograph, two columns set ragged with a paragraph cut at the foot of the
      * first, the second column's next paragraph set over another photograph, and a note on a translucent
      * panel (a transparency group at 90 %: baked). Page 2: the article's title and its first paragraph.
@@ -1041,7 +1043,7 @@ final class Fixtures {
             text(cs, f, 10, -150 * MM, top, "The neighbour page, past the edge.");
             text(cs, f, 30, x1, H - 40 * MM, "The archive at night");
             String[] body = { "Every city keeps a memory of paper, and this", "one keeps it in the cellars of a house that",
-                              "has seen four centuries of clerks come and go", "and will see a few more." };
+                              "has seen 4 centuries of clerks come and go and", "will see a few more." };
             for (int i = 0; i < body.length; i++) text(cs, f, 10, x1, H - 55 * MM - i * lead, body[i]);
             // a lead painted in the middle of a mosaic of tiles that runs all around it: one stretch of paint
             String[] lead2 = { "A lead set in the middle of a mosaic of", "coloured tiles is still the article's text,",
@@ -1061,7 +1063,7 @@ final class Fixtures {
                 }
             }
         }
-        outline(d.pdf, new Object[] { "MAG_p1_layout_v3", first }, new Object[] { "MAG_p2_layout_v3", second });
+        outline(d.pdf, new Object[] { "MAG_p1_layout_v3", first }, new Object[] { "4", second });   // file names, a spread's number
     }
 
     /**
@@ -1185,6 +1187,26 @@ final class Fixtures {
      * The case that matters is the last element: ONE P holding TWO MCIDs, a paragraph split over two
      * lines. A builder mapping one element per block passes every easy tag and still splits it.
      */
+    /**
+     * A tag tree that tags nothing: a Document holding one empty Sect and no marked content, as a layout
+     * program writes it with tagging switched off (the catalog's /MarkInfo does not say /Marked). The
+     * text is the document's, untagged — read by the heuristic like any untagged PDF.
+     */
+    private static void taggedEmpty(Doc d) throws IOException {
+        try (var cs = d.page(A4)) {
+            text(cs, d.sans(), 18, 20 * MM, H - 30 * MM, "A tree that tags nothing");
+            text(cs, d.sans(), 10, 20 * MM, H - 42 * MM, "The words on this page are marked by no element of the tag tree,");
+            text(cs, d.sans(), 10, 20 * MM, H - 47 * MM, "so they are read as the text of an untagged page.");
+        }
+        var root = new PDStructureTreeRoot();
+        var top = new PDStructureElement("Document", root);
+        root.appendKid(top);
+        top.appendKid(new PDStructureElement("Sect", top));
+        d.pdf.getDocumentCatalog().setStructureTreeRoot(root);
+        WORDS.put("tagged_empty", List.of("A tree that tags nothing",
+            "The words on this page are marked by no element of the tag tree, so they are read as the text of an untagged page."));
+    }
+
     private static void tagged(Doc d) throws IOException {
         PDFont font = new PDType1Font(Standard14Fonts.FontName.HELVETICA), bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
         Object[][] blocks = { { "H1", bold, 16f, 340f, "Titre principal du document" },

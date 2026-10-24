@@ -127,8 +127,7 @@ public final class PdfImporter extends PdfStreamEngine {
             // the marked runs their ids (it is the analysis' own first step, idempotent).
             if (tagged) {
                 Cleaner.clean(doc);
-                TaggedStructureBuilder.build(doc, st, pdf, mcidByPage);
-                doc.defaultStructureId("pdf");
+                if (TaggedStructureBuilder.build(doc, st, pdf, mcidByPage)) doc.defaultStructureId("pdf");
             }
             Analysis.run(doc, opts);
         }

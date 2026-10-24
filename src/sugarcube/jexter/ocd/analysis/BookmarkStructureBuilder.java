@@ -100,7 +100,9 @@ public final class BookmarkStructureBuilder {
      *  has no blocks (the heading is still emitted, unanchored, to keep the tree shape). */
     private static Block anchor(OCDOutline o, List<Block> blocks, int[] stats) {
         if (blocks == null || blocks.isEmpty() || !o.hasDestination()) return null;
-        String want = OutlineAligner.norm(o.title());
+        // A title with no word ("4", "1-19": a layout program numbering its spreads) names nothing: matched as
+        // text it "anchored" in any paragraph holding that digit, and that paragraph became the only heading.
+        String want = StructureBuilder.hasAlphaWord(o.title()) ? OutlineAligner.norm(o.title()) : "";
         blocks = blocks.stream().filter(b -> !StructureBuilder.isFurniture(b)).toList();   // a running head quoting the title is not it
         if (blocks.isEmpty()) return null;
         Block best = null; double bestDist = Double.MAX_VALUE;

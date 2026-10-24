@@ -270,5 +270,5 @@ public final class StructureBuilder {
         return el;
     }
 
-    private static boolean hasAlphaWord(String s) { return s != null && s.matches(".*\\p{L}{2,}.*"); }
+    static boolean hasAlphaWord(String s) { return s != null && s.matches(".*\\p{L}{2,}.*"); }
 }

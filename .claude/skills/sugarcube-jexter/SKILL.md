@@ -395,7 +395,12 @@ Analysis (`ocd.analysis`)
   words lost against `pdftotext` per page, not on figure counts: the counts looked fine while whole
   articles were labels. Decorative mosaics still come out as dozens of small FIGUREs — open.
 - Bookmarks whose titles match no text (file names) build no `outline` structure: anchored by position
-  alone they stood in front of every heading the text has (BOOK, fixture `doc_magazine`).
+  alone they stood in front of every heading the text has (BOOK, fixture `doc_magazine`). A title with no
+  word (« 4 ») is never matched as text: « contains » found it in any paragraph holding the digit.
+- **A tag tree that marks nothing is no structure.** A layout program writes `Document › Sect` with
+  tagging off (no `/MarkInfo /Marked`); taken as PDF/UA it won over the heuristic and EVERY text target of
+  a 56-page report came out empty — no error, a 1-byte Markdown. `TaggedStructureBuilder.build` adds the
+  `pdf` structure only when the tree marks content (TAGS, fixture `tagged_empty`).
 - A paragraph cut by a column break joins like one cut by a page break (`continuesBeside`); "full" is the
   paragraph's own shortest wrapped line (ragged text), and a one-line block never runs on (a label, a
   number, a contents entry: two side by side were each "full"). Fixtures `doc_magazine`,

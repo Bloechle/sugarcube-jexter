@@ -7,7 +7,8 @@
 //             written wrong and read back wrong the same way; this is the gate that sees it.
 //   TIERS     readMembers / readPage / pageCount give what read gives, page for page.
 //   NAV       every bookmark and internal link lands where PDFBox resolves it (names and GoTo included).
-//   TAGS      a tagged PDF's tree lands as the author wrote it, by STANDARD type, no content claimed twice.
+//   TAGS      a tagged PDF's tree lands as the author wrote it, by STANDARD type, no content claimed twice —
+//             and a tree that marks no content (a layout program's skeleton) is no structure at all.
 //   PIXELS    the model paints what PDFBox paints (< 1 % of a page off), and the direct renderer agrees
 //             with the model's render (< 0.25 %): a gap there is lost in the model, not in the painting.
 //   FURNITURE running heads and folios stay on the page and out of every structure the writers read — and a
@@ -502,6 +503,8 @@ public final class Gates {
             var root = src.getDocumentCatalog().getStructureTreeRoot();
             if (root == null || root.getKids().isEmpty()) return bad;
             OCDStructure pdfTree = model.structureById("pdf");
+            if (!marksContent(root))                                    // a tree that tags nothing is no structure
+                return pdfTree == null ? bad : List.of("a tag tree marking no content became the \"pdf\" structure");
             if (pdfTree == null) return List.of("tagged, but no \"pdf\" structure");
             List<String> want = new ArrayList<>(), got = new ArrayList<>();
             for (Object k : root.getKids()) if (k instanceof PDStructureElement e) tokens(e, want);
@@ -526,6 +529,16 @@ public final class Gates {
 
     /** Every heading reads as its words, whatever wraps them: a heading whose text sits in a Div (as Typst
      *  writes them) read as nothing, and the contents of every EPUB said « Heading 1 ». */
+    /** Whether the tag tree marks any content: an MCID, a marked-content or an object reference below it. */
+    private static boolean marksContent(org.apache.pdfbox.pdmodel.documentinterchange.logicalstructure.PDStructureNode n) {
+        for (Object k : n.getKids())
+            if (k instanceof Integer || k instanceof org.apache.pdfbox.pdmodel.documentinterchange.markedcontent.PDMarkedContent
+                    || k instanceof org.apache.pdfbox.pdmodel.documentinterchange.logicalstructure.PDMarkedContentReference
+                    || k instanceof org.apache.pdfbox.pdmodel.documentinterchange.logicalstructure.PDObjectReference
+                    || k instanceof org.apache.pdfbox.pdmodel.documentinterchange.logicalstructure.PDStructureNode c && marksContent(c)) return true;
+        return false;
+    }
+
     private static void headingWords(OCDStructNode n, OCDIndex ix, List<String> bad) {
         if (n.type() == OCDStructNode.Type.HEADING && ix.text(n).isBlank()) bad.add("an H" + n.level() + " reads as nothing");
         for (OCDStructNode c : n.children()) headingWords(c, ix, bad);
