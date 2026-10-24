@@ -32,6 +32,7 @@
 //   FIGURES   every picture the body shows is a FIGURE of the structure the writers read (a tagged PDF's
 //             own tree aside; a panel holding copy is that copy's, no figure), and the reflow book draws each one: a <figure> always holds its <img> —
 //             once, 81 of 83 documents with pictures lost every one in the reflowable EPUB.
+//             The Markdown marks each FIGURE as docling does, <!-- image -->, never a link to nothing (](#)).
 //   BOOK      the reflow book is cut in chapters that stand: none is only a heading, none too short to
 //             read unless it is the whole book, and its table of contents reaches every heading, nested
 //             as the headings are — once a stamp in the margin and half of a wrapped title were chapters.
@@ -767,6 +768,10 @@ public final class Gates {
         }
         if (drawn != open) bad.add((open - drawn) + " of " + open + " <figure> without a picture in the reflow book");
         if (s != null && !"pdf".equals(s.id()) && open < figs) bad.add(figs + " FIGUREs, " + open + " drawn in the reflow book");
+        // the Markdown has no picture to link to: a FIGURE is docling's placeholder, never a link that leads nowhere
+        String md = sugarcube.jexter.write.MarkdownWriter.toMarkdown(model);
+        if (md.contains("](#)")) bad.add("the Markdown links a figure to nothing: ](#)");
+        if (figs > 0 && !md.contains("<!-- image -->")) bad.add(figs + " FIGUREs, no <!-- image --> in the Markdown");
         return bad;
     }
 

@@ -17,7 +17,8 @@ import java.util.List;
  * RAG ingestion — the content view, presentation geometry discarded. The logical
  * {@link OCDStructNode} tree is walked in reading order:
  * HEADING→ATX {@code #…}, PARAGRAPH→prose, QUOTE→{@code >}, LIST/ITEM→{@code -},
- * TABLE→GitHub-flavored pipe table, CODE→fenced block, CAPTION→italic, NOTE→quote.
+ * TABLE→GitHub-flavored pipe table, CODE→fenced block, CAPTION→italic, NOTE→quote,
+ * FIGURE→docling's {@code <!-- image -->} (its alt text, when the author gave one, as an italic line).
  *
  * <p>No bounding boxes or ids are emitted: this is the readable view a model consumes
  * directly. When grounding is needed (cite a region, highlight on the page), use the
@@ -66,8 +67,10 @@ public final class MarkdownWriter {
                 case LIST -> { list(s); }
                 case ITEM -> { String t = ListMarker.strip(text(s)); if (!t.isEmpty()) block("- " + t); }   // stray item
                 case FIGURE -> {
+                    // one file, no picture to link to: docling's placeholder, and the author's description as words
+                    block("<!-- image -->");
                     String alt = s.alt();
-                    block("![" + (alt == null || alt.isBlank() ? "figure" : alt.strip()) + "](#)");
+                    if (alt != null && !alt.isBlank()) block("*Image: " + alt.strip().replace("\n", " ") + "*");
                     for (OCDStructNode c : s.children()) walk(c);    // caption (if any) follows the placeholder
                 }
                 case TABLE -> { table(s); }
