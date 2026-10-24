@@ -845,18 +845,19 @@ public final class Gates {
         edits.put("badpath", s -> s.replaceFirst("(<path id=\"[^\"]+\"[^>]*? d=\"M[^\"]*)\"", "$1 L1 1#\""));   // once looped forever
         edits.put("deepsvg", s -> last(s, "</svg>", "<g>".repeat(20_000) + "</g>".repeat(20_000) + "</svg>"));   // once a StackOverflowError
 
-        Set<String> optional = Set.of("badclip", "badpath");
+        boolean text = page.contains("data-font=\"");                     // a page with no text has no font to break
+        Set<String> optional = text ? Set.of("badclip", "badpath") : Set.of("badclip", "badpath", "badfont");
         List<String> bad = new ArrayList<>();
         var variants = new LinkedHashMap<String, byte[]>();
         for (var e : edits.entrySet()) {
             String edited = e.getValue().apply(page);
             if (edited.equals(page)) {                 // a payload that hits nothing tests nothing
                 if (!optional.contains(e.getKey())) bad.add(e.getKey() + ": the payload found nothing to hit");
-                continue;                              // a page with no clip or no path has none to break
+                continue;                              // a page with no clip, path or text has none to break
             }
             variants.put(e.getKey(), rezip(good, (n, b) -> n.endsWith(PAGE) ? edited.getBytes(StandardCharsets.UTF_8) : b));
         }
-        variants.put("nofonts", rezip(good, (n, b) -> n.endsWith(FONTS) ? null : b));
+        if (text) variants.put("nofonts", rezip(good, (n, b) -> n.endsWith(FONTS) ? null : b));
         variants.put("deepjson", rezip(good, (n, b) -> n.endsWith("meta.json")                       // once a StackOverflowError
                 ? ("[".repeat(100_000) + "]".repeat(100_000)).getBytes(StandardCharsets.UTF_8) : b));
         variants.put("trunc", Arrays.copyOf(good, good.length / 2));

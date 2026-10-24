@@ -402,7 +402,8 @@ Analysis (`ocd.analysis`)
   PDF/UA it won over the heuristic and EVERY text target came out empty — no error, a 1-byte Markdown — or
   held a few captions. `TaggedStructureBuilder.build` adds the `pdf` structure only when the tree marks at
   least half of the glyphs (`MIN_COVERAGE`; TAGS, fixtures `tagged_empty`, `tagged_partial`, the list
-  `Fixtures.UNTAGGED`). The 14 tagged PDFs of the wild corpus kept their trees.
+  `Fixtures.UNTAGGED`); a document with no text at all keeps a tree that marks anything (`tagged_figure`).
+  The 14 tagged PDFs of the wild corpus kept their trees.
 - A paragraph cut by a column break joins like one cut by a page break (`continuesBeside`); "full" is the
   paragraph's own shortest wrapped line (ragged text), and a one-line block never runs on (a label, a
   number, a contents entry: two side by side were each "full"). Fixtures `doc_magazine`,

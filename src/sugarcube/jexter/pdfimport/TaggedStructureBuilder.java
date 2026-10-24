@@ -62,7 +62,8 @@ public final class TaggedStructureBuilder {
     /** The least share of the document's text (in glyphs) a tag tree must mark to be its structure. */
     static final double MIN_COVERAGE = 0.5;
 
-    /** The share of the document's glyphs that the tree's elements mark (the runs they reach). */
+    /** The share of the document's glyphs that the tree's elements mark (the runs they reach). A document with
+     *  no text at all (tagged figures only) has no glyph to weigh: any mark makes the tree its structure. */
     private static double coverage(OCDDocument doc, OCDStructNode root) {
         Set<String> marked = new HashSet<>();
         collect(root, marked);
@@ -72,7 +73,7 @@ public final class TaggedStructureBuilder {
                 all += t.count();
                 if (marked.contains(p + "/" + t.id())) in += t.count();
             }
-        return all == 0 ? 0 : (double) in / all;
+        return all == 0 ? (marked.isEmpty() ? 0 : 1) : (double) in / all;
     }
 
     private static void collect(OCDStructNode n, Set<String> marked) {

@@ -98,6 +98,7 @@ final class Fixtures {
         FEATURES.put("tagged", (Whole) Fixtures::tagged);
         FEATURES.put("tagged_empty", (Whole) Fixtures::taggedEmpty);
         FEATURES.put("tagged_partial", (Whole) Fixtures::taggedPartial);
+        FEATURES.put("tagged_figure", (Whole) Fixtures::taggedFigure);
     }
 
     /** Writes every fixture into {@code dir}; returns their paths in a stable order. */
@@ -1244,6 +1245,33 @@ final class Fixtures {
         root.setParentTree(tree);
         d.pdf.getDocumentCatalog().setStructureTreeRoot(root);
         WORDS.put("tagged_partial", List.of("A tree that tags one caption", String.join(" ", body)));
+    }
+
+    /** A tagged document with no text at all: one picture, marked as a Figure — its tree is its structure. */
+    private static void taggedFigure(Doc d) throws IOException {
+        try (var cs = d.page(A4)) {
+            COSDictionary props = new COSDictionary();
+            props.setInt(COSName.MCID, 0);
+            cs.beginMarkedContent(COSName.getPDFName("Figure"), PDPropertyList.create(props));
+            cs.drawImage(JPEGFactory.createFromImage(d.pdf, gradient(256, 160), 0.88f), 20 * MM, H - 120 * MM, 120 * MM, 75 * MM);
+            cs.endMarkedContent();
+        }
+        PDPage page = d.pdf.getPage(0);
+        page.setStructParents(0);
+        var root = new PDStructureTreeRoot();
+        var top = new PDStructureElement("Document", root);
+        root.appendKid(top);
+        var fig = new PDStructureElement("Figure", top);
+        fig.setPage(page);
+        fig.setAlternateDescription("A gradient");
+        fig.appendKid(0);
+        top.appendKid(fig);
+        var tree = new PDNumberTreeNode(PDParentTreeValue.class);
+        COSArray kids = new COSArray();
+        kids.add(fig);
+        tree.setNumbers(Map.of(0, new PDParentTreeValue(kids)));
+        root.setParentTree(tree);
+        d.pdf.getDocumentCatalog().setStructureTreeRoot(root);
     }
 
     private static void tagged(Doc d) throws IOException {
