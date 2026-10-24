@@ -95,9 +95,10 @@ public final class GraphicClusterer {
                     if (nearAny(runPaths, mp) || inside(bbox, mp.bounds())) { run.add(mp); runPaths.add(mp); bbox = bbox.union(mp.bounds()); j++; continue; }
                     break;                                          // a far path opens the next run
                 }
-                JxRect mb = m.bounds();                             // text / image: engulf only when it lies inside the drawing
-                if (mb != null && !mb.isEmpty() && bbox.contains(mb.x() + mb.width() / 2, mb.y() + mb.height() / 2)) { run.add(m); j++; continue; }
-                break;                                              // body content outside the drawing → stop
+                JxRect mb = m.bounds();                             // text / image: engulf only when it lies inside the drawing,
+                if (!Figures.isCopy(m) && mb != null && !mb.isEmpty()   // and never a column of copy (a lead set in a mosaic)
+                        && bbox.contains(mb.x() + mb.width() / 2, mb.y() + mb.height() / 2)) { run.add(m); j++; continue; }
+                break;                                              // body content → stop
             }
 
             if (runPaths.size() >= MIN_PATHS && isSignificant(runPaths)) {

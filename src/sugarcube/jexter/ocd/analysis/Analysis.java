@@ -68,7 +68,8 @@ public final class Analysis {
      *   <li><b>PDF/UA tag tree</b> ({@code pdfTagged}) — the {@code pdf} structure wins; built by the importer.</li>
      *   <li>else <b>bookmarks</b> — {@link BookmarkStructureBuilder} resolves them <i>immediately</i> into a
      *       block-referenced {@code outline} structure (so a non-tagged but bookmarked PDF still has a real
-     *       structure, not just navigation).</li>
+     *       structure, not just navigation) — unless no bookmark's title is in the text: then they are
+     *       navigation only, and the heuristic builds the structure.</li>
      *   <li>else <b>neither</b> — the heuristic {@link StructureBuilder} is the fallback.</li>
      * </ol>
      * {@link ConvertOptions#GENERATE_OUTLINE} forces the heuristic on top, <b>in parallel</b>, without removing
@@ -77,7 +78,7 @@ public final class Analysis {
     private static void buildOutline(OCDDocument doc, ConvertOptions opts, boolean pdfTagged) {
         boolean bookmarks = !doc.outline().isEmpty();
         if (!pdfTagged && bookmarks) BookmarkStructureBuilder.build(doc);            // resolve nav → real structure, now
-        boolean hasNative = pdfTagged || bookmarks;
+        boolean hasNative = pdfTagged || doc.structureById("outline") != null;   // bookmarks naming nothing in the text build none
         if (opts.get(ConvertOptions.GENERATE_OUTLINE) || !hasNative)
             StructureBuilder.build(doc);                                          // forced parallel, or the only source
     }

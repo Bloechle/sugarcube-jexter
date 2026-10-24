@@ -796,7 +796,7 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         // A run clipped to nothing is invisible, exactly like a path or an image (see emit): the
         // decision belongs here too, because a run is committed by its own route and would
         // otherwise be the one kind of node that survives a clip with no area.
-        if (run != null && !run.glyphs().isEmpty() && !runClippedOut) {
+        if (run != null && !run.glyphs().isEmpty() && !runClippedOut && !offPage(run)) {
             run.z(z++);   // paint order; id minted later by IdStamper (clipId captured at startRun)
             addNode(run);
         }
@@ -845,12 +845,24 @@ public abstract class PdfStreamEngine extends PDFGraphicsStreamEngine {
         // shows it small and framed. Not emitted is not a loss: it was already invisible.
         if (clippedOut()) { flushText(); return; }
         flushText();   // commit any open text run first (z-order)
+        if (offPage(n)) return;
         n.z(z++);   // paint order; id minted later by IdStamper
         String cid = currentClipId();
         if (cid != null) n.clipId(cid);
         String name = blendName(getGraphicsState().getBlendMode());
         if (name != null) n.blend(name);
         addNode(n);
+    }
+
+    /**
+     * True when the node's ink lies wholly outside the MEDIA box: no crop can ever show it, every engine paints
+     * nothing there. A layout program exporting spreads writes the whole double page into each of its two
+     * pages, the neighbour's half beyond the edge — kept, a table of contents read twice in every text
+     * target, and pdftotext once. The media box, not the crop box: a page re-cropped later shows what it holds.
+     */
+    private boolean offPage(OCDNode n) {
+        JxRect ink = n.ink();
+        return !ink.isEmpty() && page.mediaBox().intersection(ink).isEmpty();
     }
 
     /** True when the live clip has no area at all: whatever would be painted is already invisible. */

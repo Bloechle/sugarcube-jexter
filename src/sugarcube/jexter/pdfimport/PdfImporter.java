@@ -22,6 +22,7 @@ import sugarcube.jexter.ocd.model.OCDLayerContent;
 import sugarcube.jexter.ocd.model.OCDImage;
 import sugarcube.jexter.ocd.model.OCDNode;
 import sugarcube.jexter.ocd.model.OCDPage;
+import sugarcube.jexter.ocd.model.OCDText;
 import sugarcube.jexter.ocd.render.OCDRenderer;
 
 import java.awt.image.BufferedImage;
@@ -40,8 +41,8 @@ import java.util.Map;
  * Each extracted node is stored on the page (or into the open group), and transparency groups are
  * modelled as an {@link OCDGroup} tree carrying the blend/alpha live at the {@code Do}. On close, a
  * multi-child group that actually composites (alpha &lt; 1) is BAKED into a single image composited
- * once (so the blend/alpha is applied once, not folded onto every overlapping leaf); everything else
- * stays a faithful vector group.
+ * once (so the blend/alpha is applied once, not folded onto every overlapping leaf), its words kept
+ * over the image as invisible text; everything else stays a faithful vector group.
  *
  * @see PdfRenderer the sibling that renders straight to a raster instead of building a model
  */
@@ -247,13 +248,21 @@ public final class PdfImporter extends PdfStreamEngine {
         return pad <= 0 ? b : b.inflate(pad, pad);
     }
 
-    /** Emit a composited image for group {@code g} carrying its blend/alpha (Y-up unit-square map). */
+    /** Emit a composited image for group {@code g} carrying its blend/alpha (Y-up unit-square map), then the
+     *  group's words as invisible text over it: the image holds their ink, the runs keep them readable —
+     *  invisible text is text, as for a glyph under a soft mask. A column of copy set over a translucent
+     *  highlight was baked whole and the article had nothing left to read in any text target. */
     private void emitBaked(OCDGroup g, JxRect crop, BufferedImage img) throws IOException {
         OCDImage n = placed(img, new java.awt.geom.Rectangle2D.Double(crop.x(), crop.y(), crop.width(), crop.height()));
         n.id(g.id()).z(g.z());
         if (g.hasBlend()) n.blend(g.blend());
         if (g.alpha() < 1f) n.alpha(g.alpha());
         addNode(n);
+        g.stream().filter(c -> c instanceof OCDText).map(c -> (OCDText) c).forEach(t -> {
+            if (!t.isInvisible()) t.renderMode(t.renderMode() >= OCDText.FILL_CLIP ? OCDText.CLIP : OCDText.INVISIBLE);
+            t.blend(null);
+            addNode(t);
+        });
     }
 
     /** Composite a group's content ONCE into an image: render its children isolated (transparent

@@ -53,7 +53,11 @@ public final class BookmarkStructureBuilder {
         int[] stats = new int[3];                                                        // exact · fuzzy · y-only
         Map<Block, OCDStructNode> anchored = new IdentityHashMap<>();                        // anchor block → its HEADING
         for (OCDOutline o : doc.outline()) walk(o, 1, root, byPage, stats, anchored);
-        if (root.children().isEmpty()) return;
+        // Bookmarks whose titles match no text name nothing in it (a layout program's file names, one per
+        // spread): navigation, not a structure — a block they reach only by its position is a guess with
+        // nothing under it. Built, they were a skeleton of headings over one flat run of paragraphs, and stood
+        // in front of the headings the text does have.
+        if (root.children().isEmpty() || stats[0] + stats[1] == 0) return;
 
         // The skeleton alone would lose the body: writers project THIS tree and nothing else.
         // Walk the blocks in reading order; an anchor block IS its heading (switch container),

@@ -57,6 +57,9 @@ a consumer, or Prism, chooses which to trust:
 
 `Analysis.buildOutline()` picks: a tagged PDF keeps its own tree; otherwise bookmarks are resolved
 immediately; otherwise the heuristic is the fallback. The heuristic can also be forced in parallel.
+Bookmarks whose titles match no text at all (a layout program's file names, one per spread) are
+navigation only: they build no `outline` structure, and the heuristic takes over — a block reached by
+its position alone is a guess with nothing under it.
 
 **The navigation is ground truth, not a lexicon.** A bookmark title is a string *quoted from the page
 itself*, so wherever the geometric segmentation disagrees with it, the navigation wins:
@@ -239,7 +242,8 @@ line with `Liner` and has `Spacer.freeze` seal it (reading order + word-space se
 
 Grows `OCDGraphic` entities from vector paths by single-linkage, accreting nearby paths and contained
 text/images by bounding-box containment and contiguous paint order. It runs **before** structure so a
-later `FIGURE` can wrap a finished graphic.
+later `FIGURE` can wrap a finished graphic. A column of copy (`Figures.isCopy`: body text of four lines
+or more) is never engulfed — it ends the run: a lead set in a mosaic of tiles left every text target.
 
 Crucially, graphics are clustered **separately** from the text cut — not fed into the same XY-Cut.
 This is a measured architectural fact, not a convenience (see *Why graphics are handled apart*).
@@ -259,7 +263,12 @@ only what pure typography and geometry can establish.
   document-wide style alphabet — ranks its signature (half-point size + whole-block bold) as an
   *elevated, recurring* style, and the block is short (≤ 2 lines, ≤ 160 chars: a heading is a label,
   not a flowing paragraph). No local size-ratio guess, no enumerator regex.
-- Everything else is a **PARAGRAPH**.
+- Everything else is a **PARAGRAPH** — except a block that carries on the paragraph a page or a column
+  break cut (`StructureBuilder.Paragraphs`), which joins it. Geometry decides: the paragraph's last line
+  is full by its own measure (the shortest line it wrapped, never under ¾ of the column: ragged text
+  wraps short), it wrapped at least once, and the block's first line is not indented; the block is the
+  first text of the next page, in the same column or one as wide, or opens the next column of the same
+  page (to the right, less than a column away, starting higher, in the same size).
 
 Recurrence is the load-bearing discriminant: a one-off large decoration or a figure's internal label
 never becomes a heading because its style does not recur.
@@ -281,7 +290,9 @@ at the place of the first thing it holds in reading order. Pure geometry, no lex
   one it may be a caption and stays text; last, pieces whose joint zone holds no body text at all are
   one drawing (a figure on a page of its own, a chart and its legend).
 - **Body or label**: text of 100 characters or more is body copy — unless at least half of what its
-  lines span lies on the drawing (code set on coloured chips is a label).
+  lines span lies on the drawing (code set on coloured chips is a label). A column of copy (four lines or
+  more) stays body whatever lies under it — a magazine sets its articles over photographs — and text set
+  larger than the document's body is a title, never a label.
 - Labels within the drawing (its ink, or overlapping it) join the FIGURE; a paragraph wholly inside is
   replaced by it. The writers draw a FIGURE of several nodes as the page paints that region
   (`OCDRenderer.renderRegion`: the shapes and pictures there, its own labels, no other text).

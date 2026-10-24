@@ -2,6 +2,7 @@ package sugarcube.jexter.ocd.analysis;
 
 import sugarcube.jexter.core.JxClock;
 import sugarcube.jexter.core.JxRect;
+import sugarcube.jexter.ocd.model.OCDBreak;
 import sugarcube.jexter.ocd.model.OCDDocument;
 import sugarcube.jexter.ocd.model.OCDGraphic;
 import sugarcube.jexter.ocd.model.OCDGroup;
@@ -36,11 +37,14 @@ import java.util.Map;
  * close and the box they would make holds no BODY text; the lines and specks that bind a drawing (an
  * arrow, an axis, a small icon) join a figure but never make one; a label touching two pieces binds them
  * (touching one, it may be a caption: it stays text); last, pieces whose joint box holds no body text are
- * one drawing. Body text is long text set on paper — code set on coloured chips is a drawing's label. A
- * picture holding body copy, or a heading and nothing else, is that text's frame, not a figure. All of it
- * is INK ({@link OCDNode#ink}): a white canvas wider than the drawing once carried a figure across the next
- * column. The short text over the region is its labels — drawn with it, out of the text flow, where it
- * was noise between the paragraphs. Body text never leaves the flow.
+ * one drawing. Body text is long text set on paper — code set on coloured chips is a drawing's label —
+ * or a column of copy, which stays text whatever lies under it (a magazine sets its articles over
+ * photographs and decorations; read as labels, whole columns left the text). Text set larger than the
+ * body is a title, never a label. A picture holding body copy, or a heading and nothing else, is that
+ * text's frame, not a figure. All of it is INK ({@link OCDNode#ink}): a white canvas wider than the
+ * drawing once carried a figure across the next column. The short text over the region is its labels —
+ * drawn with it, out of the text flow, where it was noise between the paragraphs. Body text never leaves
+ * the flow.
  *
  * <p><b>Where it goes.</b> The content's order is the reading order ({@link XYCut}); a figure takes the
  * place of the first thing it holds, or follows the text block read just before it.
@@ -60,6 +64,7 @@ public final class Figures {
     static final double GAP        = 12;     // page units: ink this close belongs to one drawing
     static final double HUG        = 3;      // page units: a label overlaps its drawing's ink by more, a caption sits beside it
     static final int    LABEL      = 100;    // characters: shorter text inside a drawing is a label, longer is body text
+    static final int    COLUMN     = 4;      // lines: a block this tall is a column of copy, body text even over a picture
     static final int    GLUE_MAX   = 3000;   // binding pieces per page past which only the pictures themselves count
 
     /** A thing on the page in reading order: a block of text, or a picture. */
@@ -156,7 +161,7 @@ public final class Figures {
         Map<OCDStructNode, Integer> leading = new IdentityHashMap<>();   // figures already put first in a container
         java.util.Set<Integer> headings = new java.util.HashSet<>();     // what the structure reads as a heading
         for (Entry e : entries) if (e.node.type() == OCDStructNode.Type.HEADING) headings.addAll(e.reads);
-        for (Region r : regions(doc, tokens, present, headings)) {
+        for (Region r : regions(doc, tokens, present, headings, FontProfile.of(doc))) {
             java.util.SortedSet<Integer> region = r.tokens();
             int at = region.first();                                     // the first thing it holds
             int page = tokens.get(at).page();
@@ -174,7 +179,8 @@ public final class Figures {
     private record Region(java.util.SortedSet<Integer> tokens, List<OCDNode> reach) {}
 
     /** The figures, page by page, in reading order of their first token. */
-    private static List<Region> regions(OCDDocument doc, List<Token> tokens, Map<OCDNode, Boolean> present, java.util.Set<Integer> headings) {
+    private static List<Region> regions(OCDDocument doc, List<Token> tokens, Map<OCDNode, Boolean> present, java.util.Set<Integer> headings,
+                                        FontProfile profile) {
         List<Region> out = new ArrayList<>();
         Map<Integer, List<Integer>> seeds = new java.util.TreeMap<>();
         for (int i = 0; i < tokens.size(); i++)
@@ -192,8 +198,8 @@ public final class Figures {
                 Token t = tokens.get(i);
                 if (t.picture() || t.page() != page) continue;
                 JxRect r = t.node().ink();
-                if (isBody(t.node()) && !onDrawing(t.node(), drawn)) body.add(r);
-                else if (headings.contains(i) || t.node().hasRole() && t.node().role().startsWith("heading-")) heads.add(r);
+                if (isCopy(t.node()) || isBody(t.node()) && !onDrawing(t.node(), drawn)) body.add(r);
+                else if (headings.contains(i) || t.node().hasRole() && t.node().role().startsWith("heading-") || display(t.node(), profile, doc)) heads.add(r);
                 else labels.add(i);
             }
             List<java.util.SortedSet<Integer>> groups = new ArrayList<>();
@@ -311,6 +317,20 @@ public final class Figures {
 
     /** Text that reads as text: a paragraph of body copy, never a drawing's label. */
     private static boolean isBody(OCDNode text) { return sugarcube.jexter.ocd.model.OCDIndex.text(text).length() >= LABEL; }
+
+    /** Text set larger than the body: a title over a picture, never its label — a drawing labels itself at
+     *  most at the size of the text around it. Unrecognised as a heading, an article's title set over its
+     *  opening illustration left every text target as one of its labels. */
+    private static boolean display(OCDNode text, FontProfile profile, OCDDocument doc) {
+        List<OCDText> runs = text.stream().filter(n -> n instanceof OCDText).map(n -> (OCDText) n).toList();
+        return !runs.isEmpty() && profile.isLarger(FontProfile.styleOfLine(runs, doc));
+    }
+
+    /** A column of copy: body text of {@value #COLUMN} lines or more — what no drawing labels itself with, so it
+     *  stays text whatever lies under it. {@link GraphicClusterer} asks the same: a drawing never engulfs one. */
+    static boolean isCopy(OCDNode text) {
+        return isBody(text) && text.stream().filter(n -> n instanceof OCDBreak).count() + 1 >= COLUMN;
+    }
 
     /** The paragraphs a figure holds are its own: the first one's place becomes the figure, the others go. */
     private static Entry absorb(OCDStructNode fig, java.util.Set<Integer> region, List<Entry> entries) {

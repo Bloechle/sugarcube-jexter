@@ -55,11 +55,16 @@ public final class FontProfile {
 
     private final Map<Style, Integer> level;   // heading signature → 1-based level (1 = largest)
     private final Style title;                  // the document title's style, or null
+    private final Style body;                   // the style carrying the most ink, or null for a textless document
 
-    private FontProfile(Map<Style, Integer> level, Style title) {
+    private FontProfile(Map<Style, Integer> level, Style title, Style body) {
         this.level = level;
         this.title = title;
+        this.body = body;
     }
+
+    /** Whether {@code s} is set larger than the body — a display size, whether or not it recurs as a heading. */
+    public boolean isLarger(Style s) { return body != null && s.size() >= body.size() * LARGER; }
 
     /** Whether {@code s} is the document title's style (the one elevated style exempt from recurrence). */
     public boolean isTitle(Style s) { return title != null && title.equals(s); }
@@ -118,7 +123,7 @@ public final class FontProfile {
                 pages.computeIfAbsent(s, k -> new HashSet<>()).add(pg);
             }
         }
-        if (ink.isEmpty()) return new FontProfile(Map.of(), null);
+        if (ink.isEmpty()) return new FontProfile(Map.of(), null, null);
 
         Style body = ink.entrySet().stream().max(Map.Entry.comparingByValue()).get().getKey();
 
@@ -153,7 +158,7 @@ public final class FontProfile {
         if (title != null && (heads.isEmpty() || title.size() > heads.get(0).size() + SIZE_TOL) && !level.containsKey(title)) {
             // keep title
         } else title = null;
-        return new FontProfile(level, title);
+        return new FontProfile(level, title, body);
     }
 
     private static double round(double v) { return Math.round(v * 2.0) / 2.0; }   // ½-pt buckets

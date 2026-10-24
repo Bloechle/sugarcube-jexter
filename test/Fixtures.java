@@ -89,6 +89,8 @@ final class Fixtures {
         FEATURES.put("doc_metadata", (Whole) Fixtures::metadata);
         FEATURES.put("doc_running_heads", (Whole) Fixtures::runningHeads);
         FEATURES.put("doc_page_break", (Whole) Fixtures::pageBreak);
+        FEATURES.put("doc_magazine", (Whole) Fixtures::magazine);
+        FEATURES.put("doc_columns_page_break", (Whole) Fixtures::columnsPageBreak);
         FEATURES.put("doc_sections", (Whole) Fixtures::sections);
         FEATURES.put("doc_chapters", (Whole) Fixtures::chapters);
         FEATURES.put("doc_chapters_outline", (Whole) Fixtures::chaptersOutline);
@@ -154,6 +156,9 @@ final class Fixtures {
 
     /** What a fixture's text must read, line by line, word for word and in this order (the WORDS gate). */
     static final Map<String, List<String>> WORDS = new LinkedHashMap<>();
+
+    /** Words a fixture paints where no engine shows them: the WORDS gate fails when any is read. */
+    static final Map<String, List<String>> ABSENT = new LinkedHashMap<>();
 
     /**
      * Press setting, as a newspaper producer writes it: no space glyph anywhere, every word placed by a TJ
@@ -961,6 +966,126 @@ final class Fixtures {
                 float y = H - 30 * MM;
                 for (String line : pages[i]) { if (!line.isEmpty()) text(cs, mono, 11, 20 * MM, y, line); y -= 5 * MM; }
                 text(cs, mono, 9, A4.getWidth() / 2, 12 * MM, String.valueOf(i + 1));
+            }
+    }
+
+    /**
+     * A magazine spread, as a layout program exports it: each page carries the whole spread, the other half
+     * beyond its edge; the bookmarks are the layout's file names, naming nothing in the text. Page 1: a
+     * display line set over its photograph, two columns set ragged with a paragraph cut at the foot of the
+     * first, the second column's next paragraph set over another photograph, and a note on a translucent
+     * panel (a transparency group at 90 %: baked). Page 2: the article's title and its first paragraph.
+     */
+    private static void magazine(Doc d) throws IOException {
+        PDFont f = d.sans();
+        float col = 80 * MM, x1 = 20 * MM, x2 = 110 * MM, lead = 12, top = H - 110 * MM;
+        WORDS.put("doc_magazine", List.of(
+            "Every minute counts",
+            "and the paper keeps the night watch over the shelves until the morning",
+            "The reading room opens at nine",
+            "A note set on a translucent panel stays readable: its words are text, whatever the panel is baked",
+            "The archive at night",
+            "A lead set in the middle of a mosaic of coloured tiles is still the article's text, not a label"));
+        ABSENT.put("doc_magazine", List.of("neighbour"));
+        PDPage first, second;
+        try (var cs = d.page(A4)) {
+            first = d.pdf.getPage(0);
+            var photo = JPEGFactory.createFromImage(d.pdf, gradient(256, 160), 0.88f);
+            cs.drawImage(photo, x1, H - 95 * MM, 110 * MM, 50 * MM);
+            text(cs, f, 24, x1 + 70 * MM, H - 75 * MM, "Every minute counts");      // over the photo, past its edge
+            String[] left = {                                                       // ragged: no line fills the column
+                "In the cellars of the old town house the", "boxes stand in rows along the walls, each",
+                "one labelled by a hand long gone. Nobody", "comes down after dark, the lamps are", 
+                "switched off one by one at seven and the", "doors are locked behind the last clerk",
+                "who leaves the building by the side gate", "and the paper keeps the night watch over" };
+            for (int i = 0; i < left.length; i++) text(cs, f, 10, x1, top - i * lead, left[i]);
+            cs.drawImage(photo, x2 + 15 * MM, top - 9 * lead, 75 * MM, 8 * lead);  // under most of the next paragraph
+            String[] right = {
+                "the shelves until the morning comes.", "",
+                "    The reading room opens at nine and the", "first visitors are students with notes",
+                "and laptops, then the historians arrive", "with their lists of boxes, and later the",
+                "families looking for a name, a date, a", "house that stood here before the war and",
+                "a photograph of a grandmother's wedding." };
+            for (int i = 0; i < right.length; i++) if (!right[i].isEmpty()) text(cs, f, 10, x2, top - i * lead, right[i]);
+            PDFormXObject note = new PDFormXObject(d.pdf);                      // a panel and its words, one group
+            note.setBBox(A4);
+            note.setResources(new PDResources());
+            COSDictionary attrs = new COSDictionary();
+            attrs.setItem(COSName.S, COSName.TRANSPARENCY);
+            note.getCOSObject().setItem(COSName.GROUP, attrs);
+            try (var fcs = new PDFormContentStream(note)) {
+                fcs.setNonStrokingColor(new Color(250, 230, 90));
+                fcs.addRect(x1, top - 14 * lead - 6, x2 + col - x1, 3 * lead + 10);   // under both columns
+                fcs.fill();
+                fcs.setNonStrokingColor(Color.BLACK);
+                String[] lines = { "A note set on a translucent panel stays readable: its words are text,",
+                                   "whatever the panel is baked into, and they read after both columns", "of the article." };
+                for (int i = 0; i < lines.length; i++) {
+                    fcs.beginText();
+                    fcs.setFont(f, 10);
+                    fcs.newLineAtOffset(x1 + 4, top - 12 * lead - i * lead);
+                    fcs.showText(lines[i]);
+                    fcs.endText();
+                }
+            }
+            PDExtendedGraphicsState translucent = new PDExtendedGraphicsState();
+            translucent.setNonStrokingAlphaConstant(0.9f);
+            cs.saveGraphicsState();
+            cs.setGraphicsStateParameters(translucent);
+            cs.drawForm(note);
+            cs.restoreGraphicsState();
+            text(cs, f, 10, A4.getWidth() + 20 * MM, top, "The neighbour page, past the edge.");   // the spread's other half
+        }
+        try (var cs = d.page(A4)) {
+            second = d.pdf.getPage(1);
+            text(cs, f, 10, -150 * MM, top, "The neighbour page, past the edge.");
+            text(cs, f, 30, x1, H - 40 * MM, "The archive at night");
+            String[] body = { "Every city keeps a memory of paper, and this", "one keeps it in the cellars of a house that",
+                              "has seen four centuries of clerks come and go", "and will see a few more." };
+            for (int i = 0; i < body.length; i++) text(cs, f, 10, x1, H - 55 * MM - i * lead, body[i]);
+            // a lead painted in the middle of a mosaic of tiles that runs all around it: one stretch of paint
+            String[] lead2 = { "A lead set in the middle of a mosaic of", "coloured tiles is still the article's text,",
+                               "not a label of the drawing around it, and", "it reads where it stands." };
+            float mx = x1, my = H - 230 * MM;
+            for (int k = 0; k < 2; k++) {                                       // tiles a point or two apart, a hole for the lead
+                for (int r = 0; r < 12; r++)
+                    for (int c = 0; c < 24; c++) {
+                        if ((c == 23 ? 1 : 0) != k || r >= 3 && r <= 8 && c >= 3 && c <= 20) continue;
+                        cs.setNonStrokingColor(new Color(40 + 8 * c, 90 + 12 * r, 160));
+                        cs.addRect(mx + c * 15, my + r * 11, 13 + (r + c) % 2, 8 + (r * c) % 2);
+                        cs.fill();
+                    }
+                if (k == 0) {
+                    cs.setNonStrokingColor(Color.BLACK);
+                    for (int i = 0; i < lead2.length; i++) text(cs, f, 11, mx + 3 * 15 + 6, my + 8 * 11 - 2 - i * 14, lead2[i]);
+                }
+            }
+        }
+        outline(d.pdf, new Object[] { "MAG_p1_layout_v3", first }, new Object[] { "MAG_p2_layout_v3", second });
+    }
+
+    /**
+     * Two pages set in two ragged columns: the paragraph at the foot of page 1's right column carries on at
+     * the top of page 2's LEFT column — the flow of a page set in columns. Its last line is long, not full:
+     * ragged text wraps short of the column, so only the paragraph's own lines say what full is.
+     */
+    private static void columnsPageBreak(Doc d) throws IOException {
+        PDFont f = d.sans();
+        float x1 = 20 * MM, x2 = 110 * MM, lead = 12, top = H - 40 * MM;
+        String[][] cols = {
+            { "The first column opens the story of a long", "night in the reading room, where the lamps", "burn low and the clocks are the only voice.", "",
+              "    A second paragraph begins with an indent", "and ends after two lines of its own." },
+            { "The right column runs to the foot of the", "page with lines that never fill the column", "because the text is set ragged, as many", "magazines set their columns, and this one",
+              "sentence is carried over the page break to" },
+            { "the next page, where it ends in the first", "column with a short last line." },
+            { "    The right column of the second page opens", "a paragraph of its own and closes it." } };
+        for (int p = 0; p < 2; p++)
+            try (var cs = d.page(A4)) {
+                for (int c = 0; c < 2; c++) {
+                    String[] lines = cols[2 * p + c];
+                    for (int i = 0; i < lines.length; i++)
+                        if (!lines[i].isEmpty()) text(cs, f, 10, c == 0 ? x1 : x2, top - i * lead, lines[i]);
+                }
             }
     }
 

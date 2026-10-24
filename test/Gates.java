@@ -11,10 +11,12 @@
 //   PIXELS    the model paints what PDFBox paints (< 1 % of a page off), and the direct renderer agrees
 //             with the model's render (< 0.25 %): a gap there is lost in the model, not in the painting.
 //   FURNITURE running heads and folios stay on the page and out of every structure the writers read — and a
-//             section heading at the top of every page, the same words but its number, is no running head.
+//             section heading at the top of every page, the same words but its number, is no running head;
+//             a paragraph the press cut at the foot of a page or of a column reads as one.
 //   AGAIN     a second Analysis.run writes the same container, and reading the stages changes nothing.
 //   WORDS     a fixture that declares its text reads it word for word and in order: no space glued, none
-//             invented, no column read across.
+//             invented, no column read across — and never reads what it paints where no engine shows it
+//             (a spread's other half, past the page's edge: once a table of contents read twice).
 //   STRADDLE  no paragraph wraps a paint span another node sits inside (it could not be stored atomically).
 //   CLIPS     every clip reference resolves, on the imported model and on the model read back.
 //   COPY      a page and its copy project identically, and editing the copy leaves the page alone.
@@ -26,7 +28,7 @@
 //             html), a layer left on by every one — once the clean PDF of a privacy check SHOWED a
 //             hidden draft layer, in blue, and every text target read it out.
 //   FIGURES   every picture the body shows is a FIGURE of the structure the writers read (a tagged PDF's
-//             own tree aside), and the reflow book draws each one: a <figure> always holds its <img> —
+//             own tree aside; a panel holding copy is that copy's, no figure), and the reflow book draws each one: a <figure> always holds its <img> —
 //             once, 81 of 83 documents with pictures lost every one in the reflowable EPUB.
 //   BOOK      the reflow book is cut in chapters that stand: none is only a heading, none too short to
 //             read unless it is the whole book, and its table of contents reaches every heading, nested
@@ -327,10 +329,13 @@ public final class Gates {
      *  word, a split one, or columns read across each break it. Only fixtures that declare their words are
      *  checked. */
     private static List<String> words(String name, byte[] ocd) throws Exception {
-        List<String> lines = Fixtures.WORDS.get(name.replaceFirst("\\.pdf$", ""));
+        String id = name.replaceFirst("\\.pdf$", "");
+        List<String> lines = Fixtures.WORDS.get(id);
         if (lines == null) return ok();
         String md = new String(to(ocd, "md"), java.nio.charset.StandardCharsets.UTF_8).replaceAll("\\s+", " ");
         List<String> bad = new ArrayList<>();
+        for (String w : Fixtures.ABSENT.getOrDefault(id, List.of()))
+            if (md.contains(w)) bad.add("read what no engine shows: \"" + w + "\"");
         String text = " " + md + " ";
         int from = 0;
         for (String l : lines) {
@@ -455,6 +460,16 @@ public final class Gates {
             for (int i = 1; i <= 4; i++)
                 if (!md.contains("Section " + i + ": terms")) bad.add("the heading of section " + i + " was read as a running head");
             if (md.lines().anyMatch(l -> l.strip().matches("\\d+"))) bad.add("a bare folio is read as text");
+        }
+        if (current.equals("doc_columns_page_break.pdf")) {          // the last column of a page flows into the first of the next
+            String md = sugarcube.jexter.write.MarkdownWriter.toMarkdown(model);
+            if (md.lines().noneMatch(l -> l.contains("page break to the next page"))) bad.add("the paragraph the page break cut is still two");
+            if (md.lines().anyMatch(l -> l.contains("short last line.") && l.contains("The right column of the second"))) bad.add("an indented paragraph was joined to the one before");
+        }
+        if (current.equals("doc_magazine.pdf")) {                    // a paragraph cut at the foot of a column
+            String md = sugarcube.jexter.write.MarkdownWriter.toMarkdown(model);
+            if (md.lines().noneMatch(l -> l.contains("keeps the night watch over the shelves"))) bad.add("the paragraph the column break cut is still two");
+            if (md.lines().anyMatch(l -> l.contains("comes.") && l.contains("The reading room"))) bad.add("an indented paragraph was joined to the one before");
         }
         if (current.equals("doc_page_break.pdf")) {                  // a bare folio, and a paragraph the press cut
             String md = sugarcube.jexter.write.MarkdownWriter.toMarkdown(model);
@@ -734,6 +749,7 @@ public final class Gates {
                 int page = p;
                 model.page(p).images().filter(im -> !model.hides(im) && !sugarcube.jexter.ocd.analysis.Furniture.isRunning(im))
                      .filter(im -> Math.max(im.ink().width(), im.ink().height()) >= 24)
+                     .filter(im -> !framesCopy(model.page(page), im))
                      .filter(im -> !shown.contains(page + "/" + im.id()))
                      .forEach(im -> bad.add("page " + (page + 1) + ": picture " + im.id() + " is in no FIGURE"));
             }
@@ -748,6 +764,13 @@ public final class Gates {
         if (drawn != open) bad.add((open - drawn) + " of " + open + " <figure> without a picture in the reflow book");
         if (s != null && !"pdf".equals(s.id()) && open < figs) bad.add(figs + " FIGUREs, " + open + " drawn in the reflow book");
         return bad;
+    }
+
+    /** A picture holding a paragraph of copy whole (100 characters or more) is that text's panel, no figure. */
+    private static boolean framesCopy(OCDPage page, OCDNode im) {
+        var box = im.ink();
+        return page.nodes().filter(n -> n instanceof sugarcube.jexter.ocd.model.OCDParagraph && OCDIndex.text(n).length() >= 100)
+                   .map(OCDNode::ink).anyMatch(t -> t.x() >= box.x() && t.y() >= box.y() && t.right() <= box.right() && t.maxY() <= box.maxY());
     }
 
     /** Count the FIGUREs under {@code n}, and note every node they reach (descendants included) as page/id. */
@@ -792,6 +815,8 @@ public final class Gates {
         }
         targets.removeIf(t -> !t.contains("#") && files.containsKey(t));
         if (!targets.isEmpty()) bad.add("table of contents entries lead nowhere: " + targets);
+        if (name.startsWith("doc_magazine") && (!nav.contains("The archive at night") || nav.contains("Every minute")))
+            bad.add("the contents are not the text's headings: bookmarks that name nothing in it stood in for them");
         if (name.startsWith("doc_chapters")) {                  // the book under one title: cut at its parts, details nested
             if (files.size() != 3) bad.add(files.size() + " chapters, not 3 (the parts, the stub joined to the last)");
             if (!java.util.regex.Pattern.compile("1 The first part</a>\\s*<ol>\\s*<li><a href=\"[^\"]+\">1\\.1 ").matcher(nav).find())

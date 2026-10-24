@@ -272,6 +272,12 @@ Import (`pdfimport`)
   non-vertical, non-standard-14, `/Widths` declares the code, both widths non-zero). Symptom when missing:
   text spaced out, glyphs narrower than their advances.
 - JPEG 2000 hides in a SOFT MASK too, and the declared filter lies: `JpxImage` checks the BYTES.
+- **A baked group keeps its words.** A low-alpha group is baked into one image; its runs follow it as
+  invisible text (`emitBaked`), as under a soft mask. Before, a column of copy set over a translucent
+  highlight became a picture and every text target lost the article — no pixel gate sees that.
+- **Ink wholly outside the MEDIA box is not imported** (`offPage`): a layout program exporting spreads
+  writes the whole double page into each page, the neighbour's half past the edge, and a table of
+  contents was read twice. The media box, not the crop box: a page re-cropped later shows what it holds.
 - A tagged PDF's grouping element (Div, Sect) INSIDE a heading, paragraph or caption groups nothing: it
   folds into a SPAN (`TaggedStructureBuilder`). Typst writes every heading as H1 › Div › Span: kept as a
   SECTION, the heading read as nothing and every EPUB's contents said « Heading 1 » (TAGS checks it).
@@ -383,6 +389,17 @@ Analysis (`ocd.analysis`)
 - A paragraph the press cut is joined back by geometry alone (`StructureBuilder.Paragraphs`, both builders):
   last text of its page, its last line the column's full width; first text of the next page, same column,
   not indented. A heading between them keeps them apart. Fixture `doc_page_break`, gate FURNITURE.
+- **A magazine is the stress test of `Figures`**: articles set over photographs, leads in mosaics, titles
+  over their opening picture. A column of copy (`Figures.isCopy`, ≥ 4 lines) stays text over any picture
+  and `GraphicClusterer` never engulfs one; text set larger than the body is never a label. Measure on
+  words lost against `pdftotext` per page, not on figure counts: the counts looked fine while whole
+  articles were labels. Decorative mosaics still come out as dozens of small FIGUREs — open.
+- Bookmarks whose titles match no text (file names) build no `outline` structure: anchored by position
+  alone they stood in front of every heading the text has (BOOK, fixture `doc_magazine`).
+- A paragraph cut by a column break joins like one cut by a page break (`continuesBeside`); "full" is the
+  paragraph's own shortest wrapped line (ragged text), and a one-line block never runs on (a label, a
+  number, a contents entry: two side by side were each "full"). Fixtures `doc_magazine`,
+  `doc_columns_page_break`, gate FURNITURE.
 - Tables, captions, lists, code are deferred to `Refiner` — do not re-add a heuristic. Figures are not:
   `Figures` places the body's pictures by geometry (doc/ANALYSIS.md 6b), gate FIGURES. Measure a change
   to it on a corpus AND look at the pictures: the counts hid a chart split in 30 pieces, a figure spread
