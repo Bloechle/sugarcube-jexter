@@ -588,6 +588,17 @@ put the new launch line at the top of any delivery mail. `ConvertOptions` lives 
   EVERY one of them (a purge of `meta.json` once ran on the server and was discarded).
 - Open: a source JPEG with a soft mask is decoded at import and comes back Flate (keeping the DCT bytes
   needs the model to carry the mask beside the image); CMYK images still use PDFBox's default profile.
+- TODO (2026-10-25, found running the gates on a run of designed annual reports; reproduce on such a file):
+  - PIXELS: the model's render differs from PDFBox by ~2 % on two pages of one report (a diff map tool:
+    render both, paint the pixels apart) — the one product-facing fidelity item.
+  - The direct render (`PdfRenderer`, diagnostic only) differs ~80 % on one page, ~6 % on another, while the
+    model's render matches PDFBox: the direct path paints what the importer does not, or the reverse.
+  - MODEL: a page's clip count drops on the OCD round trip (6 → 0) with no node field and no pixel changed —
+    check whether the writer drops unreferenced or duplicate clips (then the gate counts the wrong thing).
+  - FURNITURE: one running line (t2) read into the heuristic tree.
+  - Reading order: two contents titles side by side glued into one (a page number hanging into a ~6 pt
+    gutter, counted 4 by the 1 pt profile — see the XY-Cut rounding note above); a box read in the middle of
+    a column's sentence (the rows-of-wide-items trial above).
 
 ## Git and this skill
 
