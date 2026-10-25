@@ -433,7 +433,12 @@ Analysis (`ocd.analysis`)
   `doc_three_columns` fixture is red on the old measure. A screen that holds the whole region (a page's coloured
   ground) screens no row: counted, it raised the floor under every valley, a contents grid lost every row cut
   and was read line by line across its cells (`doc_grid_background`). Declared WORDS end on a whole word
-  followed by a space: « grid, » or « trade, » never match « grid » — three fixtures of this session paid for it. What is left of those pairs is a grid of short
+  followed by a space: « grid, » or « trade, » never match « grid » — three fixtures of this session paid for it.
+- XY-Cut's profile is one bucket a point, and its gap thresholds were tuned WITH that rounding (an edge rounds
+  down into the bucket it ends in: a 6.1 pt gutter counts 5). Measured at a quarter point (2026-10-25), it cut
+  the last row of a contents grid right, but also split label and value on one line, a code listing's spaces
+  and some 3 % more blocks of a run of annual reports, with more words lost against pdftotext: not shipped.
+  A finer profile needs its thresholds re-tuned with it, on the whole corpus. What is left of those pairs is a grid of short
   titles side by side read row by row (a contents page), not a leading.
 - A line-final hyphen is judged by the document's own words (`OCDIndex` `Vocabulary`, mirrored by `ocd.js`
   `keepsHyphen` for read-aloud and search — the bench `hyphens.mjs` fails when they drift): the compound
