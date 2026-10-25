@@ -168,10 +168,11 @@ public final class StructureBuilder {
     }
 
     /** Whether {@code b}, the first text of its page, carries on {@code a}, the last text of the page before: in
-     *  the same column, or in one as wide — on a page set in columns, the last flows into the first of the next. */
+     *  the same text size, in the same column, or in one as wide — on a page set in columns, the last flows into the first of the next. */
     static boolean continues(Block a, Block b) {
         double col = column(a, b);
-        return col > 0 && runsOn(a, b, col) && (Math.abs(a.bounds.x() - b.bounds.x()) <= COLUMN_SLACK * col
+        return col > 0 && Math.abs(a.size - b.size) <= SIZE_TOL && runsOn(a, b)           // in the same text size
+            && (Math.abs(a.bounds.x() - b.bounds.x()) <= COLUMN_SLACK * col
                                               || Math.abs(a.bounds.width() - b.bounds.width()) <= COLUMN_SLACK * col);
     }
 
@@ -183,7 +184,7 @@ public final class StructureBuilder {
         return col > 0 && b.bounds.x() >= a.bounds.right() - COLUMN_SLACK * col                 // to the right…
             && b.bounds.x() - a.bounds.right() < col                                            // …the next column
             && b.bounds.maxY() > a.bounds.y()                                                   // its top above a's foot
-            && Math.abs(a.size - b.size) <= SIZE_TOL && runsOn(a, b, col);
+            && Math.abs(a.size - b.size) <= SIZE_TOL && runsOn(a, b);
     }
 
     /** The column the two blocks are set in: their widest line, or 0 when either is empty. */
@@ -196,16 +197,23 @@ public final class StructureBuilder {
     }
 
     /** {@code a} ran out of room (its last line is full) and {@code b} does not open a paragraph (no indent).
-     *  Full is the block's own measure: text set ragged wraps short of the column, so a last line as long as
+     *  Full is the block's own measure, in its own column (never the next one's, which may be wider): text set ragged wraps short of the column, so a last line as long as
      *  the shortest line the block wrapped ran out of room too — never under {@link #RAGGED} of the column.
      *  A block of one line has wrapped nothing: a label, a number, a table-of-contents entry — it runs on into
      *  nothing (two such side by side are each "full" of a column only as wide as themselves). */
-    private static boolean runsOn(Block a, Block b, double col) {
+    private static boolean runsOn(Block a, Block b) {
         if (a.lines.size() < 2) return false;
         Segmenter.Line end = a.lines.get(a.lines.size() - 1), start = b.lines.get(0);
-        double full = FULL_LINE * col;
+        // a's last line is judged by a's OWN column: a spread sets its columns in two widths, and measured by the
+        // wider one the full last line of the narrower read as short — the paragraph stayed cut in two. A block
+        // far narrower than the next is no column of its own, and keeps the wider measure
+        double own = 0, col = 0;
+        for (Segmenter.Line l : a.lines) own = Math.max(own, l.bounds.width());
+        for (Segmenter.Line l : b.lines) col = Math.max(col, l.bounds.width());
+        if (own < RAGGED * col) own = Math.max(own, col);   // far narrower than the next: no column (a stack of bullets)
+        double full = FULL_LINE * own;
         for (int i = 0; i < a.lines.size() - 1; i++) full = Math.min(full, a.lines.get(i).bounds.width());
-        if (end.bounds.width() < Math.max(full, RAGGED * col)) return false;            // a short last line ends a paragraph
+        if (end.bounds.width() < Math.max(full, RAGGED * own)) return false;            // a short last line ends a paragraph
         return b.lines.size() < 2 || start.bounds.x() - b.lines.get(1).bounds.x() <= INDENT * Math.max(1, b.size);   // indented: a new paragraph
     }
 

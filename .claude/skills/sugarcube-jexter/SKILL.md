@@ -433,7 +433,9 @@ Analysis (`ocd.analysis`)
   `doc_three_columns` fixture is red on the old measure. A screen that holds the whole region (a page's coloured
   ground) screens no row: counted, it raised the floor under every valley, a contents grid lost every row cut
   and was read line by line across its cells (`doc_grid_background`). Declared WORDS end on a whole word
-  followed by a space: « grid, » or « trade, » never match « grid » — three fixtures of this session paid for it.
+  followed by a space: « grid, » or « trade, » never match « grid » — three fixtures of this session paid for it. And
+  WORDS folds every run of white space: it cannot see a paragraph cut in two — check that on the Markdown's
+  LINES (the FURNITURE block of md checks), or the fixture is green on the code before (paid for twice).
 - XY-Cut's profile is one bucket a point, and its gap thresholds were tuned WITH that rounding (an edge rounds
   down into the bucket it ends in: a 6.1 pt gutter counts 5). Measured at a quarter point (2026-10-25), it cut
   the last row of a contents grid right, but also split label and value on one line, a code listing's spaces

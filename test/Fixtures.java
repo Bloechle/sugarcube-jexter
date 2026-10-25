@@ -99,6 +99,7 @@ final class Fixtures {
         FEATURES.put("doc_two_text_styles", (Whole) Fixtures::twoTextStyles);
         FEATURES.put("doc_display_titles", (Whole) Fixtures::displayTitles);
         FEATURES.put("doc_display_spread", (Whole) Fixtures::displaySpread);
+        FEATURES.put("doc_column_widths", (Whole) Fixtures::columnWidths);
         FEATURES.put("doc_sections", (Whole) Fixtures::sections);
         FEATURES.put("doc_chapters", (Whole) Fixtures::chapters);
         FEATURES.put("doc_chapters_outline", (Whole) Fixtures::chaptersOutline);
@@ -1315,6 +1316,26 @@ final class Fixtures {
             float top = H - 70 * MM - 90 - 11;                                   // inside the title's descender band
             for (int c = 0; c < 2; c++)
                 for (int i = 0; i < cols[c].length; i++) text(cs, f, 9, 15 * MM + c * 95 * MM, top - i * 11, cols[c][i]);
+        }
+    }
+
+    /**
+     * A spread's two columns in two widths (Courier, so a line's width is its length): a paragraph runs to the
+     * foot of the narrow one, its last line full by its own measure but short of the wide one's, and goes on at
+     * the top of the wide one. One paragraph.
+     */
+    private static void columnWidths(Doc d) throws IOException {
+        PDFont f = new PDType1Font(Standard14Fonts.FontName.COURIER);
+        String[] left = { "A spread sets its two columns in widths", "of their own, the narrow one on the left", "and the wide one on the right, and this",
+                          "paragraph runs on for a while in it, set", "ragged as the magazine sets its pages, a", "few words more on each line than in the",
+                          "paragraph runs to the foot of the narrow", "column, where the press cut it in the" };
+        String[] right = { "middle of a sentence that goes on at the top of the", "wide column and ends there a few lines further on,",
+                           "when the story has been told and the reader turns", "the page to read the next one, set in the same way,",
+                           "with its own title and its own pictures around it,", "as any paragraph does, with a short last line." };
+        try (var cs = d.page(A4)) {
+            text(cs, f, 8, 15 * MM, H - 50 * MM, "Two widths");                  // a one-line item: the text's line
+            for (int i = 0; i < left.length; i++) text(cs, f, 8, 15 * MM, H - 60 * MM - i * 10, left[i]);
+            for (int i = 0; i < right.length; i++) text(cs, f, 8, 15 * MM + 74 * MM, H - 60 * MM - i * 10, right[i]);
         }
     }
 

@@ -475,6 +475,10 @@ public final class Gates {
             if (md.lines().anyMatch(l -> l.contains("comes.") && l.contains("The reading room"))) bad.add("an indented paragraph was joined to the one before");
             if (md.lines().noneMatch(l -> l.startsWith("#") && l.contains("The archive at night"))) bad.add("a title set on two lines is two headings");
         }
+        if (current.equals("doc_column_widths.pdf")) {               // a paragraph cut at the foot of a narrower column
+            String md = sugarcube.jexter.write.MarkdownWriter.toMarkdown(model);
+            if (md.lines().noneMatch(l -> l.contains("cut it in the middle of a sentence"))) bad.add("the paragraph the column break cut is still two");
+        }
         if (current.equals("doc_display_spread.pdf")) {              // a 90 pt title over two columns of 9 pt
             String md = sugarcube.jexter.write.MarkdownWriter.toMarkdown(model);
             if (md.lines().noneMatch(l -> l.startsWith("#") && l.contains("Never walk alone"))) bad.add("a title of two lines at display size is not one heading");

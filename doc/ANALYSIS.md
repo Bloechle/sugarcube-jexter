@@ -271,7 +271,10 @@ only what pure typography and geometry can establish.
   is full by its own measure (the shortest line it wrapped, never under ¾ of the column: ragged text
   wraps short), it wrapped at least once, and the block's first line is not indented; the block is the
   first text of the next page, in the same column or one as wide, or opens the next column of the same
-  page (to the right, less than a column away, starting higher, in the same size). Short blocks read
+  page (to the right, less than a column away, starting higher, in the same size). Both ask the same text
+  size, and the last line is full by its OWN column's measure: a spread sets its columns in two widths, and
+  judged by the wider one the full last line of the narrower read as short (a block far narrower than the
+  next — a stack of bullets — is no column of its own and keeps the wider measure). Short blocks read
   first on the next page — a legend, the labels of an infographic set over the columns (under 4 lines and
   100 characters) — do not close it: the sequel read after them still joins, and they follow it.
 
