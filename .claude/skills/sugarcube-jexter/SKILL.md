@@ -446,7 +446,13 @@ Analysis (`ocd.analysis`)
   `Segmenter.titleGoesOn` rejoins the next line of a display title across leaves. Judging XY-Cut's row cut by
   the lines facing it instead merged wide-set lists of lines in three fixtures: tried, reverted. And a 9 pt
   line set under a 103 pt word lies inside the band its descenders reserve: `Liner` now keeps runs stacked one
-  above the other (size ratio 2, across over half the narrower) on two lines (`doc_display_spread`). What is left of those pairs is a grid of short
+  above the other (size ratio 2, across over half the narrower) on two lines (`doc_display_spread`).
+- A page whose title and lead cross every gutter, with labels set ABOVE them, leaves XY-Cut no cut and
+  `headed` does not apply (the wide items are not wholly above the rest): it reads row by row across the
+  columns. Tried (2026-10-25): a wide item no other stands beside is a row of its own, the region cut over
+  and under it. At the line level it cut every wide paragraph into lines (cuts 10 → 25); at the block
+  level it fixed that page's column order, but the bottom box still came between a column and its sequel,
+  and three new mid-sentence cuts appeared in other reports: a trade, not a gain — reverted. What is left of those pairs is a grid of short
   titles side by side read row by row (a contents page), not a leading.
 - A line-final hyphen is judged by the document's own words (`OCDIndex` `Vocabulary`, mirrored by `ocd.js`
   `keepsHyphen` for read-aloud and search — the bench `hyphens.mjs` fails when they drift): the compound
