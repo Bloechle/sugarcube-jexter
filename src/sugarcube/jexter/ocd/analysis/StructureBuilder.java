@@ -130,24 +130,41 @@ public final class StructureBuilder {
         private Block last;
         private OCDStructNode lastP;
         private int page = -1;
+        // the paragraph the page break left open, and how many short blocks the new page read before its sequel
+        private Block carry;
+        private OCDStructNode carryP;
+        private int held;
 
         void add(OCDStructNode container, Block b) {
             boolean first = b.page != page;
             page = b.page;
             List<OCDStructNode> kids = container.children();
             boolean open = last != null && !kids.isEmpty() && kids.get(kids.size() - 1) == lastP;
-            if (open && (first ? b.page == last.page + 1 && continues(last, b) : b.page == last.page && continuesBeside(last, b))) {
+            if (first) { carry = open ? last : null; carryP = open ? lastP : null; held = 0; }
+            if (!first && carryP != null && b.page == carry.page + 1 && kids.size() > held
+                    && kids.get(kids.size() - 1 - held) == carryP && continues(carry, b)) {
+                for (String nid : b.nodeIds) carryP.addRef(b.page, nid);    // the sequel, past the labels read first:
+                lastP = carryP; carry = null; carryP = null;               // they stay after the paragraph they cut
+            } else if (open && (first ? b.page == last.page + 1 && continues(last, b) : b.page == last.page && continuesBeside(last, b))) {
                 for (String nid : b.nodeIds) lastP.addRef(b.page, nid);
+                carry = null; carryP = null;
             } else {
                 lastP = new OCDStructNode(OCDStructNode.Type.PARAGRAPH);
                 for (String nid : b.nodeIds) lastP.addRef(b.page, nid);
                 container.add(lastP);
+                if (carryP != null && b.page == carry.page + 1 && isLabel(b)) held++; else { carry = null; carryP = null; }
             }
             last = b;
         }
 
         /** A block that is not a paragraph (a heading): what follows it never joins what came before it. */
-        void interrupt(Block b) { page = b.page; last = null; lastP = null; }
+        void interrupt(Block b) { page = b.page; last = null; lastP = null; carry = null; carryP = null; }
+    }
+
+    /** A label, a caption, a figure's legend: a few short lines. Read at the top of a page (an infographic set over
+     *  the columns), they do not close the paragraph the page break cut — its sequel, read after them, joins it. */
+    private static boolean isLabel(Block b) {
+        return b.lines.size() < Figures.COLUMN && b.text().length() < Figures.LABEL;
     }
 
     /** Whether {@code b}, the first text of its page, carries on {@code a}, the last text of the page before: in

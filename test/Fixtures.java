@@ -95,6 +95,7 @@ final class Fixtures {
         FEATURES.put("doc_grid_background", (Whole) Fixtures::gridBackground);
         FEATURES.put("doc_wallpaper", (Whole) Fixtures::wallpaper);
         FEATURES.put("doc_confetti", (Whole) Fixtures::confetti);
+        FEATURES.put("doc_break_labels", (Whole) Fixtures::breakLabels);
         FEATURES.put("doc_sections", (Whole) Fixtures::sections);
         FEATURES.put("doc_chapters", (Whole) Fixtures::chapters);
         FEATURES.put("doc_chapters_outline", (Whole) Fixtures::chaptersOutline);
@@ -1213,6 +1214,35 @@ final class Fixtures {
                 cs.setNonStrokingColor(Color.BLACK);
                 y -= 20;
             }
+        }
+    }
+
+    /**
+     * A paragraph the page break cuts, and an infographic at the top of the next page: its legend and two short
+     * labels are read before the column goes on. They do not close the paragraph: its sequel joins it.
+     */
+    private static void breakLabels(Doc d) throws IOException {
+        PDFont f = d.sans();
+        float x = 20 * MM, lead = 12;
+        WORDS.put("doc_break_labels", List.of(
+            "and the sentence the press cut at the foot of the page goes on at the top of the next",
+            "Four facts about the archive"));
+        try (var cs = d.page(A4)) {
+            String[] col = { "The archive opened its new reading room this year, and", "the visitors came in greater numbers than ever before,",
+                             "students in the evening and historians in the morning,", "and the sentence the press cut at the foot of the page goes" };
+            for (int i = 0; i < col.length; i++) text(cs, f, 10, x, 60 * MM - i * lead, col[i]);
+        }
+        try (var cs = d.page(A4)) {
+            cs.setNonStrokingColor(new Color(120, 170, 90));                    // the infographic: a field of dots
+            for (int r = 0; r < 8; r++) for (int c = 0; c < 30; c++) { cs.addRect(x + c * 5.5f * MM, H - 30 * MM - r * 5 * MM, 8, 8); }
+            cs.fill();
+            cs.setNonStrokingColor(Color.BLACK);
+            text(cs, f, 8, x, H - 80 * MM, "Four facts about the archive");
+            text(cs, f, 8, x + 90 * MM, H - 80 * MM, "Volume: the boxes it holds.");
+            text(cs, f, 8, x + 140 * MM, H - 80 * MM, "Age: the oldest letter.");
+            String[] col = { "on at the top of the next one, under the drawing, and", "ends here, a few lines down, as any paragraph does.", "",
+                             "    A new paragraph opens with an indent and runs on", "for two lines of its own." };
+            for (int i = 0; i < col.length; i++) if (!col[i].isEmpty()) text(cs, f, 10, x, H - 95 * MM - i * lead, col[i]);
         }
     }
 
