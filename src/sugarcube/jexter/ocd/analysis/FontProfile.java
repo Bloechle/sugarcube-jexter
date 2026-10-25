@@ -25,6 +25,9 @@ import java.util.Set;
  *       (body itself not bold). An elevated style becomes a heading level only if it also <b>recurs</b>
  *       — appears on at least {@link #MIN_PAGES} pages or {@link #MIN_RUNS} times. Recurrence is what
  *       separates a real heading style from a one-off emphasised phrase or a lone decorative size.</li>
+ *   <li>A style that sets running text is no heading style, however large: two paragraphs of copy or more
+ *       ({@link Figures#isCopy}: four lines and more) set in it make it a text style — an article set larger
+ *       than the rest of the report read its two-line paragraphs as headings.</li>
  *   <li>The single largest elevated style standing above every heading level is the <b>title</b>; it
  *       alone is exempt from recurrence, since a document title may appear only once.</li>
  *   <li>Levels are the distinct heading signatures ranked by <b>size descending</b> (bold before regular
@@ -46,6 +49,8 @@ public final class FontProfile {
     private static final int    MIN_PAGES  = 2;
     /** …or at least this many runs across the document. */
     private static final int    MIN_RUNS   = 3;
+    /** A style sets running text once this many paragraphs of copy are set in it. */
+    private static final int    COPY_BLOCKS = 2;
     /** A block/line counts as bold when at least this fraction of its ink is bold (whole-line-bold rule) —
      *  the one threshold: {@link Segmenter} cuts on the same. */
     static final double BOLD_LINE  = 0.60;
@@ -125,6 +130,16 @@ public final class FontProfile {
         }
         if (ink.isEmpty()) return new FontProfile(Map.of(), null, null);
 
+        // the styles running text is set in: paragraphs of copy (read from the analysed paragraphs; none before)
+        Map<Style, Integer> copy = new HashMap<>();
+        for (int p = 0; p < doc.pageCount(); p++)
+            doc.page(p).nodes().filter(n -> n instanceof sugarcube.jexter.ocd.model.OCDParagraph && Figures.isCopy(n) && !Furniture.isRunning(n))
+               .forEach(n -> {
+                   List<OCDText> runs = new ArrayList<>();
+                   n.stream().filter(OCDText.class::isInstance).forEach(t -> runs.add((OCDText) t));
+                   copy.merge(styleOfLine(runs, doc), 1, Integer::sum);
+               });
+
         Style body = ink.entrySet().stream().max(Map.Entry.comparingByValue()).get().getKey();
 
         // a heading style is ELEVATED above body (larger, or bold at body size) AND RECURS — recurrence is
@@ -137,7 +152,7 @@ public final class FontProfile {
             boolean larger   = s.size() >= body.size() * LARGER;
             boolean boldBody = !larger && s.bold() && !body.bold() && Math.abs(s.size() - body.size()) <= SIZE_TOL;
             boolean elevated = larger || boldBody;
-            if (!elevated) continue;
+            if (!elevated || copy.getOrDefault(s, 0) >= COPY_BLOCKS) continue;   // a text style is no heading style
             if (title == null || s.size() > title.size()) title = s;   // track the biggest elevated style
             boolean recurs = pages.get(s).size() >= MIN_PAGES || occur.get(s) >= MIN_RUNS;
             if (recurs) heads.add(s);

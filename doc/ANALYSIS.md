@@ -276,7 +276,10 @@ only what pure typography and geometry can establish.
   100 characters) — do not close it: the sequel read after them still joins, and they follow it.
 
 Recurrence is the load-bearing discriminant: a one-off large decoration or a figure's internal label
-never becomes a heading because its style does not recur.
+never becomes a heading because its style does not recur. And a style that sets running text — two paragraphs of copy
+or more (four lines and more) — is no heading style however large: an article set larger than the rest
+of a report read the two lines that opened its next page as a heading, and a contents page set in that
+size gave each entry a chapter of its own.
 
 ### 6b. Figures — the body's pictures
 

@@ -836,6 +836,8 @@ public final class Gates {
         }
         targets.removeIf(t -> !t.contains("#") && files.containsKey(t));
         if (!targets.isEmpty()) bad.add("table of contents entries lead nowhere: " + targets);
+        if (name.startsWith("doc_two_text_styles") && (nav.contains("so the two lines") || !nav.contains("A feature set larger")))
+            bad.add("the contents hold two lines of an article set larger than the report, or miss its title");
         if (name.startsWith("doc_magazine") && (!nav.contains("The archive at night") || nav.contains("Every minute")))
             bad.add("the contents are not the text's headings: bookmarks that name nothing in it stood in for them");
         if (name.startsWith("doc_chapters")) {                  // the book under one title: cut at its parts, details nested

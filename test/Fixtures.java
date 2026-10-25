@@ -96,6 +96,7 @@ final class Fixtures {
         FEATURES.put("doc_wallpaper", (Whole) Fixtures::wallpaper);
         FEATURES.put("doc_confetti", (Whole) Fixtures::confetti);
         FEATURES.put("doc_break_labels", (Whole) Fixtures::breakLabels);
+        FEATURES.put("doc_two_text_styles", (Whole) Fixtures::twoTextStyles);
         FEATURES.put("doc_sections", (Whole) Fixtures::sections);
         FEATURES.put("doc_chapters", (Whole) Fixtures::chapters);
         FEATURES.put("doc_chapters_outline", (Whole) Fixtures::chaptersOutline);
@@ -1243,6 +1244,35 @@ final class Fixtures {
             String[] col = { "on at the top of the next one, under the drawing, and", "ends here, a few lines down, as any paragraph does.", "",
                              "    A new paragraph opens with an indent and runs on", "for two lines of its own." };
             for (int i = 0; i < col.length; i++) if (!col[i].isEmpty()) text(cs, f, 10, x, H - 95 * MM - i * lead, col[i]);
+        }
+    }
+
+    /**
+     * A report set in 9 pt with an article set larger, in 11 pt: its paragraphs of copy make 11 pt a text style,
+     * so the two lines that open its second page — the end of a sentence the page cut — are text, not a heading.
+     * Its title, in 18 pt bold, is the heading.
+     */
+    private static void twoTextStyles(Doc d) throws IOException {
+        PDFont f = d.sans(), b = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+        String body = "The report is set in a small size, line after line of it, the way annual reports set their long accounts of the year";
+        for (int pg = 0; pg < 2; pg++)
+            try (var cs = d.page(A4)) {
+                for (int i = 0; i < 40; i++) {                                  // no two lines alike: no running head
+                    String[] w = body.split(" ");
+                    int k = (pg * 40 + i * 7) % w.length;
+                    text(cs, f, 9, 20 * MM, H - 25 * MM - i * 11, String.join(" ", java.util.Arrays.copyOfRange(w, k, w.length)) + " " + String.join(" ", java.util.Arrays.copyOfRange(w, 0, k)));
+                }
+            }
+        String[] para = { "The article runs over two pages and is set larger than", "the report around it, the way a feature stands out in",
+                          "a magazine, in paragraphs of five lines or more that", "make its size a size for reading and not for titles,", "however large it is." };
+        try (var cs = d.page(A4)) {
+            text(cs, b, 18, 20 * MM, H - 25 * MM, "A feature set larger");
+            for (int p = 0; p < 3; p++) for (int i = 0; i < para.length; i++) text(cs, f, 11, 20 * MM, H - 40 * MM - p * 80 - i * 14, para[i]);
+        }
+        try (var cs = d.page(A4)) {
+            text(cs, f, 11, 20 * MM, H - 25 * MM, "so the two lines that open this page end the sentence");
+            text(cs, f, 11, 20 * MM, H - 25 * MM - 14, "the page cut, and read as text.");
+            for (int p = 0; p < 2; p++) for (int i = 0; i < para.length; i++) text(cs, f, 11, 20 * MM, H - 50 * MM - p * 80 - i * 14, para[i]);
         }
     }
 
