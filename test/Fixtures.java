@@ -98,6 +98,7 @@ final class Fixtures {
         FEATURES.put("doc_break_labels", (Whole) Fixtures::breakLabels);
         FEATURES.put("doc_two_text_styles", (Whole) Fixtures::twoTextStyles);
         FEATURES.put("doc_display_titles", (Whole) Fixtures::displayTitles);
+        FEATURES.put("doc_display_spread", (Whole) Fixtures::displaySpread);
         FEATURES.put("doc_sections", (Whole) Fixtures::sections);
         FEATURES.put("doc_chapters", (Whole) Fixtures::chapters);
         FEATURES.put("doc_chapters_outline", (Whole) Fixtures::chaptersOutline);
@@ -1295,6 +1296,26 @@ final class Fixtures {
                     text(cs, f, 9, 20 * MM, H - 60 * MM - i * 11, String.join(" ", java.util.Arrays.copyOfRange(w, k, w.length)) + " " + String.join(" ", java.util.Arrays.copyOfRange(w, 0, k)));
                 }
             }
+    }
+
+    /**
+     * A feature's opening page: a title of two lines set solid at 90 pt, its second line one short word over the
+     * first of two columns of 9 pt that start right under it — inside the band its descenders reserve.
+     * The title reads as one heading, and its last word is not glued to the body's first.
+     */
+    private static void displaySpread(Doc d) throws IOException {
+        PDFont f = d.sans();
+        WORDS.put("doc_display_spread", List.of("Never walk alone", "The fans arrive by the special train at"));
+        try (var cs = d.page(A4)) {
+            text(cs, f, 90, 15 * MM, H - 70 * MM, "Never walk");
+            text(cs, f, 90, 15 * MM, H - 70 * MM - 90, "alone");
+            String[][] cols = {
+                { "The fans arrive by the special train at", "twenty past two, and the police are", "waiting for them on the platform with", "the dogs and the horses, as every", "season, in the cold of the afternoon." },
+                { "In the control room the screens show", "the station, the bridge and the stadium,", "and the officers follow the march of", "the supporters from one camera to the", "next until the gates of the stadium." } };
+            float top = H - 70 * MM - 90 - 11;                                   // inside the title's descender band
+            for (int c = 0; c < 2; c++)
+                for (int i = 0; i < cols[c].length; i++) text(cs, f, 9, 15 * MM + c * 95 * MM, top - i * 11, cols[c][i]);
+        }
     }
 
     private static void metadata(Doc d) throws IOException {

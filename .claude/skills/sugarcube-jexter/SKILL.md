@@ -439,11 +439,12 @@ Analysis (`ocd.analysis`)
   the last row of a contents grid right, but also split label and value on one line, a code listing's spaces
   and some 3 % more blocks of a run of annual reports, with more words lost against pdftotext: not shipped.
   A finer profile needs its thresholds re-tuned with it, on the whole corpus.
-- A title of two lines at display size (80 pt) still splits when XY-Cut cuts between its lines: the white
-  there is three times a body line. Judging a row cut by the lines facing it (0.8 × the lower one) mended it
-  in one report but merged wide-set lists of lines in three fixtures (« Mode 0 fill / Mode 1 stroke… », a
-  table of contents), even restricted to lines twice the text's line: reverted (2026-10-25). Wide lines are
-  also pulled out as cross banners and put back one leaf each — look there first. What is left of those pairs is a grid of short
+- A title of two lines at display size (80 pt) split in two (2026-10-25): its second line, wide enough to
+  bridge the columns under it, was pulled out as a cross banner and put back as a leaf of its own —
+  `Segmenter.titleGoesOn` rejoins the next line of a display title across leaves. Judging XY-Cut's row cut by
+  the lines facing it instead merged wide-set lists of lines in three fixtures: tried, reverted. And a 9 pt
+  line set under a 103 pt word lies inside the band its descenders reserve: `Liner` now keeps runs stacked one
+  above the other (size ratio 2, across over half the narrower) on two lines (`doc_display_spread`). What is left of those pairs is a grid of short
   titles side by side read row by row (a contents page), not a leading.
 - A line-final hyphen is judged by the document's own words (`OCDIndex` `Vocabulary`, mirrored by `ocd.js`
   `keepsHyphen` for read-aloud and search — the bench `hyphens.mjs` fails when they drift): the compound

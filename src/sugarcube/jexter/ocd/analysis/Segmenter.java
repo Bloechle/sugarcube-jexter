@@ -52,6 +52,8 @@ public final class Segmenter {
     /** × line height: a baseline gap wider than the region's body leading by this much is a paragraph
      *  break — the "interline" cut (a kink in otherwise-even leading) that holds same-style paragraphs apart. */
     private static final double INTERLINE_JUMP = 0.35;
+    /** × the line's size: the widest baseline gap a display title set over several lines keeps (set solid is 1). */
+    private static final double DISPLAY_LEADING = 1.5;
     /** A lead marker's gap must be at least this × the line's own median word space to read as an enumerator. */
     private static final double ENUM_GAP_RATIO = 2.5;
     /** A lead glyph raised at least this × the body size above the baseline is a superscript (¹²³), not inline code. */
@@ -139,7 +141,10 @@ public final class Segmenter {
                 if (freeze) Spacer.freeze(doc, cl.runs());        // freeze the line: order + word spaces, sealed once
                 clean.add(line(doc, cl.runs()));                  // Line.text is now built from spaced runs
             }
-            leaves.add(clean);
+            List<Line> last = leaves.isEmpty() ? null : leaves.get(leaves.size() - 1);
+            if (last != null && !last.isEmpty() && !clean.isEmpty() && titleGoesOn(last.get(last.size() - 1), clean.get(0), bodySize))
+                last.addAll(clean);
+            else leaves.add(clean);
         }
         double bodyLeading = bodyLeading(leaves);                      // the region's settled leading
         // ④ split each leaf's lines into blocks by typography (size / weight) and leading
@@ -147,6 +152,20 @@ public final class Segmenter {
         for (List<Line> leaf : leaves) splitLeaf(doc, leaf, page, bodyLeading, bodySize, out);
         absorbDust(doc, out);                                        // absorb stray dust blocks into their container
         return out;
+    }
+
+    /** Whether {@code b} is the next line of the display title {@code a} ends — XY-Cut parted them: a title
+     *  line wide enough to bridge the columns under it is pulled out as a banner and put back as a leaf of its
+     *  own, so a title of 80 pt on two lines read as two headings. Both larger than the body, the same size
+     *  and weight, the same direction, {@code b} under {@code a} at a title's leading, and overlapping it
+     *  across. Geometry only. */
+    private static boolean titleGoesOn(Line a, Line b, double bodySize) {
+        double hi = Math.max(a.size, b.size), lo = Math.min(a.size, b.size);
+        if (lo <= 0 || hi / lo >= SIZE_JUMP || bodySize <= 0 || lo < bodySize * SIZE_JUMP) return false;
+        if (a.bold() != b.bold() || axis(a) != axis(b)) return false;
+        double gap = a.yc - b.yc;
+        return gap > 0 && gap <= DISPLAY_LEADING * hi
+                && Math.min(a.bounds.right(), b.bounds.right()) > Math.max(a.bounds.x(), b.bounds.x());
     }
 
     /** The line's writing direction, quantised to a quarter turn — {@code -1} for an empty line. A block is

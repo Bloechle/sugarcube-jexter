@@ -37,6 +37,13 @@ final class Liner {
      *  here costs nothing: XY-Cut only cuts where every line leaves the gap, and inside its leaf the band is
      *  read whole again ({@code splitColumns=false}). */
     private static final double COLUMN_GAP = 0.5;
+    /** Size ratio from which a run under another is on another line: runs of one line stand side by side, so a
+     *  9 pt line set under a 103 pt word, inside the band its descenders reserve, is the next line of text —
+     *  read as one line, the title's last word was glued to the body's first. A superscript sits beside its
+     *  word, never under it, and still joins. */
+    private static final double UNDER_RATIO = 2.0;
+    /** × the narrower run: how much of it must lie across the other for one to stand under the other. */
+    private static final double UNDER_COVER = 0.5;
 
     /** A clustered line: mean y and member runs (left→right). Geometry only — no text, no spacing; word
      *  spaces live in the runs as sentinels (the {@link Spacer} authority), read by whoever needs the text. */
@@ -127,7 +134,17 @@ final class Liner {
          *  smaller): a raised or shrunk sub/superscript sits inside the band and joins, no special case. */
         boolean accepts(OCDText t) {
             return box.axis(t) == axis                              // a different baseline direction is a different line
-                && vOverlap(box.of(t), band) >= OVERLAP_MIN;
+                && vOverlap(box.of(t), band) >= OVERLAP_MIN
+                && runs.stream().noneMatch(m -> stacked(m, t));      // one above the other: two lines
+        }
+
+        /** Whether one of the two runs stands under the other: sizes far apart, and across each other. */
+        private boolean stacked(OCDText a, OCDText b) {
+            double sa = a.fontSize(), sb = b.fontSize();
+            if (sa <= 0 || sb <= 0 || Math.max(sa, sb) < UNDER_RATIO * Math.min(sa, sb)) return false;
+            JxRect ra = box.of(a), rb = box.of(b);
+            double across = Math.min(ra.maxX(), rb.maxX()) - Math.max(ra.minX(), rb.minX());
+            return across > UNDER_COVER * Math.min(ra.width(), rb.width());
         }
 
         /** Cut this band into lines at every gap wider than {@link #COLUMN_GAP} (a column gutter or a margin

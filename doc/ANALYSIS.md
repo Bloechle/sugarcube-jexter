@@ -371,7 +371,11 @@ OCDStructNode  (heading · paragraph)
 ### Liner — lines without metadata
 
 `Liner.lines` groups runs into baseline lines by **vertical overlap alone**: two runs share a line when
-their vertical bands overlap by at least **1/3 of the smaller band**. Overlap *is* the discriminant —
+their vertical bands overlap by at least **1/3 of the smaller band**. Runs of one line stand **side by side**: a run
+lying across another at least twice its size or half its size (over half the narrower one's width) is on
+another line — a 9 pt line set under a 103 pt word lies inside the band its descenders reserve, and read as
+one line the title's last word was glued to the body's first. A superscript sits beside its word and still
+joins. Overlap *is* the discriminant —
 same-line runs overlap strongly, tight-leading neighbours only ≈0.1–0.3 — so a raised or shrunk
 **sub/superscript naturally joins its line** with no special case and no size gate (an earlier size
 guard orphaned superscripts: a raised, small run seeded its own band and the larger body run was then
