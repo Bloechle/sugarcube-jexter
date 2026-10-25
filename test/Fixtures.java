@@ -94,6 +94,7 @@ final class Fixtures {
         FEATURES.put("doc_three_columns", (Whole) Fixtures::threeColumns);
         FEATURES.put("doc_grid_background", (Whole) Fixtures::gridBackground);
         FEATURES.put("doc_wallpaper", (Whole) Fixtures::wallpaper);
+        FEATURES.put("doc_confetti", (Whole) Fixtures::confetti);
         FEATURES.put("doc_sections", (Whole) Fixtures::sections);
         FEATURES.put("doc_chapters", (Whole) Fixtures::chapters);
         FEATURES.put("doc_chapters_outline", (Whole) Fixtures::chaptersOutline);
@@ -1187,6 +1188,31 @@ final class Fixtures {
                               "spread with one picture, and the article runs over", "it in a column of its own, long enough to read as",
                               "copy and never as the label of a drawing." };
             for (int i = 0; i < copy.length; i++) text(cs, f, 10, 60 * MM, H - 120 * MM - i * 12, copy[i]);   // across the grid
+        }
+    }
+
+    /**
+     * Confetti: six small coloured tiles (two bars each) strewn down a column of copy, one under each of its six
+     * paragraphs, so the text parts every tile from the next. One drawing for the reader, not six.
+     */
+    private static void confetti(Doc d) throws IOException {
+        PDFont f = d.sans();
+        WORDS.put("doc_confetti", List.of("The tiles of a pattern bleed in from the page before"));
+        try (var cs = d.page(A4)) {
+            float x = 30 * MM, y = H - 30 * MM;
+            for (int p = 0; p < 6; p++) {
+                String[] para = { p == 0 ? "The tiles of a pattern bleed in from the page before" : "Another paragraph of the article runs on down the",
+                                  "and land between the paragraphs of the article, a", "few of them under each one, small and bright and", "with no word of their own to say what they are." };
+                for (int i = 0; i < para.length; i++) text(cs, f, 10, x, y - i * 12, para[i]);
+                y -= 4 * 12 + 4;
+                for (int k = 0; k < 2; k++) {                                   // a tile: two bars side by side
+                    cs.setNonStrokingColor(k == 0 ? new Color(230, 70, 60) : new Color(40, 150, 210));
+                    cs.addRect(x + 40 * MM + p * 6 * MM + k * 14, y - 8, 14, 8);
+                    cs.fill();
+                }
+                cs.setNonStrokingColor(Color.BLACK);
+                y -= 20;
+            }
         }
     }
 

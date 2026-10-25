@@ -303,6 +303,9 @@ at the place of the first thing it holds in reading order. Pure geometry, no lex
 A picture painted three times or more on ONE page — the same bytes, a wallpaper tiled over a spread
 (a layout program embeds the file again for each placement, under a fresh name) — is shown once, where it
 is first read: cut apart by the columns set over it, its copies made one figure each.
+A page whose drawing the text cut into five or more small pieces (each under 1 % of the page, no label
+of their own) — tiles strewn round the columns, a pattern bleeding in from the page before — shows them
+as ONE figure, where the first is read: they made 44 figures in a row for one page of a report.
 
 The `FIGURES` gate holds it: every body picture is in a FIGURE, every `<figure>` of the reflow book
 holds its `<img>`.

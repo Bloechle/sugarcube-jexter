@@ -773,6 +773,7 @@ public final class Gates {
         }
         if (drawn != open) bad.add((open - drawn) + " of " + open + " <figure> without a picture in the reflow book");
         if (current.equals("doc_wallpaper.pdf") && figs != 1) bad.add("a picture tiled six times on the page makes " + figs + " FIGUREs, not 1");
+        if (current.equals("doc_confetti.pdf") && figs != 1) bad.add("six tiles strewn down a column make " + figs + " FIGUREs, not 1");
         if (s != null && !"pdf".equals(s.id()) && open < figs) bad.add(figs + " FIGUREs, " + open + " drawn in the reflow book");
         // the Markdown has no picture to link to: a FIGURE is docling's placeholder, never a link that leads nowhere
         String md = sugarcube.jexter.write.MarkdownWriter.toMarkdown(model);

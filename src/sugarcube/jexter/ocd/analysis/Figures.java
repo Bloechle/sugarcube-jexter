@@ -30,7 +30,8 @@ import java.util.Map;
  * of a book must not see: a picture under the text (a scan behind its OCR words, a full-bleed background),
  * one repeated on most pages (a logo, a running decoration), page furniture, a layer switched off, and
  * specks too small to be a picture. A picture painted {@value #REPEATS} times or more on ONE page — the same
- * bytes, a wallpaper tiled over the page — is shown once, where it is first read. Headings and paragraphs are never re-decided: the builders own them.
+ * bytes, a wallpaper tiled over the page — is shown once, where it is first read; and a page whose drawing
+ * the text cut into a heap of small pieces with no label shows them as one figure. Headings and paragraphs are never re-decided: the builders own them.
  *
  * <p><b>One figure is one zone free of body copy</b> — the XY-Cut idea run bottom-up. A drawing reaches
  * this pass in pieces: a chart's bars, axes and legend, a diagram's boxes and the arrows between them, its
@@ -67,6 +68,8 @@ public final class Figures {
     static final int    LABEL      = 100;    // characters: shorter text inside a drawing is a label, longer is body text
     static final int    COLUMN     = 4;      // lines: a block this tall is a column of copy, body text even over a picture
     static final int    GLUE_MAX   = 3000;   // binding pieces per page past which only the pictures themselves count
+    static final double CRUMB      = 0.01;   // × the page area: a figure smaller than this, with no label, is a crumb…
+    static final int    SCATTER    = 5;      // …and this many crumbs on one page are one drawing the text cut apart
 
     /** A thing on the page in reading order: a block of text, or a picture. */
     private record Token(int page, OCDNode node, boolean picture) {}
@@ -263,6 +266,7 @@ public final class Figures {
             for (int k = 0; k < groups.size(); k++)                       // the short text over a region is its labels
                 for (int i : labels)
                     if (!boxes.get(k).intersection(tokens.get(i).node().ink().inflate(-HUG, -HUG)).isEmpty()) groups.get(k).add(i);
+            scatter(groups, bound, boxes, tokens, doc.page(page).effectiveBox());
             for (int k = 0; k < groups.size(); k++) {
                 JxRect own = JxRect.EMPTY;
                 for (int i : groups.get(k)) own = own.union(tokens.get(i).node().ink());
@@ -273,6 +277,22 @@ public final class Figures {
         }
         out.sort(java.util.Comparator.comparingInt(r -> r.tokens().first()));
         return out;
+    }
+
+    /** Confetti: a page whose drawing the text cut into {@value #SCATTER} or more small pieces with no label of
+     *  their own — tiles strewn round the columns, a pattern bleeding in from the page before — shows them as ONE
+     *  figure, where the first is read. Each made a figure of its own: 44 in a row for one page of a report. The
+     *  pieces stay what they are; only the reader of the book sees one drawing instead of a heap of crumbs. */
+    private static void scatter(List<java.util.SortedSet<Integer>> groups, List<List<OCDNode>> bound, List<JxRect> boxes,
+                                List<Token> tokens, JxRect pageBox) {
+        double crumb = CRUMB * pageBox.width() * pageBox.height();
+        List<Integer> crumbs = new ArrayList<>();
+        for (int k = 0; k < groups.size(); k++) {
+            JxRect b = boxes.get(k);
+            if (b.width() * b.height() < crumb && groups.get(k).stream().allMatch(i -> tokens.get(i).picture())) crumbs.add(k);
+        }
+        if (crumbs.size() < SCATTER) return;
+        for (int x = crumbs.size() - 1; x > 0; x--) merge(groups, bound, boxes, crumbs.get(0), crumbs.get(x));
     }
 
     /** Two pieces of one drawing: their ink is close, and no body text lies in the box they would make. */
