@@ -93,6 +93,7 @@ final class Fixtures {
         FEATURES.put("doc_columns_page_break", (Whole) Fixtures::columnsPageBreak);
         FEATURES.put("doc_three_columns", (Whole) Fixtures::threeColumns);
         FEATURES.put("doc_grid_background", (Whole) Fixtures::gridBackground);
+        FEATURES.put("doc_wallpaper", (Whole) Fixtures::wallpaper);
         FEATURES.put("doc_sections", (Whole) Fixtures::sections);
         FEATURES.put("doc_chapters", (Whole) Fixtures::chapters);
         FEATURES.put("doc_chapters_outline", (Whole) Fixtures::chaptersOutline);
@@ -1167,6 +1168,25 @@ final class Fixtures {
                 if (!c[2].isEmpty()) text(cs, f, 10, x + 9 * MM, y - 16, c[2]);
                 for (int i = 3; i < c.length; i++) text(cs, f, 7, x + 9 * MM, y - 30 - (i - 3) * 9, c[i]);
             }
+        }
+    }
+
+    /**
+     * A picture tiled over the page as a wallpaper: the same photograph placed six times in a grid (embedded six
+     * times, the same bytes under six names, as a layout program does), a column of copy set over part of it.
+     * A reader of the book sees the picture once.
+     */
+    private static void wallpaper(Doc d) throws IOException {
+        PDFont f = d.sans();
+        WORDS.put("doc_wallpaper", List.of("The same photograph is laid six times over the page"));
+        try (var cs = d.page(A4)) {
+            for (int k = 0; k < 6; k++)                                         // six embeddings, one picture
+                cs.drawImage(JPEGFactory.createFromImage(d.pdf, gradient(256, 160), 0.88f),
+                             15 * MM + (k % 2) * 95 * MM, H - 15 * MM - (k / 2 + 1) * 62 * MM, 85 * MM, 55 * MM);
+            String[] copy = { "The same photograph is laid six times over the", "page as a wallpaper, the way a designer fills a",
+                              "spread with one picture, and the article runs over", "it in a column of its own, long enough to read as",
+                              "copy and never as the label of a drawing." };
+            for (int i = 0; i < copy.length; i++) text(cs, f, 10, 60 * MM, H - 120 * MM - i * 12, copy[i]);   // across the grid
         }
     }
 

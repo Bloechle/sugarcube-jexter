@@ -29,7 +29,8 @@ import java.util.Map;
  * about captions, tables or what a figure means (still {@link Refiner}'s). It only keeps out what a reader
  * of a book must not see: a picture under the text (a scan behind its OCR words, a full-bleed background),
  * one repeated on most pages (a logo, a running decoration), page furniture, a layer switched off, and
- * specks too small to be a picture. Headings and paragraphs are never re-decided: the builders own them.
+ * specks too small to be a picture. A picture painted {@value #REPEATS} times or more on ONE page — the same
+ * bytes, a wallpaper tiled over the page — is shown once, where it is first read. Headings and paragraphs are never re-decided: the builders own them.
  *
  * <p><b>One figure is one zone free of body copy</b> — the XY-Cut idea run bottom-up. A drawing reaches
  * this pass in pieces: a chart's bars, axes and legend, a diagram's boxes and the arrows between them, its
@@ -75,7 +76,8 @@ public final class Figures {
         List<Token> tokens = new ArrayList<>();
         Map<String, Integer> where = new HashMap<>();          // page + node id → token index
         Map<String, Integer> repeats = repeats(doc);
-        for (int pi = 0; pi < doc.pageCount(); pi++) walk(doc, pi, doc.page(pi).content(), tokens, where, repeats);
+        for (int pi = 0; pi < doc.pageCount(); pi++)
+            walk(doc, pi, doc.page(pi).content(), tokens, where, repeats, copies(doc, doc.page(pi)), new java.util.HashSet<>());
         if (tokens.stream().noneMatch(Token::picture)) return;
 
         boolean placed = false;
@@ -94,15 +96,33 @@ public final class Figures {
     /** The page's text blocks and pictures in reading order. A paragraph or a graphic is one token, and
      *  every id inside it (runs, nested paragraphs) points at that token. */
     private static void walk(OCDDocument doc, int page, List<OCDNode> nodes, List<Token> tokens,
-                             Map<String, Integer> where, Map<String, Integer> repeats) {
+                             Map<String, Integer> where, Map<String, Integer> repeats, Map<String, Integer> copies, java.util.Set<String> once) {
         OCDPage p = doc.page(page);
         for (OCDNode n : nodes) {
             if (doc.hides(n)) continue;
             if (n instanceof OCDParagraph || n instanceof OCDText) add(page, n, false, tokens, where);
             else if (n instanceof OCDGraphic g) { if (shows(p, g, repeats)) add(page, g, true, tokens, where); }
-            else if (n instanceof OCDImage im) { if (shows(p, im, repeats)) add(page, im, true, tokens, where); }
-            else if (n instanceof OCDGroup g) walk(doc, page, g.children(), tokens, where, repeats);   // a wrapper: what it holds
+            else if (n instanceof OCDImage im) {
+                String c = content(doc, im);
+                boolean tiled = copies.getOrDefault(c, 0) >= REPEATS;
+                if (shows(p, im, repeats) && (!tiled || once.add(c))) add(page, im, true, tokens, where);
+            }
+            else if (n instanceof OCDGroup g) walk(doc, page, g.children(), tokens, where, repeats, copies, once);   // a wrapper: what it holds
         }
+    }
+
+    /** How many times the page paints each picture, by its bytes: a designer's file placed again and again
+     *  is embedded again and again under fresh names. */
+    private static Map<String, Integer> copies(OCDDocument doc, OCDPage page) {
+        Map<String, Integer> n = new HashMap<>();
+        page.nodes().filter(OCDImage.class::isInstance).forEach(im -> n.merge(content(doc, (OCDImage) im), 1, Integer::sum));
+        return n;
+    }
+
+    /** A picture's identity by its bytes (their length and hash), or its resource when it has none. */
+    private static String content(OCDDocument doc, OCDImage im) {
+        byte[] b = im.resourceRef() == null ? null : doc.image(im.resourceRef());
+        return b == null ? "ref:" + im.resourceRef() : b.length + ":" + java.util.Arrays.hashCode(b);
     }
 
     private static void add(int page, OCDNode n, boolean picture, List<Token> tokens, Map<String, Integer> where) {

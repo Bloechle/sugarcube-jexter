@@ -753,7 +753,11 @@ public final class Gates {
             figs = figureRefs(s.root(), model, shown);
             for (int p = 0; p < model.pageCount(); p++) {
                 int page = p;
+                Map<String, Integer> copies = new HashMap<>();                  // a picture tiled on the page is shown once
+                model.page(p).images().forEach(im -> copies.merge(bytesOf(model, im), 1, Integer::sum));
+                Set<String> once = new HashSet<>();
                 model.page(p).images().filter(im -> !model.hides(im) && !sugarcube.jexter.ocd.analysis.Furniture.isRunning(im))
+                     .filter(im -> copies.get(bytesOf(model, im)) < 3 || once.add(bytesOf(model, im)))
                      .filter(im -> Math.max(im.ink().width(), im.ink().height()) >= 24)
                      .filter(im -> !framesCopy(model.page(page), im))
                      .filter(im -> !shown.contains(page + "/" + im.id()))
@@ -768,12 +772,18 @@ public final class Gates {
             if (end > at && book.substring(at, end).contains("<img")) drawn++;
         }
         if (drawn != open) bad.add((open - drawn) + " of " + open + " <figure> without a picture in the reflow book");
+        if (current.equals("doc_wallpaper.pdf") && figs != 1) bad.add("a picture tiled six times on the page makes " + figs + " FIGUREs, not 1");
         if (s != null && !"pdf".equals(s.id()) && open < figs) bad.add(figs + " FIGUREs, " + open + " drawn in the reflow book");
         // the Markdown has no picture to link to: a FIGURE is docling's placeholder, never a link that leads nowhere
         String md = sugarcube.jexter.write.MarkdownWriter.toMarkdown(model);
         if (md.contains("](#)")) bad.add("the Markdown links a figure to nothing: ](#)");
         if (figs > 0 && !md.contains("<!-- image -->")) bad.add(figs + " FIGUREs, no <!-- image --> in the Markdown");
         return bad;
+    }
+
+    private static String bytesOf(OCDDocument model, OCDNode im) {
+        byte[] b = model.image(((sugarcube.jexter.ocd.model.OCDImage) im).resourceRef());
+        return b == null ? "?" + im.id() : b.length + ":" + java.util.Arrays.hashCode(b);
     }
 
     /** A picture holding a paragraph of copy whole (100 characters or more) is that text's panel, no figure. */

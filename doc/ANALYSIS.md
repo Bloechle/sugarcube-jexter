@@ -300,6 +300,10 @@ at the place of the first thing it holds in reading order. Pure geometry, no lex
   replaced by it. The writers draw a FIGURE of several nodes as the page paints that region
   (`OCDRenderer.renderRegion`: the shapes and pictures there, its own labels, no other text).
 
+A picture painted three times or more on ONE page — the same bytes, a wallpaper tiled over a spread
+(a layout program embeds the file again for each placement, under a fresh name) — is shown once, where it
+is first read: cut apart by the columns set over it, its copies made one figure each.
+
 The `FIGURES` gate holds it: every body picture is in a FIGURE, every `<figure>` of the reflow book
 holds its `<img>`.
 
