@@ -30,6 +30,12 @@ import java.util.Set;
  *       than the rest of the report read its two-line paragraphs as headings.</li>
  *   <li>The single largest elevated style standing above every heading level is the <b>title</b>; it
  *       alone is exempt from recurrence, since a document title may appear only once.</li>
+ *   <li>Unless several stand there: a magazine sets each article's title in a size of its own, fitted to
+ *       its page (55 to 103 pt in one report), so none recurs. The styles above every heading level are then
+ *       ONE level, the first, when together they cover {@link #MIN_RUNS} pages or more (sizes that differ ask
+ *       more evidence than one that recurs) — on fewer, they are a cover, and the largest is the title. A
+ *       display title is the largest text of every page it is on; the top recurring level shares the first
+ *       level with them when it heads its pages too (one of those sizes happened to be used twice).</li>
  *   <li>Levels are the distinct heading signatures ranked by <b>size descending</b> (bold before regular
  *       at equal size) → level 1 (largest) … N. Size order <i>is</i> the hierarchy, document-wide and
  *       unambiguous; no per-block ratio threshold is ever consulted again.</li>
@@ -157,11 +163,28 @@ public final class FontProfile {
             boolean recurs = pages.get(s).size() >= MIN_PAGES || occur.get(s) >= MIN_RUNS;
             if (recurs) heads.add(s);
         }
+        // display titles: each the largest text of its page, in a size no other title shares, on several pages
+        Map<Integer, Double> pageTop = new HashMap<>();
+        for (Style s : ink.keySet()) for (int pg : pages.get(s)) pageTop.merge(pg, s.size(), Math::max);
+        java.util.function.Predicate<Style> tops = s -> pages.get(s).stream().allMatch(pg -> s.size() >= pageTop.get(pg) - SIZE_TOL);
+        List<Style> display = new ArrayList<>();
+        Set<Integer> shown = new HashSet<>();
+        for (Style s : ink.keySet()) {
+            if (s.equals(body) || heads.contains(s) || s.size() < body.size() * LARGER || !tops.test(s)
+                    || copy.getOrDefault(s, 0) >= COPY_BLOCKS) continue;
+            display.add(s);
+            shown.addAll(pages.get(s));
+        }
+        // sizes that differ need more evidence than one that recurs: as many pages as a style needs runs
+        boolean magazine = display.size() > 1 && shown.size() >= MIN_RUNS;
         // rank by size desc, bold before regular at equal size → coalesce equal (size,bold) into one level
         heads.sort(Comparator.comparingDouble(Style::size).reversed()
                 .thenComparing(Comparator.comparing(Style::bold).reversed()));
         Map<Style, Integer> level = new HashMap<>();
         int lvl = 0; double lastSize = Double.NaN; boolean lastBold = false;
+        // the display titles are the first level — beside the top recurring one when it too heads its pages
+        boolean beside = magazine && !heads.isEmpty() && tops.test(heads.get(0));
+        if (magazine) { lvl = beside ? 0 : 1; for (Style s : display) level.put(s, 1); title = null; }
         for (Style s : heads) {
             if (Double.isNaN(lastSize) || Math.abs(s.size() - lastSize) > SIZE_TOL || s.bold() != lastBold) {
                 lvl++; lastSize = s.size(); lastBold = s.bold();
@@ -170,7 +193,7 @@ public final class FontProfile {
         }
         // the document title: the biggest elevated style, only when it stands ABOVE every heading level
         // (so a recurring heading is never mistaken for the title). Null when there is no such singular style.
-        if (title != null && (heads.isEmpty() || title.size() > heads.get(0).size() + SIZE_TOL) && !level.containsKey(title)) {
+        if (!magazine && title != null && (heads.isEmpty() || title.size() > heads.get(0).size() + SIZE_TOL) && !level.containsKey(title)) {
             // keep title
         } else title = null;
         return new FontProfile(level, title, body);

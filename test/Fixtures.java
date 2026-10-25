@@ -97,6 +97,7 @@ final class Fixtures {
         FEATURES.put("doc_confetti", (Whole) Fixtures::confetti);
         FEATURES.put("doc_break_labels", (Whole) Fixtures::breakLabels);
         FEATURES.put("doc_two_text_styles", (Whole) Fixtures::twoTextStyles);
+        FEATURES.put("doc_display_titles", (Whole) Fixtures::displayTitles);
         FEATURES.put("doc_sections", (Whole) Fixtures::sections);
         FEATURES.put("doc_chapters", (Whole) Fixtures::chapters);
         FEATURES.put("doc_chapters_outline", (Whole) Fixtures::chaptersOutline);
@@ -1274,6 +1275,26 @@ final class Fixtures {
             text(cs, f, 11, 20 * MM, H - 25 * MM - 14, "the page cut, and read as text.");
             for (int p = 0; p < 2; p++) for (int i = 0; i < para.length; i++) text(cs, f, 11, 20 * MM, H - 50 * MM - p * 80 - i * 14, para[i]);
         }
+    }
+
+    /**
+     * A magazine: four articles, each opening on a page under a title set in a size of its own, fitted to the
+     * page (40, 48, 56 and 64 pt), over a 9 pt body. No title size recurs, and every one is the largest text of
+     * its page: the four are the first level of the contents, not the largest alone as the document's title.
+     */
+    private static void displayTitles(Doc d) throws IOException {
+        PDFont f = d.sans();
+        String[] titles = { "Night shift", "Paper trails", "Lost and found", "Open doors" };
+        String body = "Each article runs on in a small size under its title, line after line, the way a magazine sets its pages for reading";
+        String[] w = body.split(" ");
+        for (int a = 0; a < 4; a++)
+            try (var cs = d.page(A4)) {
+                text(cs, f, 40 + 8 * a, 20 * MM, H - 40 * MM, titles[a]);
+                for (int i = 0; i < 30; i++) {                                  // no two lines alike: no running head
+                    int k = (a * 30 + i * 5) % w.length;
+                    text(cs, f, 9, 20 * MM, H - 60 * MM - i * 11, String.join(" ", java.util.Arrays.copyOfRange(w, k, w.length)) + " " + String.join(" ", java.util.Arrays.copyOfRange(w, 0, k)));
+                }
+            }
     }
 
     private static void metadata(Doc d) throws IOException {

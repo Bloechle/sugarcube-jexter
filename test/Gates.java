@@ -836,6 +836,9 @@ public final class Gates {
         }
         targets.removeIf(t -> !t.contains("#") && files.containsKey(t));
         if (!targets.isEmpty()) bad.add("table of contents entries lead nowhere: " + targets);
+        if (name.startsWith("doc_display_titles"))
+            for (String t : List.of("Night shift", "Paper trails", "Lost and found", "Open doors"))
+                if (!nav.contains(t)) bad.add("the contents miss the article \"" + t + "\": a title in a size of its own is a title still");
         if (name.startsWith("doc_two_text_styles") && (nav.contains("so the two lines") || !nav.contains("A feature set larger")))
             bad.add("the contents hold two lines of an article set larger than the report, or miss its title");
         if (name.startsWith("doc_magazine") && (!nav.contains("The archive at night") || nav.contains("Every minute")))

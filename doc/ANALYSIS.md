@@ -279,7 +279,10 @@ Recurrence is the load-bearing discriminant: a one-off large decoration or a fig
 never becomes a heading because its style does not recur. And a style that sets running text — two paragraphs of copy
 or more (four lines and more) — is no heading style however large: an article set larger than the rest
 of a report read the two lines that opened its next page as a heading, and a contents page set in that
-size gave each entry a chapter of its own.
+size gave each entry a chapter of its own. A magazine sets each article's title in a size of its own, fitted to
+its page, so none recurs: the styles that are the largest text of every page they are on, none recurring,
+are together the first level once they cover three pages (beside the top recurring level when it heads its
+pages too); on fewer pages they are a cover, and the largest is the document's title.
 
 ### 6b. Figures — the body's pictures
 
