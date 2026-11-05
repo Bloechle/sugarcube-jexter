@@ -30,7 +30,7 @@
  *
  * Requires qry.js 3.x (global `$`).
  *
- * @version 3.6.1
+ * @version 3.7.1
  * @author  Jean-Luc Bloechle with Claude.ai
  * @license MIT
  */
@@ -90,6 +90,7 @@ export const labels = {
     all: 'All',                             // makeConsole(): every line
     warnings: 'Warnings',                   // makeConsole(): warnings and errors
     errors: 'Errors',                       // makeConsole(): errors only
+    find: 'Filter',                         // makeConsole(): its find field (placeholder and name)
     copy: 'Copy',                           // makeConsole(): copy the lines shown
     clear: 'Clear',                         // makeConsole(): empty it
     close: 'Close',                         // makeConsole(): its × button (its accessible name)

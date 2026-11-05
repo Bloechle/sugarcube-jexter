@@ -26,7 +26,7 @@
  *
  * Requires qry.js 3.x (global `$`) and qry-web.js beside this file.
  *
- * @version 3.6.1
+ * @version 3.7.1
  * @author  Jean-Luc Bloechle with Claude.ai
  * @license MIT
  */
@@ -1590,25 +1590,50 @@ export const makeDropZone = (target = document.body, { onFiles, accept = '', pas
 const _LEVELS = ['debug', 'log', 'info', 'warn', 'error'];
 /** @private — a level's weight: the filters and the badge count warn (3) and error (4). */
 const _rank = (level) => _LEVELS.indexOf(level);
-/** @private — one logged value as text: an Error by its stack, an object as JSON. */
-const _say = (v) => {
-    if (v instanceof Error) return v.stack?.includes(v.message) ? v.stack : `${v}\n${v.stack ?? ''}`.trim();
-    if (v !== null && typeof v === 'object') { try { return JSON.stringify(v, null, 2); } catch { return String(v); } }
+/** @private — one logged value on one line: an Error by its name and message (its stack is the line's
+ *  detail), an object as compact JSON. */
+const _brief = (v) => {
+    if (v instanceof Error) return String(v);
+    if (v !== null && typeof v === 'object') { try { return JSON.stringify(v); } catch { return String(v); } }
     return String(v);
+};
+/** @private — the stacks of the Errors among values, their frames only (the message is the line). */
+const _frames = (values) => values.filter((v) => v instanceof Error && v.stack).map((v) => {
+    const s = v.stack.startsWith(String(v)) ? v.stack.slice(String(v).length) : v.stack;     // Chromium repeats the message, the others do not
+    return s.split('\n').map((l) => l.trim()).filter(Boolean).join('\n');
+}).join('\n') || undefined;
+/** @private — console.* and the page's uncaught errors into log(); returns what puts console.* back
+ *  (unless someone patched it since). The listeners go with `on`'s signal. */
+const _capture = (log, on) => {
+    const patched = _LEVELS.map((level) => {
+        const original = console[level], wrapper = (...args) => { original.apply(console, args); log(args.map(_brief).join(' '), { level, detail: _frames(args) }); };
+        console[level] = wrapper;
+        return [level, original, wrapper];
+    });
+    window.on('error', (e) => log(e.error ?? e.message, { level: 'error', source: e.filename ? `${e.filename.split('/').pop()}:${e.lineno}` : undefined }), on);
+    window.on('unhandledrejection', (e) => log(e.reason, { level: 'error' }), on);
+    return () => { for (const [level, original, wrapper] of patched) if (console[level] === wrapper) console[level] = original; };
 };
 /** The console's icons, by role — names of the app's set (icons.add): a role whose name is not
  *  registered shows its text instead (qry draws none). Lucide's names, the set our apps use. */
 const _CONSOLE_ICONS = { console: 'terminal', all: 'list', warn: 'triangle-alert', error: 'circle-x', info: 'info', debug: 'bug', copy: 'copy', clear: 'eraser', close: 'x' };
+/** @private — a time as the console shows it (24 h, seconds). */
+const _clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
 
 /** The console of an app — the drawer every tool of ours had its own copy of (F2, a footer button):
  *  the lines the app writes (`log`), and with `capture` what `console.*` says and every uncaught
  *  error or rejected promise. Give it an element — `<section id="console" class="qry-console" hidden>`,
- *  in a `.qry-workspace` between its body and its footer (qry-ui.css makes it a row there) — and it
- *  is filled: a resize handle on its top edge (makeSplitter: drag, ↑/↓, double-click resets; the height
- *  in `--qry-console-h`), a head (the title — a click closes —, the count, what the element held:
- *  your own controls, then All · Warnings · Errors, Copy, Clear, ×) and the lines (`role="log"`: time,
- *  level, `source`, text). The lines come in once per frame, at most `max` are kept, and the view
- *  follows the end unless you scrolled up.
+ *  in a `.qry-workspace` between its body and its footer (qry-ui.css makes it a row there), or
+ *  `class="qry-console floating"` anywhere: over the page at its bottom — and it is filled: a resize
+ *  handle on its top edge (makeSplitter: drag, ↑/↓, double-click resets; the height in
+ *  `--qry-console-h`), a head (the title — a click closes —, the count, what the element held: your
+ *  own controls, then a find field, All · Warnings · Errors with their counts, Copy, Clear, ×) and the
+ *  lines (`role="log"`: time · level · source · text, in aligned columns). A line is one line: an
+ *  object as compact JSON, an Error by its message — its stack (or a `detail` given to `log`) folds
+ *  under it (<details>). The same line again, at once, is not repeated: its row counts it (×3) and
+ *  takes the last time. The lines come in once per frame, at most `max` are kept, and the view follows
+ *  the end unless you scrolled up. The find field keeps the lines whose text, source or detail hold
+ *  what is typed ($.fold: case and accents ignored); Escape there empties it, then closes.
  *  - `button`: its toggle(s) — `aria-expanded`, `aria-controls`, `aria-keyshortcuts` are set; while it
  *    is closed, a `.qry-console-badge` on each counts the warnings and errors (`.warn`, or `.danger`
  *    once an error came) — open, it goes.
@@ -1617,31 +1642,37 @@ const _CONSOLE_ICONS = { console: 'terminal', all: 'list', warn: 'triangle-alert
  *    Escape closes it while the focus is inside — the focus goes back to its button.
  *  - `autoOpen: 'error'` (or 'warn') opens it at the first such line, once — until clear().
  *  - `onSelect(entry)`: a line logged with `data` is a button that calls it (an error's line in an editor).
- *  - `persist: 'app:console'`: open or closed and the filter are kept ($.store), the height under `<key>:height`.
+ *  - `persist: 'app:console'`: open or closed, the filter and the last Clear are kept ($.store), the height under
+ *    `<key>:height`. After Clear, a line dated before it is not taken again — a server's log loaded once more, by
+ *    this page or (kept) the next one.
  *  - `theme`: 'dark' (default: a console reads as a terminal, whatever the page's mode — the app's
  *    accent and tones in their dark form) or 'page' (it follows the page).
  *  - `icons`: { role: name } over the defaults ({ console: 'terminal', all: 'list', warn:
  *    'triangle-alert', error: 'circle-x', info: 'info', debug: 'bug', copy: 'copy', clear: 'eraser',
  *    close: 'x' }) — names of the app's icons.add set; a role left unregistered (or set to null)
  *    shows its word, never a missing-icon square.
- *  The filters count their lines (Warnings: warnings and errors; Errors). destroy() puts console.*
- *  back (unless someone patched it since) and the element's own children.
+ *  `log`'s options: `level`, `source`, `data` (onSelect), `time` (ms since the epoch, default now: a
+ *  line dated as its source did — a server's own clock), `detail` (folded under the line), `quiet`
+ *  (a line that is not news — a server's past log loaded at start: no badge, no autoOpen).
+ *  Copy takes the lines shown (their details indented), and says how many. destroy() puts console.*
+ *  back and the element's own children.
  *  @param {string|Element} panel  the element it fills
- *  @param {{button?: string|Element|Element[], capture?: boolean, max?: number, shortcut?: string|null, autoOpen?: false|'warn'|'error', onSelect?: (entry: {time: number, level: string, text: string, source?: string, data?: any}) => void, persist?: string, theme?: 'dark'|'page', icons?: Object<string, string|null>}} [opts]
- *  `log`'s `time` (ms since the epoch, default now) dates a line as its source did (a server's own clock).
- *  @returns {{ element: Element, log: (text: any, opts?: {level?: 'debug'|'log'|'info'|'warn'|'error', source?: string, data?: any, time?: number}) => void, clear: () => void, text: () => string, copy: () => Promise<boolean>, filter: (level?: 'all'|'warn'|'error') => string, open: () => void, close: () => void, toggle: () => void, isOpen: () => boolean, destroy: () => void }}
+ *  @param {{button?: string|Element|Element[], capture?: boolean, max?: number, shortcut?: string|null, autoOpen?: false|'warn'|'error', onSelect?: (entry: {time: number, level: string, text: string, source?: string, detail?: string, data?: any, count: number}) => void, persist?: string, theme?: 'dark'|'page', icons?: Object<string, string|null>}} [opts]
+ *  @returns {{ element: Element, log: (text: any, opts?: {level?: 'debug'|'log'|'info'|'warn'|'error', source?: string, data?: any, time?: number, detail?: string, quiet?: boolean}) => void, clear: () => void, text: () => string, copy: () => Promise<boolean>, filter: (level?: 'all'|'warn'|'error') => string, search: (text?: string) => string, open: () => void, close: () => void, toggle: () => void, isOpen: () => boolean, destroy: () => void }}
  *  @example const con = makeConsole('#console', { button: '#console-btn', capture: true, persist: 'app:console' });
  *           con.log('Image loaded: 1920 × 1080');  con.log('No ./images folder', { level: 'warn', source: 'loader' })
  *  @example makeConsole('#console', { button: '#console-btn', onSelect: (e) => editor.goTo(e.data.line) })
  *           .log(err.message, { level: 'error', source: `L${err.line}`, data: { line: err.line } })
+ *  @example for (const l of await $.load('/api/log')) con.log(l.text, { level: l.level, source: l.source, time: l.unixMs, quiet: true })
  */
 export const makeConsole = (panel, { button, capture = false, max = 1000, shortcut = 'F2', autoOpen = false, onSelect, persist, theme: mode = 'dark', icons: names = {} } = {}) => {
     const box = $(panel), buttons = $.all(button), { on, off } = _scope();
     const glyph = (role) => { const n = { ..._CONSOLE_ICONS, ...names }[role]; return n && icons.has(n) ? icon(n) : null; };
     const dark = mode === 'dark' && !box.hasAttribute('data-theme');
     const store = persist ? $.store() : null, saved = store?.get(persist, null) ?? {};
-    let level = ['warn', 'error'].includes(saved.filter) ? saved.filter : 'all';
     const own = [...box.childNodes];
+
+    // ── the element: head and body ──
     if (!box.id) box.id = $.uid('qry-console');
     box.cls('+qry-console').attr('aria-label', box.attr('aria-label') || labels.console);
     if (dark) box.dataset.theme = 'dark';                          // its own ground: a terminal in any page
@@ -1652,45 +1683,56 @@ export const makeConsole = (panel, { button, capture = false, max = 1000, shortc
           <button type="button" class="qry-console-title">${glyph('console')}<span>${labels.console}</span></button>
           <span class="qry-console-count" hidden></span>
           <span class="qry-spacer"></span>
+          <input type="search" class="qry-console-find" placeholder="${labels.find}" aria-label="${labels.find}" spellcheck="false">
           <span class="qry-console-filters" role="group" aria-label="${labels.level}">${[['all', labels.all], ['warn', labels.warnings], ['error', labels.errors]].map(([v, l]) =>
               $.html`<button type="button" class="qry-console-filter" data-filter="${v}">${glyph(v)}<span>${l}</span>${v !== 'all' && $.html`<span class="qry-console-n" data-n="${v}" hidden></span>`}</button>`)}</span>
           ${act('copy', labels.copy)}${act('clear', labels.clear)}${act('close', labels.close)}
         </div>
         <div class="qry-console-body" role="log" tabindex="0" aria-label="${box.attr('aria-label')}" data-empty="${labels.empty}"></div>`);
-    const head = box.querySelector('.qry-console-head'), body = box.querySelector('.qry-console-body'), count = head.querySelector('.qry-console-count');
+    const head = box.querySelector('.qry-console-head'), body = box.querySelector('.qry-console-body');
+    const count = head.querySelector('.qry-console-count'), find = head.querySelector('.qry-console-find');
     head.querySelector('.qry-spacer').after(...own);              // the element's own controls: in the head
     const badges = buttons.map((b) => {
-        b.attr({ 'aria-controls': box.id, 'aria-expanded': 'false', 'aria-keyshortcuts': shortcut || null });
+        b.attr({ 'aria-controls': box.id, 'aria-expanded': false, 'aria-keyshortcuts': shortcut || null });
         return $.create('span', { class: 'qry-console-badge', hidden: true }).mount(b);
     });
 
-    const entries = [], entryOf = new WeakMap();
+    // ── the lines: kept (entries), drawn once per frame (queue) ──
+    const entries = [], entryOf = new WeakMap(), n = { warn: 0, error: 0 };
+    let level = ['warn', 'error'].includes(saved.filter) ? saved.filter : 'all', query = '', cleared = saved.cleared ?? 0;
     let queue = [], frame = 0, unseen = 0, worst = 0, opened = false;
-    const shows = (e) => level === 'all' || _rank(e.level) >= _rank(level);
+    const tally = (e, k) => { if (_rank(e.level) >= 3) n.warn += k; if (e.level === 'error') n.error += k; };
+    const found = (e) => !query || $.fold(`${e.text} ${e.source ?? ''} ${e.detail ?? ''}`).includes(query);
+    const shows = (e) => (level === 'all' || _rank(e.level) >= _rank(level)) && found(e);      // the level is CSS's (data-show); the find, each row's hidden
     const isOpen = () => !box.hidden;
-    const keep = () => store?.set(persist, { open: isOpen(), filter: level });
+    const keep = () => store?.set(persist, { open: isOpen(), filter: level, cleared });
     const badge = () => badges.forEach((s) => { s.text(unseen > 99 ? '99+' : String(unseen)).cls(worst > 3 ? '-warn +danger' : '+warn -danger'); s.hidden = !unseen; });
-    const counted = () => {                                       // the lines, and on each filter its own
-        count.text(format.plural(entries.length, labels.lines)); count.hidden = !entries.length;
-        const n = { warn: 0, error: 0 };
-        for (const e of entries) { if (e.level === 'error') n.error += 1; if (_rank(e.level) >= 3) n.warn += 1; }
+    const counted = () => {
+        count.text(query ? `${entries.filter(found).length} / ${format.plural(entries.length, labels.lines)}` : format.plural(entries.length, labels.lines));
+        count.hidden = !entries.length;
         head.querySelectorAll('[data-n]').forEach((s) => { const k = n[s.dataset.n]; s.text(k > 999 ? '999+' : String(k)); s.hidden = !k; });
+        head.querySelectorAll('[data-act="copy"], [data-act="clear"]').forEach((b) => { b.disabled = !entries.length; });
     };
-    const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+    const repeat = (e) => { const r = e.row.querySelector('.qry-console-repeat'); r.text(`×${e.count}`).hidden = false;
+        const t = e.row.querySelector('time'); t.text(_clock(e.time)).attr('datetime', new Date(e.time).toISOString()); };
     const row = (e) => {
-        const r = $.create(onSelect && e.data !== undefined ? 'button' : 'div', { class: 'qry-console-row', 'data-level': e.level });
-        if (r.tagName === 'BUTTON') r.type = 'button';
-        r.html($.html`<time datetime="${new Date(e.time).toISOString()}">${clock(e.time)}</time><span class="qry-console-level${e.level !== 'log' && !glyph(e.level) ? ' is-word' : ''}" title="${e.level}">${e.level === 'log' ? '' : glyph(e.level) ?? e.level}${e.level !== 'log' && glyph(e.level) && $.html`<span class="qry-sr-only">${e.level}</span>`}</span><span class="qry-console-text">${e.source != null && $.html`<span class="qry-console-source">${e.source}</span>`}${e.text}</span>`);
-        r.hidden = !shows(e);
-        entryOf.set(r, e);
+        const select = onSelect && e.data !== undefined, g = e.level === 'log' ? null : glyph(e.level);
+        const said = $.html`${e.text}<span class="qry-console-repeat" hidden></span>`;
+        const r = $.create(select ? 'button' : 'div', { class: 'qry-console-row', 'data-level': e.level, hidden: !found(e) });
+        if (select) r.type = 'button';
+        r.html($.html`<time datetime="${new Date(e.time).toISOString()}">${_clock(e.time)}</time><span class="qry-console-level${e.level !== 'log' && !g ? ' is-word' : ''}" title="${e.level}">${e.level === 'log' ? '' : g ?? e.level}${g && $.html`<span class="qry-sr-only">${e.level}</span>`}</span><span class="qry-console-source">${e.source ?? ''}</span>${
+            !e.detail ? $.html`<span class="qry-console-text">${said}</span>`
+            : select ? $.html`<span class="qry-console-text">${said}<span class="qry-console-detail">${e.detail}</span></span>`     // no <details> in a button
+            : $.html`<details class="qry-console-text"><summary>${said}</summary><span class="qry-console-detail">${e.detail}</span></details>`}`);
+        e.row = r; entryOf.set(r, e);
+        if (e.count > 1) repeat(e);
         return r;
     };
     const flush = () => {                                         // once per frame: a print loop pays one layout, not one per line
         frame = 0;
         const end = body.scrollTop + body.clientHeight >= body.scrollHeight - 8;
-        body.append(...queue.map(row));
+        body.append(...queue.filter((e) => !e.gone).map(row));
         queue = [];
-        while (body.childElementCount > max) body.firstElementChild.remove();
         counted();
         if (end) body.scrollTop = body.scrollHeight;
     };
@@ -1705,74 +1747,88 @@ export const makeConsole = (panel, { button, capture = false, max = 1000, shortc
         if (open) { unseen = worst = 0; badge(); body.scrollTop = body.scrollHeight; }
         keep();
     };
-    const log = (text, { level: lv = 'log', source, data, time = Date.now() } = {}) => {
-        const e = { time, level: _LEVELS.includes(lv) ? lv : 'log', text: _say(text), source, data };
-        entries.push(e); queue.push(e);
-        if (entries.length > max) entries.shift();
-        if (queue.length > max) queue.shift();                    // a hidden tab draws no frame: the queue stays bounded
+    const log = (text, { level: lv = 'log', source, data, time = Date.now(), detail, quiet = false } = {}) => {
+        if (time < cleared) return;                               // cleared already: a log loaded again (this page or, kept, the next)
+        const e = { time, level: _LEVELS.includes(lv) ? lv : 'log', text: _brief(text), source: source ?? undefined, detail: detail ?? _frames([text]), data, count: 1 };
+        const last = entries.at(-1);
+        if (last && data === undefined && last.data === undefined && ['level', 'text', 'source', 'detail'].every((k) => last[k] === e[k])) {
+            last.count += 1; last.time = time;                    // the same line again: counted on its row
+            if (last.row) repeat(last);
+        } else {
+            entries.push(e); queue.push(e); tally(e, 1);
+            if (entries.length > max) { const old = entries.shift(); old.gone = true; old.row?.remove(); tally(old, -1); }
+            if (queue.length > max) queue = queue.slice(-max);    // a hidden tab draws no frame: the queue stays bounded
+        }
         if (!frame) frame = requestAnimationFrame(flush);
+        if (quiet) return;
         if (autoOpen && !opened && !isOpen() && _rank(e.level) >= _rank(autoOpen)) { opened = true; show(true); }
         if (!isOpen() && _rank(e.level) >= 3) { unseen += 1; worst = Math.max(worst, _rank(e.level)); badge(); }
     };
     const clear = () => {
+        for (const e of entries) e.gone = true;
         entries.length = 0; queue = []; body.empty();
-        unseen = worst = 0; opened = false;
-        badge(); counted();
+        n.warn = n.error = unseen = worst = 0; opened = false; cleared = Date.now();
+        badge(); counted(); keep();
     };
-    const text = () => entries.filter(shows).map((e) => [clock(e.time), e.level === 'log' ? '' : e.level, e.source ?? '', e.text].filter(Boolean).join('  ')).join('\n');
+    const text = () => entries.filter(shows).map((e) => {
+        const line = [_clock(e.time), e.level === 'log' ? '' : e.level, e.source ?? '', e.count > 1 ? `${e.text} (×${e.count})` : e.text].filter(Boolean).join('  ');
+        return e.detail ? `${line}\n${e.detail.replace(/^/gm, '    ')}` : line;
+    }).join('\n');
     const filter = (...v) => {
-        if (v.length && ['all', 'warn', 'error'].includes(v[0])) {
-            level = v[0];
-            for (const r of body.children) r.hidden = !shows(entryOf.get(r));
-            keep();
-        }
+        if (v.length && ['all', 'warn', 'error'].includes(v[0])) { level = v[0]; keep(); }
+        body.dataset.show = level;
         head.querySelectorAll('[data-filter]').forEach((b) => b.attr('aria-pressed', b.dataset.filter === level));
         return level;
     };
+    const search = (...v) => {
+        if (v.length) {
+            find.value = String(v[0] ?? ''); query = $.fold(find.value);
+            for (const e of entries) if (e.row) e.row.hidden = !found(e);
+            counted();
+        }
+        return find.value;
+    };
 
+    // ── what the user does ──
     head.on('click', (e) => {
         const b = e.target.closest('button');
         if (b?.dataset.filter) filter(b.dataset.filter);
         else if (b?.matches('.qry-console-title, [data-act="close"]')) show(false);
         else if (b?.dataset.act === 'clear') clear();
-        else if (b?.dataset.act === 'copy') { const t = text(); if (t) copy(t); }
+        else if (b?.dataset.act === 'copy') api.copy();
     }, on);
+    find.on('input', () => search(find.value), on);
     if (onSelect) body.delegate('button.qry-console-row', 'click', function () { onSelect(entryOf.get(this)); }, on);
-    box.on('keydown', (e) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); show(false); } }, on);
+    box.on('keydown', (e) => {
+        if (e.key !== 'Escape' || e.defaultPrevented) return;
+        e.preventDefault();
+        if (e.target === find && find.value) search(''); else show(false);      // the find first, then the console
+    }, on);
     buttons.forEach((b) => b.on('click', () => show(!isOpen()), on));
     if (shortcut) document.on('keydown', (e) => { if (!e.defaultPrevented && _lists(shortcut, e)) { e.preventDefault(); show(!isOpen()); } }, on);
     const split = makeSplitter(box.querySelector('.qry-console-resize'), { container: box, axis: 'y', from: 'end', prop: '--qry-console-h', min: 96,
         max: () => innerHeight * 0.8, persist: persist && `${persist}:height` });
-
-    const patched = [];
-    if (capture) {
-        for (const lv of _LEVELS) {
-            const original = console[lv], wrapper = (...args) => { original.apply(console, args); log(args.map(_say).join(' '), { level: lv }); };
-            console[lv] = wrapper;
-            patched.push([lv, original, wrapper]);
-        }
-        window.on('error', (e) => log(e.error ?? e.message, { level: 'error', source: e.filename ? `${e.filename.split('/').pop()}:${e.lineno}` : undefined }), on);
-        window.on('unhandledrejection', (e) => log(e.reason, { level: 'error' }), on);
-    }
+    const restore = capture ? _capture(log, on) : () => {};
 
     if (saved.open != null) box.hidden = !saved.open;               // kept, else as the markup has it
     buttons.forEach((b) => b.attr('aria-expanded', isOpen()));
-    filter();
-    return {
-        element: box, log, clear, text, filter, isOpen,
-        copy: () => { const t = text(); return t ? copy(t) : Promise.resolve(false); },
+    filter(); counted();
+    const api = {
+        element: box, log, clear, text, filter, search, isOpen,
+        copy: () => { const t = text(), k = entries.filter(shows).length;
+            return t ? copy(t, { message: `${format.plural(k, labels.lines)} · ${labels.copied}` }) : Promise.resolve(false); },
         open: () => show(true),
         close: () => show(false),
         toggle: () => show(!isOpen()),
         destroy() {
-            off(); split.destroy(); cancelAnimationFrame(frame);
-            for (const [lv, original, wrapper] of patched) if (console[lv] === wrapper) console[lv] = original;
+            off(); split.destroy(); cancelAnimationFrame(frame); restore();
             badges.forEach((s) => s.remove());
             if (dark) delete box.dataset.theme;
             buttons.forEach((b) => b.attr({ 'aria-controls': null, 'aria-expanded': null, 'aria-keyshortcuts': null }));
             box.empty().append(...own);
         },
     };
+    return api;
 };
 
 // ════════════════════════════════════════════════════════════════════════════

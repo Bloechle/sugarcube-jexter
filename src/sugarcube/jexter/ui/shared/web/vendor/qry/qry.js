@@ -12,7 +12,7 @@
  * `signal` option: abort its AbortController and everything it wired goes away — ONE teardown
  * model. Setters given a signal or a function follow it (see SETTERS).
  *
- * @version 3.6.1
+ * @version 3.7.1
  * @author Jean-Luc Bloechle with Claude.ai
  * @license MIT
  */

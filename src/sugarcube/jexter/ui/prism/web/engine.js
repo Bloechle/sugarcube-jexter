@@ -505,7 +505,7 @@ function wire() {
         makeEvents(backend.logStreamUrl).on('message', e => {
             if (!e || typeof e !== 'object') return;   // malformed event (not JSON) — skip
             // {level, src, msg} — Prism's log bridge shape
-            P.logLine(e.level || 'info', (e.src ? e.src + ': ' : '') + e.msg, 'server');
+            P.log(e.msg, { level: e.level || 'info', source: e.src ? `server · ${e.src}` : 'server' });
         });
     }
     $.all('#export-dialog .export-opt[data-to]').forEach(b => b.addEventListener('click', () => {

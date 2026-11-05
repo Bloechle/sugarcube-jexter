@@ -24,7 +24,7 @@ open, re-zipped on export).
    carries `data-ui` (+ `data-z="under|over"`) — stripped by `OcdPage.xhtml()`, never in the
    container; a frame stylesheet goes through `book.frameCss`. The chassis's single write primitive
    is `P.putMember`. The chassis itself is `prism.js` over `events.js` (the bus), `tools.js` (the
-   registry, tabs, ribbon, drawers, keys), `console.js` (F2) and `search.js`.
+   registry, tabs, ribbon, drawers, keys) and `search.js`; the F2 console is qry's `makeConsole` (`prism.log(text, { level, source, detail })`).
 
 Hard-won rules:
 - **A mode's chrome is a right drawer declared in index.html** (`<aside id="<mode>-drawer"

@@ -103,7 +103,7 @@ function setEditing(on) {
   // The cursor changing is NOT proof the tool works: the marquee lives on the frame's own listeners, and
   // those come from the `frame` event. If a loaded page never got one, say so here rather than let the
   // user discover it by dragging on a page that cannot answer.
-  if (bound < total) P.logLine?.('error', `augment: ${total - bound} of ${total} loaded page(s) have no marquee — the frame hook did not run`, 'augment');
+  if (bound < total) P.log?.(`augment: ${total - bound} of ${total} loaded page(s) have no marquee — the frame hook did not run`, { level: 'error', source: 'augment' });
   renderEditList();
   toast('Augment — pick a kind above, then drag a rectangle on the page. Drag to move, corner to resize, double-click to remove.');
 }
@@ -115,7 +115,7 @@ function bindEditor(f, idx) {
   // A page whose SVG is not parsed yet cannot be bound, and silently returning is how this tool came to
   // look broken: the cursor said "edit mode", the marquee had no listener. Say it, and mark what IS bound
   // so entering the tool can check rather than assume.
-  if (!svg) { P.logLine?.('warn', `augment: page ${idx + 1} has no <svg> yet — marquee not bound`, 'augment'); return; }
+  if (!svg) { P.log?.(`augment: page ${idx + 1} has no <svg> yet — marquee not bound`, { level: 'warn', source: 'augment' }); return; }
   if (doc.__pxAugBound) return;                 // frames are recreated on demand; never bind twice
   doc.__pxAugBound = true;
   if (editing) doc.documentElement.style.cursor = 'crosshair';

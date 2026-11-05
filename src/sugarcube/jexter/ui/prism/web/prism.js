@@ -10,16 +10,21 @@
 //   layout    scroll · single page · two-page spread (persisted) · zoom anchored under the pointer
 //   seam      window.prism: state, events (events.js), the tool registry (tools.js), the verbs below,
 //             and the providers the engine answers (hooks: openSource · highlight · ttsNodes)
-//   console   F2 (console.js)
+//   console   F2 (qry's makeConsole, below)
 import '/shared/js/icons.js';                          // the apps' icon set (icons.add): registered before boot() draws
-import { boot, theme, toast, makeDropZone, makeDialog, makeMenu, makeSplitter, makeChoice } from '/shared/vendor/qry/qry-app.js';
+import { boot, theme, toast, makeDropZone, makeDialog, makeMenu, makeSplitter, makeChoice, makeConsole } from '/shared/vendor/qry/qry-app.js';
 import { unzip } from '/shared/vendor/fflate.js';
 import { ocdRefusal } from '/shared/js/ocd.js';
 import { on, emit } from './events.js';
 import { registerTool, setTool, ribbon, keyFor, currentTool, devMode, setDevMode } from './tools.js';
-import { logLine, toggleLog, installLogCapture, wireConsole } from './console.js';
 import { wireSearch, clearSearch, clearAllHl, markRect, fold } from './search.js';
 import { fileNameOf } from './backend.js';
+
+// The F2 console (Qry's makeConsole, over the page): console.* and the uncaught errors, beside what the engine
+// (its SSE log, source 'server'), the Service Worker ('worker') and the reader say. F2 is Prism's own key (onKey
+// below): a frame's keydown never reaches this document, so the chassis forwards it.
+const con = makeConsole('#log-console', { capture: true, shortcut: null, persist: 'prism:console' });
+const log = (text, opts) => con.log(text, opts);
 
 // The chassis draws thumbnails, so it speaks the two shared authorities: `book` for "which member is
 // page i", `shots` for "a small picture of it". They are imported DYNAMICALLY, in main(), and that is
@@ -89,7 +94,6 @@ async function main() {
   ({ book }  = await import('/shared/js/book.js'));     // after the seam exists — see the note on top
   ({ shots } = await import('/shared/js/shot.js'));
   watchMembers();
-  installLogCapture();                                              // capture console.* into the footer console
   wireChrome();
   try { await initSW(); }
   catch (e) { toast(e.message, { tone: 'danger' }); return; }   // no Service Worker → nothing can be served
@@ -115,7 +119,7 @@ async function initSW() {
   await navigator.serviceWorker.register('./prism-sw.js');
   // The worker has no window and a console few people open: what it says lands in F2, beside the rest.
   navigator.serviceWorker.addEventListener('message', e => {
-    if (e.data?.type === 'log') logLine(e.data.level || 'info', e.data.msg, 'worker');
+    if (e.data?.type === 'log') log(e.data.msg, { level: e.data.level || 'info', source: 'worker' });
   });
   await navigator.serviceWorker.ready;
   if (!navigator.serviceWorker.controller)
@@ -604,7 +608,7 @@ async function loadFrame(idx) {
     // origin, so no `load` fires and the card stays blank. Say it, and mark the card.
     ?.addEventListener('error', () => {
       card.cls('+failed');
-      logLine('error', `page ${idx + 1} did not load — ${state.pages[idx].href}`, 'reader');
+      log(`page ${idx + 1} did not load — ${state.pages[idx].href}`, { level: 'error', source: 'reader' });
     }, { once: true });
   mounted.add(idx);
   releaseFrames();
@@ -638,7 +642,7 @@ function bindFrameInput(f, idx) {
   // at the end of a try that also does wheel, touch and drop wiring, so any one of those throwing left
   // the whole tool layer unbound on that page, silently, with the catch swallowing the reason. Emit
   // first: the tools do not depend on the input wiring, and a failure there must cost only itself.
-  try { emit('frame', f, idx); } catch (e) { logLine('error', `frame hook failed on page ${idx + 1} — ${e.message || e}`, 'reader'); }
+  try { emit('frame', f, idx); } catch (e) { log(`frame hook failed on page ${idx + 1} — ${e.message || e}`, { level: 'error', source: 'reader', detail: e.stack }); }
   try {
     f.contentWindow.addEventListener('wheel', e => {
       if (!e.ctrlKey && !e.metaKey) return;
@@ -653,7 +657,7 @@ function bindFrameInput(f, idx) {
       const file = [...(e.dataTransfer?.files || [])].find(x => OPENABLE.test(x.name));
       if (file) openEpub(await file.arrayBuffer(), file.name); // tools' own targets stopPropagation first
     });
-  } catch (e) { logLine('warn', `input wiring failed on page ${idx + 1} — ${e.message || e}`, 'reader'); }
+  } catch (e) { log(`input wiring failed on page ${idx + 1} — ${e.message || e}`, { level: 'warn', source: 'reader' }); }
 }
 
 /* -- Navigation | current | layout --------------------------------- */
@@ -865,13 +869,10 @@ function wireSplitters() {
   const body = $.opt('.px-body'); if (!body) return;
   makeSplitter('#split-left',  { container: body, prop: '--px-rail-w',   min: 170, max: 480, persist: 'prism:rail-w' });
   makeSplitter('#split-right', { container: body, prop: '--px-drawer-w', from: 'end', min: 210, max: 560, persist: 'prism:drawer-w' });
-  makeSplitter('#split-log',   { container: document.documentElement, prop: '--px-log-h', axis: 'y', from: 'end',
-                                 min: 140, max: () => Math.round(window.innerHeight * 0.88), persist: 'prism:log-h' });
 }
 
 function wireChrome() {
   wireSplitters();
-  wireConsole();
   $('#toggle-rail').on('click', () => $('body').cls('~rail-collapsed'));
   // A phone gives the page the width: the rail starts folded there and opens over the stage (prism.css).
   if (matchMedia('(max-width: 760px)').matches) $('body').cls('+rail-collapsed');
@@ -890,7 +891,7 @@ function wireChrome() {
   $('#m-export').on('click', () => dialog('export-dialog').open());
   $('#b-help').on('click', () => dialog('help-dialog').open());
   $('#b-theme').html(() => `<i data-icon="${theme.isDark() ? 'sun' : 'moon'}"></i>`).on('click', theme.toggle);   // the icon follows the mode (the OS's too)
-  $('#m-console').on('click', () => toggleLog());
+  $('#m-console').on('click', con.toggle);
   // (no #m-theme: the header button #b-theme above owns the toggle AND its icon. The menu item it
   // belonged to is gone; the leftover binding warned on every boot and, had the element come back,
   // would have toggled without updating the icon — two authorities for one control.)
@@ -948,7 +949,7 @@ function wireChrome() {
   // event path, so a keydown there never reaches this window — which is why F2 stopped answering the
   // moment a book was open and clicked into. Same-origin, so the frame's keys are forwarded here.
   const onKey = e => {
-    if (e.key === 'F2') { e.preventDefault(); toggleLog(); return; }
+    if (e.key === 'F2') { e.preventDefault(); con.toggle(); return; }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
       e.preventDefault(); const on = !devMode(); setDevMode(on);
       toast(on ? 'Dev mode on — tabs in development are visible' : 'Dev mode off', { tone: on ? 'ok' : '', duration: 2200 });
@@ -956,7 +957,7 @@ function wireChrome() {
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); dialog('export-dialog').open(); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); $('#file-input').click(); return; }
-    if (e.key === 'Escape' && $.opt('#log-console')?.classList.contains('open')) { toggleLog(false); return; }
+    if (e.key === 'Escape' && con.isOpen()) { con.close(); return; }
     if (/input|textarea/i.test(e.target.tagName) || state.current < 0) return;
     if (e.key === 'ArrowRight' || (e.code === 'Space' && !e.shiftKey)) { e.preventDefault(); pageStep(1); }
     else if (e.key === 'ArrowLeft' || (e.code === 'Space' && e.shiftKey)) { e.preventDefault(); pageStep(-1); }
@@ -993,4 +994,4 @@ async function fetchXml(url) {
 
 /* -- The jexter seam: the chassis API engine.js builds on ----------- */
 Object.assign(window.prism, { openEpub, goTo, whenFrameReady, markRect, setPageBox, frameToClient,
-  clearAllHl, centreOn, fold, toast, exportName, logLine, putMember });
+  clearAllHl, centreOn, fold, toast, exportName, log, putMember });

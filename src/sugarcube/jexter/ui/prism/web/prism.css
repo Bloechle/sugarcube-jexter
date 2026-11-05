@@ -519,44 +519,6 @@ html:not([data-theme="dark"]) .px-filebtn { color:var(--jx-brand-deep); }
   background:color-mix(in srgb, var(--qry-accent) 50%, transparent); background-clip:padding-box;
 }
 
-/* ── Log console (F2) — Prism-style, slides up over the footer ────────── */
-.log-console {
-  position:fixed; left:0; right:0; bottom:0; height:var(--px-log-h, 38vh); max-height:88vh; z-index:50;
-  display:flex; flex-direction:column; transform:translateY(101%); transition:transform .18s ease;
-  background:#0f1722; color:#dbe4ee; border-top:2px solid var(--qry-accent); box-shadow:0 -14px 44px rgba(8,38,84,.34);
-}
-.log-console.open { transform:translateY(0); }
-.log-head { display:flex; align-items:center; gap:.5rem; padding:.34rem .55rem; flex:0 0 auto;
-  background:#0b1119; border-bottom:1px solid rgba(255,255,255,.08); }
-.log-title { font-weight:700; font-size:.74rem; display:inline-flex; align-items:center; gap:.4rem; color:#e6edf6; cursor:pointer; }
-.log-title .qry-icon { width:.95rem; height:.95rem; color:var(--jx-brand-bright); }
-.log-tag { font-size:.58rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:#9fb0c3;
-  border:1px solid rgba(255,255,255,.18); border-radius:999px; padding:0 .35rem; }
-.log-sp { flex:1; }
-.log-filters { display:inline-flex; gap:.15rem; margin-right:.3rem; }
-.log-f { font:inherit; font-size:.66rem; padding:.12rem .5rem; border-radius:999px; cursor:pointer;
-  border:1px solid rgba(255,255,255,.15); background:transparent; color:#9fb0c3; transition:color .15s, border-color .15s, background .15s; }
-.log-f:hover { color:#e6edf6; border-color:rgba(255,255,255,.28); }
-.log-f.active { background:var(--qry-accent); color:#fff; border-color:transparent; }
-.log-console .px-icon { color:#9fb0c3; }
-.log-console .px-icon:hover { color:#e6edf6; background:rgba(255,255,255,.08); }
-.log-body { flex:1; overflow:auto; padding:.35rem .55rem; font-family:var(--qry-font-mono);
-  font-size:.72rem; line-height:1.5; color:#dbe4ee; }
-.log-row { display:grid; grid-template-columns:3.1rem 5rem 1fr; gap:.55rem; padding:.04rem 0;
-  border-bottom:1px solid rgba(255,255,255,.06); white-space:pre-wrap; word-break:break-word; }
-.log-lv { text-transform:uppercase; font-size:.58rem; font-weight:700; align-self:center; letter-spacing:.03em; color:#8a99ab; }
-.log-src { color:#67788b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.log-msg { color:#dbe4ee; }
-.log-row.lv-info  .log-lv { color:#4fa96a; }
-.log-row.lv-warn  .log-lv { color:#e0952b; }
-.log-row.lv-error .log-lv { color:#e5544a; }
-.log-row.lv-error .log-msg { color:#f3b0ab; }
-.log-console[data-filter="debug"] .log-row:not(.lv-debug),
-.log-console[data-filter="info"]  .log-row:not(.lv-info),
-.log-console[data-filter="warn"]  .log-row:not(.lv-warn),
-.log-console[data-filter="error"] .log-row:not(.lv-error) { display:none; }
-.log-body::-webkit-scrollbar { width:10px; }
-.log-body::-webkit-scrollbar-thumb { background:rgba(255,255,255,.18); border-radius:999px; border:2px solid transparent; background-clip:padding-box; }
 
 
 /* -- jexter seam: structure rail + pills (Prism additions) ----------- */

@@ -306,24 +306,7 @@
     <div class="qry-dialog-actions"><button type="button" class="qry-btn primary" data-close>Close</button></div>
   </dialog>
 
-  <div id="log-console" class="log-console" data-filter="all">
-    <div id="split-log" class="px-split px-split-h" title="Drag to resize"></div>
-    <div class="log-head">
-      <span id="log-title" class="log-title" role="button" tabindex="0" title="Close (F2)"><i data-icon="terminal"></i> Log <span class="log-tag">client</span></span>
-      <span class="log-sp"></span>
-      <div class="log-filters">
-        <button class="log-f active" data-lvl="all">All</button>
-        <button class="log-f" data-lvl="debug">Debug</button>
-        <button class="log-f" data-lvl="info">Info</button>
-        <button class="log-f" data-lvl="warn">Warn</button>
-        <button class="log-f" data-lvl="error">Error</button>
-      </div>
-      <button id="log-copy" class="px-icon sm" title="Copy"><i data-icon="copy"></i></button>
-      <button id="log-clear" class="px-icon sm" title="Clear"><i data-icon="trash-2"></i></button>
-      <button id="log-close" class="px-icon sm" title="Close (F2)"><i data-icon="x"></i></button>
-    </div>
-    <div id="log-body" class="log-body"></div>
-  </div>
+  <section id="log-console" class="qry-console floating" hidden></section>   <!-- the F2 console: Qry's makeConsole fills it -->
 
 </body>
 </html>
