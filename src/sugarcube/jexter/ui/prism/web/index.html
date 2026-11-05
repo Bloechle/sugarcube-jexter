@@ -9,8 +9,7 @@
   <!-- qry 3, vendored under /shared (nothing is fetched): qry-ui → the Sugarcube look → qry.js → modules -->
   <link rel="stylesheet" href="/shared/vendor/qry/qry-ui.css">
   <link rel="stylesheet" href="/shared/sugarcube.css">
-  <script src="/shared/vendor/qry/qry.js"></script>
-  <script>try { const t = JSON.parse(localStorage.getItem('prism:theme')); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}</script>
+  <script src="/shared/vendor/qry/qry.js" data-theme-persist="prism:theme" data-theme-initial="dark"></script>   <!-- the saved theme before the first paint; theme.init reads the key here -->
   <link rel="stylesheet" href="./prism.css">
   <script type="module" src="./prism.js"></script>
   <script type="module" src="./augment.js"></script>
@@ -199,10 +198,10 @@
       <button id="next-btn" class="px-icon" aria-label="Next page"><i data-icon="chevron-right"></i></button>
     </span>
     <span class="px-foot-r">
-    <span class="px-seg">
-      <button class="px-segbtn active" data-mode="scroll" title="Scroll" aria-label="Scroll"><i data-icon="gallery-vertical"></i></button>
-      <button class="px-segbtn" data-mode="page" title="Single page" aria-label="Single page"><i data-icon="file"></i></button>
-      <button class="px-segbtn" data-mode="spread" title="Two-page spread" aria-label="Two-page spread"><i data-icon="book-open"></i></button>
+    <span class="px-seg" id="layout" aria-label="Layout">
+      <button class="px-segbtn" data-value="scroll" title="Scroll" aria-label="Scroll"><i data-icon="gallery-vertical"></i></button>
+      <button class="px-segbtn" data-value="page" title="Single page" aria-label="Single page"><i data-icon="file"></i></button>
+      <button class="px-segbtn" data-value="spread" title="Two-page spread" aria-label="Two-page spread"><i data-icon="book-open"></i></button>
     </span>
     <span class="px-zoom">
       <button id="fit-width-btn" class="px-icon sm" aria-label="Fit width" title="Fit width"><i data-icon="move-horizontal"></i></button>

@@ -12,7 +12,7 @@
 //             and the providers the engine answers (hooks: openSource · highlight · ttsNodes)
 //   console   F2 (console.js)
 import '/shared/js/icons.js';                          // the apps' icon set (icons.add): registered before boot() draws
-import { boot, theme, toast, makeDropZone, makeDialog, makeMenu, makeSplitter } from '/shared/vendor/qry/qry-app.js';
+import { boot, theme, toast, makeDropZone, makeDialog, makeMenu, makeSplitter, makeChoice } from '/shared/vendor/qry/qry-app.js';
 import { unzip } from '/shared/vendor/fflate.js';
 import { ocdRefusal } from '/shared/js/ocd.js';
 import { on, emit } from './events.js';
@@ -30,9 +30,12 @@ import { fileNameOf } from './backend.js';
 // from book.js, with the rail silently empty.
 let book = null, shots = null;
 
+/** The layout, kept in this browser: 'scroll' | 'page' | 'spread' (the footer's segmented buttons: makeChoice). */
+const layout = $.signal('scroll', { persist: 'prism:mode' });
+const store = $.store('prism:');                              // the other settings kept here (never throws)
 const state = {
   id: null, pages: [], toc: [], current: -1, zoom: 1, lang: 'en',
-  mode: localStorage.getItem('prism_mode') || 'scroll',   // 'scroll' | 'page' | 'spread'
+  mode: layout.peek(),
   files: null, root: '', opfPath: '', opfDir: '', aug: null,   // in-memory book + augmentation model
 };
 let seq = 0;
@@ -65,10 +68,10 @@ window.prism.setStatus = setStatus;
 
 // Unit preference (Settings drawer) + page-dims readout — Prism's footer dims, here.
 const UNIT = { pt: [1, 0], mm: [25.4 / 72, 1], cm: [2.54 / 72, 2], in: [1 / 72, 2] };
-let unit = localStorage.getItem('prism_unit') || 'pt';
+let unit = store.get('unit', 'pt');
 function setUnit(u) {
   unit = (u in UNIT || u === 'px') ? u : 'pt';
-  localStorage.setItem('prism_unit', unit);
+  store.set('unit', unit);
 }
 window.prism.toUnit = (v) => unit === 'px' ? Math.round(v * state.zoom) + ' px'
   : (v * (UNIT[unit] || UNIT.pt)[0]).toFixed((UNIT[unit] || UNIT.pt)[1]) + ' ' + unit;
@@ -80,14 +83,13 @@ window.prism.registerTool = registerTool;
 window.prism.setTool = setTool;
 window.prism.tool = currentTool;
 
-boot({ title: 'Prism', theme: { persist: 'prism:theme' }, ready: main });
+boot({ title: 'Prism', ready: main });   // the theme's key and its first mode (dark) are on qry.js's tag
 
 async function main() {
   ({ book }  = await import('/shared/js/book.js'));     // after the seam exists — see the note on top
   ({ shots } = await import('/shared/js/shot.js'));
   watchMembers();
   installLogCapture();                                              // capture console.* into the footer console
-  if (localStorage.getItem('prism:theme') == null) theme.mode('dark'); // dark by default, like Prism
   wireChrome();
   try { await initSW(); }
   catch (e) { toast(e.message, { tone: 'danger' }); return; }   // no Service Worker → nothing can be served
@@ -700,9 +702,7 @@ function setCurrent(idx) {
 }
 
 function setMode(mode) {
-  state.mode = mode;
-  localStorage.setItem('prism_mode', mode);
-  $.all('.px-segbtn').forEach(b => b.cls((b.attr('data-mode') === mode ? '+' : '-') + 'active'));
+  state.mode = mode;                                   // the layout signal's change (its watch, below), or the boot's
   $('#epub-scroll').attr('data-mode', mode);
   applyMode();
   emit('mode', mode);                                  // a tool whose ribbon shows the layout listens; onEnter is for entering
@@ -889,9 +889,7 @@ function wireChrome() {
   $('#m-close').on('click', closeBook);
   $('#m-export').on('click', () => dialog('export-dialog').open());
   $('#b-help').on('click', () => dialog('help-dialog').open());
-  { const setIc = () => { $('#b-theme').html(`<i data-icon="${theme.isDark() ? 'sun' : 'moon'}"></i>`); };
-    $('#b-theme').on('click', () => { theme.toggle(); setIc(); });
-    setIc(); }
+  $('#b-theme').html(() => `<i data-icon="${theme.isDark() ? 'sun' : 'moon'}"></i>`).on('click', theme.toggle);   // the icon follows the mode (the OS's too)
   $('#m-console').on('click', () => toggleLog());
   // (no #m-theme: the header button #b-theme above owns the toggle AND its icon. The menu item it
   // belonged to is gone; the leftover binding warned on every boot and, had the element come back,
@@ -915,10 +913,8 @@ function wireChrome() {
     $('#' + btn.attr('data-tab')).cls('-hidden');
   }));
 
-  $.all('.px-segbtn').forEach(b => {
-    b.cls((b.attr('data-mode') === state.mode ? '+' : '-') + 'active');
-    b.on('click', () => setMode(b.attr('data-mode')));
-  });
+  makeChoice('#layout', layout);                               // the buttons show the layout, a click sets it
+  $.watch(layout, setMode);
   $('#epub-scroll').attr('data-mode', state.mode);
 
   $('#prev-btn').on('click', () => pageStep(-1));

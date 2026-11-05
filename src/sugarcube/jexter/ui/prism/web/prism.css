@@ -306,7 +306,7 @@ body.is-loading #empty { display:none; }
   border:0; border-radius:999px; background:transparent; color:var(--qry-text-muted); cursor:pointer; transition:background .15s, color .15s;
 }
 .px-segbtn:hover { color:var(--qry-text); }
-.px-segbtn.active { background:var(--qry-accent); color:#fff; }
+.px-segbtn[aria-pressed="true"] { background:var(--qry-accent); color:#fff; }
 .px-segbtn .qry-icon { width:16px; height:16px; }
 
 .prism-page {

@@ -26,7 +26,7 @@
  * (unlayered) always wins, with no specificity games and no !important.
  * Targets Chromium 133+ and Safari 26+ (relative colours, light-dark, anchor positioning).
  *
- * @version 3.0.0
+ * @version 3.6.0
  * @author  Jean-Luc Bloechle with Claude.ai
  * @license MIT
  */
@@ -52,7 +52,6 @@
     --qry-radius: 10px;
     --qry-gap: 1rem;
     --qry-control: 2.4rem;                          /* min height of buttons, inputs, selects */
-    --qry-control-sm: calc(var(--qry-control) * .84);   /* derived: small buttons, chips, tabs */
     /* --qry-font-display: unset — headings use it when set, else --qry-font */
     --qry-container: 72rem;
     /* motion, ONE signature (qry-web's viewer, slideshow and reveal read the same tokens) */
@@ -66,15 +65,16 @@
 }
 [data-theme="light"] { color-scheme: light; }   /* …unless the page chose */
 [data-theme="dark"] { color-scheme: dark; }
-@media (pointer: coarse) { :root { --qry-control: 2.75rem; --qry-control-sm: max(2.5rem, calc(var(--qry-control) * .84)); } }   /* a finger: 44 px targets, 40 px for the small ones */
+@media (pointer: coarse) { :root { --qry-control: 2.75rem; --qry-control-sm-min: 2.5rem; } }   /* a finger: 44 px targets, 40 px for the small ones */
 
 /* ── derived — computed where the knobs are set: <html>, or any .qry-theme ──
    Light keeps a colour's lightness inside a band where white text reads on it; dark lifts it
    into a band where it reads on the dark surfaces. Greys: the neutral hue at a fixed lightness
    ladder. Nothing below is meant to be overridden — set a knob instead. */
 :root, .qry-theme {
+    --qry-control-sm: max(var(--qry-control-sm-min, 0px), calc(var(--qry-control) * .84));   /* small buttons, chips, tabs: follows a scoped --qry-control */
     accent-color: var(--qry-accent);                /* checkboxes, radios, ranges, progress */
-    --qry-accent: light-dark(oklch(from var(--qry-theme-accent) clamp(.32, l, .5) c h), oklch(from var(--qry-theme-accent) clamp(.74, l + .3, .84) min(c, .15) h));
+    --qry-accent: light-dark(oklch(from var(--qry-theme-accent) clamp(.32, l, .48) min(c, .16) h), oklch(from var(--qry-theme-accent) clamp(.74, l + .3, .84) min(c, .15) h));
     --qry-accent-strong: color-mix(in oklab, var(--qry-accent) 82%, light-dark(#000, #fff));
     --qry-on-accent: light-dark(#fff, oklch(from var(--qry-theme-accent) .2 .03 h));   /* text on the accent, or on any tone */
     --qry-tint: color-mix(in oklab, var(--qry-accent) 14%, transparent);
@@ -85,19 +85,20 @@
     --qry-glass: color-mix(in oklab, var(--qry-surface) 84%, transparent);
     --qry-surface-grey: light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) 1 0 h), oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .21 0 h));   /* the surface without its hue: soft fills mix into it */
     --qry-line:        light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .915 var(--qry-theme-chroma) h), oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .3 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));
+    --qry-line-control: light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .62 var(--qry-theme-chroma) h), oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .55 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));   /* a field's edge: ≥ 3:1 (WCAG 1.4.11) */
     --qry-line-strong: light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .86 var(--qry-theme-chroma) h),  oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .37 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));
     --qry-text:        light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .25 var(--qry-theme-chroma) h),  oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .92 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));
     --qry-text-strong: light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .16 var(--qry-theme-chroma) h),  oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .985 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));
     --qry-text-muted:  light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .47 var(--qry-theme-chroma) h),  oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .76 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));   /* ≥ 4.5:1 on bg + surfaces */
-    --qry-text-subtle: light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .55 var(--qry-theme-chroma) h),  oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .66 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));
+    --qry-text-subtle: light-dark(oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .5 var(--qry-theme-chroma) h),  oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .69 var(--qry-theme-chroma-dark, var(--qry-theme-chroma)) h));
     --qry-scrim: oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .14 var(--qry-theme-chroma) h / .5);   /* behind dialogs, overlays */
     --qry-ink: oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .19 var(--qry-theme-chroma) h);         /* always dark: code blocks, the viewer */
     --qry-ink-text: oklch(from var(--qry-theme-neutral, var(--qry-theme-accent)) .93 var(--qry-theme-chroma) h);
 
-    --qry-ok:     light-dark(oklch(from var(--qry-theme-ok) clamp(.38, l, .52) c h),     oklch(from var(--qry-theme-ok) clamp(.74, l + .25, .84) c h));
-    --qry-warn:   light-dark(oklch(from var(--qry-theme-warn) clamp(.38, l, .52) c h),   oklch(from var(--qry-theme-warn) clamp(.74, l + .25, .84) c h));
-    --qry-danger: light-dark(oklch(from var(--qry-theme-danger) clamp(.38, l, .52) c h), oklch(from var(--qry-theme-danger) clamp(.74, l + .25, .84) c h));
-    --qry-purple: light-dark(oklch(from var(--qry-theme-purple) clamp(.38, l, .52) c h), oklch(from var(--qry-theme-purple) clamp(.74, l + .25, .84) c h));
+    --qry-ok:     light-dark(oklch(from var(--qry-theme-ok) clamp(.38, l, .5) min(c, .17) h),     oklch(from var(--qry-theme-ok) clamp(.74, l + .25, .84) c h));
+    --qry-warn:   light-dark(oklch(from var(--qry-theme-warn) clamp(.38, l, .5) min(c, .17) h),   oklch(from var(--qry-theme-warn) clamp(.74, l + .25, .84) c h));
+    --qry-danger: light-dark(oklch(from var(--qry-theme-danger) clamp(.38, l, .5) min(c, .17) h), oklch(from var(--qry-theme-danger) clamp(.74, l + .25, .84) c h));
+    --qry-purple: light-dark(oklch(from var(--qry-theme-purple) clamp(.38, l, .5) min(c, .17) h), oklch(from var(--qry-theme-purple) clamp(.74, l + .25, .84) c h));
 
     /* the highlight is a FILL: a light one (oklch l > .58) carries dark ink, a dark one white ink.
        Its lightness leaves the band where neither ink reaches 4.5:1 (pushed to ≥ .66 or ≤ .5);
@@ -122,6 +123,9 @@
 }
 
 @layer qry.base {
+/* the writing direction, for what has no logical property: a translate, a background's position */
+:root { --qry-dir: 1; --qry-start: left; }
+:dir(rtl) { --qry-dir: -1; --qry-start: right; }
 /* ── State: ARIA when ARIA has a word for it (aria-pressed, aria-selected, aria-current,
    aria-expanded, aria-busy, aria-sort, aria-invalid); otherwise ONE convention, .is-*
    (is-active, is-open, is-visible, is-collapsed, is-hidden, is-in, is-current…).
@@ -194,7 +198,7 @@ meter::-webkit-meter-even-less-good-value { background: var(--qry-danger); borde
 @media (min-width: 721px) and (max-width: 1024px) { .qry-grid-3, .qry-grid-4 { --qry-cols: 2; } }
 .qry-span-all { grid-column: 1 / -1; }
 .qry-sr-only { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.qry-skip { position: absolute; left: 1rem; top: -4rem; z-index: 100; padding: .5rem 1rem; background: var(--qry-surface); border-radius: var(--qry-radius-sm); box-shadow: var(--qry-shadow); }
+.qry-skip { position: absolute; inset-inline-start: 1rem; top: -4rem; z-index: 100; padding: .5rem 1rem; background: var(--qry-surface); border-radius: var(--qry-radius-sm); box-shadow: var(--qry-shadow); }
 .qry-skip:focus { top: 1rem; }
 
 }
@@ -226,27 +230,29 @@ meter::-webkit-meter-even-less-good-value { background: var(--qry-danger); borde
 .qry-btn:disabled { opacity: .5; cursor: not-allowed; }
 .qry-btn[aria-busy="true"]::before { content: ''; width: 1em; height: 1em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: qry-spin .7s linear infinite; }
 .qry-btn svg { width: 1.1em; height: 1.1em; }
-/* segmented control: <div class="qry-btn-group" role="group"><button class="qry-btn" aria-pressed="true">…</div> */
+/* a toggle button (aria-pressed — alone, or a segmented control: <div class="qry-btn-group" role="group">
+   <button class="qry-btn" aria-pressed="true">…</div>; makeChoice wires one to a signal) */
 .qry-btn-group { display: inline-flex; }
-.qry-btn-group > .qry-btn { border-radius: 0; margin-left: -1px; }
-.qry-btn-group > .qry-btn:first-child { border-radius: var(--qry-btn-radius, var(--qry-radius-sm)) 0 0 var(--qry-btn-radius, var(--qry-radius-sm)); margin-left: 0; }
-.qry-btn-group > .qry-btn:last-child { border-radius: 0 var(--qry-btn-radius, var(--qry-radius-sm)) var(--qry-btn-radius, var(--qry-radius-sm)) 0; }
-.qry-btn-group > .qry-btn[aria-pressed="true"] { background: var(--qry-tint); border-color: var(--qry-accent); color: var(--qry-accent-strong); position: relative; }
+.qry-btn-group > .qry-btn { border-radius: 0; margin-inline-start: -1px; }
+.qry-btn-group > .qry-btn:first-child { border-start-start-radius: var(--qry-btn-radius, var(--qry-radius-sm)); border-end-start-radius: var(--qry-btn-radius, var(--qry-radius-sm)); margin-inline-start: 0; }
+.qry-btn-group > .qry-btn:last-child { border-start-end-radius: var(--qry-btn-radius, var(--qry-radius-sm)); border-end-end-radius: var(--qry-btn-radius, var(--qry-radius-sm)); }
+.qry-btn[aria-pressed="true"] { background: var(--qry-tint); border-color: var(--qry-accent); color: var(--qry-accent-strong); position: relative; }
 
 .qry-field { display: grid; gap: .35rem; font-weight: 600; font-size: .92rem; }
 .qry-input, .qry-field :where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea) {
     width: 100%; min-height: var(--qry-control); padding: .45rem .7rem; font: 400 1rem var(--qry-font); color: var(--qry-text);
-    background: var(--qry-surface); border: 1px solid var(--qry-line-strong); border-radius: var(--qry-radius-sm);
+    background: var(--qry-surface); border: 1px solid var(--qry-line-control); border-radius: var(--qry-radius-sm);
 }
-.qry-input:focus, .qry-field :is(input, select, textarea):focus { border-color: var(--qry-accent); outline: 2px solid var(--qry-tint); }
+:is(.qry-input, .qry-field :is(input, textarea))::placeholder { color: var(--qry-text-subtle); opacity: 1; }   /* the browser's own is 3.8:1 in dark */
+.qry-input:focus, .qry-field :is(input:not([type="checkbox"], [type="radio"]), select, textarea):focus { border-color: var(--qry-accent); outline: 2px solid var(--qry-accent); outline-offset: 1px; }
 /* dates and times: the native picker (keyboard, locale, phone wheels; its popup follows color-scheme) */
 :is(.qry-input, .qry-field input)::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .7; }
 :is(.qry-input, .qry-field input)::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 /* a switch: <label class="qry-cluster"><input type="checkbox" class="qry-switch" role="switch"> Dark</label> */
-.qry-switch { appearance: none; position: relative; flex: none; width: 2.2rem; height: 1.3rem; margin: 0; border-radius: 999px; background: var(--qry-line-strong); cursor: pointer; transition: background var(--qry-speed); }
-.qry-switch::after { content: ''; position: absolute; top: .15rem; left: .15rem; width: 1rem; height: 1rem; border-radius: 50%; background: var(--qry-surface); box-shadow: var(--qry-shadow); transition: translate var(--qry-speed) var(--qry-ease); }
+.qry-switch { appearance: none; position: relative; flex: none; width: 2.2rem; height: 1.3rem; margin: 0; border-radius: 999px; background: var(--qry-line-control); cursor: pointer; transition: background var(--qry-speed); }
+.qry-switch::after { content: ''; position: absolute; top: .15rem; inset-inline-start: .15rem; width: 1rem; height: 1rem; border-radius: 50%; background: var(--qry-surface); box-shadow: var(--qry-shadow); transition: translate var(--qry-speed) var(--qry-ease); }
 .qry-switch:checked { background: var(--qry-accent); }
-.qry-switch:checked::after { translate: .9rem 0; }
+.qry-switch:checked::after { translate: calc(.9rem * var(--qry-dir)) 0; }
 /* a CHOICE of a few, as one segmented row — native radios, so a form reads it (serialize, FormData) and the
    keyboard is the browser's: <div class="qry-seg" role="radiogroup" aria-label="Effect">
    <label><input type="radio" name="effect" value="fade"> Fade</label><label><input type="radio" name="effect" value="rise" checked> Rise</label></div> */
@@ -259,15 +265,16 @@ meter::-webkit-meter-even-less-good-value { background: var(--qry-danger); borde
 .qry-seg > label:has(:disabled) { opacity: .5; cursor: not-allowed; }
 @media (pointer: coarse) {   /* a finger: a bigger switch (its label is the rest of the target) */
     .qry-switch { width: 2.8rem; height: 1.65rem; }
-    .qry-switch::after { top: .175rem; left: .175rem; width: 1.3rem; height: 1.3rem; }
+    .qry-switch::after { top: .175rem; inset-inline-start: .175rem; width: 1.3rem; height: 1.3rem; }
     .qry-switch:checked::after { translate: 1.15rem 0; }
 }
 /* a spinner: <span class="qry-spinner" role="status" aria-label="Loading"></span> — or aria-busy on a .qry-btn */
 .qry-spinner { display: inline-block; width: 1.2em; height: 1.2em; border: 2px solid var(--qry-line-strong); border-top-color: var(--qry-accent); border-radius: 50%; animation: qry-spin .7s linear infinite; vertical-align: middle; }
 @keyframes qry-spin { to { rotate: 1turn; } }
+.qry-icon.is-spinning { animation: qry-spin .9s linear infinite; }   /* an icon at work (a refresh, a sync) */
 .qry-field-error { color: var(--qry-danger); font-size: .82rem; font-weight: 500; }
 .qry-field-error:empty { display: none; }
-.qry-form-error, .qry-dialog-error { padding: .6rem .8rem; border-radius: var(--qry-radius-sm); color: var(--qry-danger); background: color-mix(in srgb, var(--qry-danger) 8%, transparent); }
+.qry-form-error, .qry-dialog-error { --qry-tone: var(--qry-danger); padding: .6rem .8rem; border-radius: var(--qry-radius-sm); color: var(--qry-danger); background: var(--qry-soft); }
 .qry-dialog-error { margin: .6rem 0 0; }
 form[aria-busy="true"] { cursor: progress; }
 .qry-field:has([aria-invalid="true"]) :is(input, select, textarea) { border-color: var(--qry-danger); }
@@ -298,7 +305,7 @@ button.qry-card:disabled { opacity: .55; cursor: not-allowed; }
    11 % light / 18 % dark. Mixed in oklab into the surface WITHOUT its hue: a red stays red on a blue
    theme (oklch would sweep the hue through violet; even oklab drifts toward a tinted grey).
    Callouts, badges and icon boxes use it; .qry-soft gives it to anything. */
-:is(.qry-callout, .qry-badge, .qry-icon-box, .qry-soft) {
+:is(.qry-callout, .qry-badge, .qry-icon-box, .qry-soft, .qry-slide.chapter, .qry-slides-toc a, .qry-form-error, .qry-dialog-error) {
     --qry-soft: light-dark(color-mix(in oklab, var(--qry-tone, var(--qry-accent)) 11%, var(--qry-surface-grey)), color-mix(in oklab, var(--qry-tone, var(--qry-accent)) 18%, var(--qry-surface-grey)));
 }
 .qry-soft { background: var(--qry-soft); }
@@ -311,27 +318,54 @@ button.qry-card:disabled { opacity: .55; cursor: not-allowed; }
 /* ═══════════════════════════════════════════════════════════════════════════
    DATA DISPLAY — dashboards and status (toned: .ok .warn .danger .purple)
    ═══════════════════════════════════════════════════════════════════════════ */
-/* a key figure: <div class="qry-metric ok"><div class="qry-metric-value">98 %</div><div class="qry-metric-label">uptime</div></div> */
-.qry-metric { position: relative; padding: 1rem 1.1rem; border-radius: var(--qry-radius); background: var(--qry-surface); border: 1px solid var(--qry-line); box-shadow: var(--qry-shadow); overflow: hidden; }
-.qry-metric { --qry-stripe: var(--qry-tone, var(--qry-accent)); }   /* inherited by its ::before */
-.qry-metric::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--qry-stripe); }
+/* a key figure: <div class="qry-metric ok"><div class="qry-metric-label">uptime</div><div class="qry-metric-value">98 %</div>
+   <div class="qry-metric-sub">+0.4 % this week</div></div> — label, value, and an optional line under it (a trend, a unit, a date) */
+.qry-metric { position: relative; padding: 1rem 1.1rem; border-radius: var(--qry-radius); background: var(--qry-surface); border: 1px solid var(--qry-line); box-shadow: var(--qry-shadow); overflow: hidden;
+    --qry-stripe: var(--qry-tone, var(--qry-accent)); }   /* the stripe, inherited by its ::before */
+.qry-metric::before { content: ''; position: absolute; inset-block: 0; inset-inline-start: 0; width: 4px; background: var(--qry-stripe); }
 .qry-metric-value { font-family: var(--qry-font-display, var(--qry-font)); font-size: 1.6rem; font-weight: 700; letter-spacing: -.02em; color: var(--qry-text-strong); font-variant-numeric: tabular-nums; }
 .qry-metric-label { font-size: .78rem; font-weight: 600; letter-spacing: .02em; color: var(--qry-text-muted); }   /* no uppercase: a label may be maths (θ, a₀) */
-/* a compact label + value pair, for lists of figures */
-.qry-stat-value { font-size: 1.15rem; font-weight: 700; color: var(--qry-text-strong); font-variant-numeric: tabular-nums; }
-.qry-stat-label { font-size: .8rem; color: var(--qry-text-muted); }
+.qry-metric-sub { font-size: .78rem; color: var(--qry-text-muted); font-variant-numeric: tabular-nums; }
+.qry-metric.compact { padding: .7rem .9rem; }
+.qry-metric.compact .qry-metric-value { font-size: 1.3rem; }
 /* an icon in a soft square: <span class="qry-icon-box ok"><svg…></span> */
 .qry-icon-box { display: inline-grid; place-items: center; width: 2rem; height: 2rem; border-radius: var(--qry-radius-sm); color: var(--qry-tone, var(--qry-accent)); background: var(--qry-soft); }
 .qry-icon-box.lg { width: 2.75rem; height: 2.75rem; }
 .qry-icon-box svg { width: 55%; height: 55%; }
 /* a message in the flow of the page: <div class="qry-callout warn">…</div> */
 /* The tone's bar is a BACKGROUND layer, not a border: the box's rounded corners clip it outside and
-   its inner edge stays straight (a border-left curves inward along the radius). */
-.qry-callout { padding: .8rem 1rem .8rem calc(1rem + 4px); border-radius: var(--qry-radius-sm);
-    background: linear-gradient(var(--qry-tone, var(--qry-accent)) 0 0) left / 4px 100% no-repeat, var(--qry-soft); }
+   its inner edge stays straight (a border-left curves inward along the radius). At the START side: --qry-start. */
+.qry-callout { padding: .8rem 1rem; padding-inline-start: calc(1rem + 4px); border-radius: var(--qry-radius-sm);
+    background: linear-gradient(var(--qry-tone, var(--qry-accent)) 0 0) var(--qry-start) / 4px 100% no-repeat, var(--qry-soft); }
+.qry-callout.highlight { --qry-soft: color-mix(in oklab, var(--qry-highlight) 40%, var(--qry-surface-grey));   /* a pale fill at 11 % is no fill at all */
+    background: linear-gradient(var(--qry-highlight-text) 0 0) var(--qry-start) / 4px 100% no-repeat, var(--qry-soft); }
 /* a dot before a status word */
 .qry-dot { --qry-stripe: var(--qry-tone, var(--qry-accent)); }
-.qry-dot::before { content: ''; display: inline-block; width: .55em; height: .55em; margin-right: .4em; border-radius: 50%; background: var(--qry-stripe); vertical-align: .08em; }
+.qry-dot::before { content: ''; display: inline-block; width: .55em; height: .55em; margin-inline-end: .4em; border-radius: 50%; background: var(--qry-stripe); vertical-align: .08em; }
+
+/* calendar (makeCalendar): a head, then the month's days; the chosen day filled, today ringed,
+   a mark a dot in its tone under the number (white on the chosen day) */
+.qry-calendar { display: grid; gap: .35rem; align-content: start; }
+.qry-calendar-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.qry-calendar-title { font-weight: 650; }
+.qry-calendar-title::first-letter { text-transform: uppercase; }
+.qry-calendar-head .qry-btn::before { content: ''; width: .5em; height: .5em; border: solid currentColor; border-width: 0 0 2px 2px; translate: .12em 0; rotate: 45deg; }
+.qry-calendar-head .qry-calendar-next::before { translate: -.12em 0; rotate: -135deg; }
+.qry-calendar-head .qry-btn:dir(rtl) { scale: -1 1; }   /* previous points to the start, next to the end */
+.qry-calendar-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.qry-calendar-grid th { padding: .2rem 0 .35rem; color: var(--qry-text-muted); font-size: .75rem; font-weight: 500; text-align: center; }
+.qry-calendar-grid td { padding: 2px; }
+.qry-calendar-grid button {
+    position: relative; display: grid; place-items: center; width: 100%; height: clamp(2.4rem, 9vw, 2.75rem); padding: 0 0 .3rem;
+    line-height: 1;
+    border: 0; border-radius: var(--qry-radius-sm); background: none; color: var(--qry-text);
+    font: inherit; font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.qry-calendar-grid button:hover { background: var(--qry-tint); }
+.qry-calendar-grid button[aria-current="date"] { font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--qry-line-strong); }
+.qry-calendar-grid button[aria-pressed="true"] { background: var(--qry-accent); color: var(--qry-on-accent); box-shadow: none; }
+.qry-calendar-mark { position: absolute; bottom: .32rem; left: 50%; width: .36rem; height: .36rem; translate: -50% 0; border-radius: 50%; background: var(--qry-tone, var(--qry-accent)); }
+[aria-pressed="true"] > .qry-calendar-mark { background: var(--qry-on-accent); }
 
 /* charts (qry-app makeChart): plain SVG painted with the tokens — a theme change needs no redraw.
    A mark takes the element's tone (.ok .warn .danger .purple .accent .highlight), or .muted for background data. */
@@ -356,25 +390,29 @@ button.qry-card:disabled { opacity: .55; cursor: not-allowed; }
 .qry-details > summary::-webkit-details-marker { display: none; }
 .qry-details > summary::before { content: ''; flex: none; width: .42em; height: .42em; margin-inline: .15em; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; rotate: -45deg; transition: rotate var(--qry-speed) var(--qry-ease); }
 .qry-details[open] > summary::before { rotate: 45deg; }
+.qry-details > summary:dir(rtl)::before { scale: -1 1; }   /* closed, it points to the end */
 .qry-details > summary:hover { color: var(--qry-accent); }
 
 .qry-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
-.qry-chip { min-height: var(--qry-control-sm); padding: .25rem .7rem; border: 1px solid var(--qry-line-strong); border-radius: 999px; background: var(--qry-surface); color: var(--qry-text); font: 400 .86rem var(--qry-font); cursor: pointer; user-select: none; }
+/* .scroll: one line that scrolls sideways instead of wrapping (a phone's filter bar) */
+:is(.qry-chips, .qry-seg).scroll { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+:is(.qry-chips, .qry-seg).scroll > * { flex: none; }
+.qry-chip { min-height: var(--qry-control-sm); padding: .25rem .7rem; border: 1px solid var(--qry-line-strong); border-radius: 999px; background: var(--qry-surface); color: var(--qry-text); font: 400 .86rem var(--qry-font); cursor: pointer; -webkit-user-select: none; user-select: none; }
 .qry-chip:hover { border-color: var(--qry-accent); }
 .qry-chip[aria-pressed="true"] { background: var(--qry-accent); border-color: var(--qry-accent); color: var(--qry-on-accent); }
 
 .qry-info-row { display: flex; justify-content: space-between; gap: 1rem; padding: .35rem 0; border-bottom: 1px solid var(--qry-line); font-size: .92rem; }
 .qry-info-label { color: var(--qry-text-muted); }
-.qry-info-value { font-weight: 600; text-align: right; color: var(--qry-tone, currentColor); }
+.qry-info-value { font-weight: 600; text-align: end; color: var(--qry-tone, currentColor); }
 .qry-info-value.highlight { color: var(--qry-highlight-text); }
 
 .qry-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
-.qry-table th, .qry-table td { padding: .5rem .7rem; border-bottom: 1px solid var(--qry-line); text-align: left; }
+.qry-table th, .qry-table td { padding: .5rem .7rem; border-bottom: 1px solid var(--qry-line); text-align: start; }
 .qry-table th { position: sticky; top: 0; background: var(--qry-surface-2); font-weight: 700; color: var(--qry-text-strong); white-space: nowrap; }
 .qry-table th > button { all: inherit; display: inline; padding: 0; cursor: pointer; }   /* sortableTable: a real button per header */
 .qry-table th > button:focus-visible { outline: 2px solid var(--qry-accent); outline-offset: 2px; }
 .qry-table th[aria-sort="ascending"], .qry-table th[aria-sort="descending"] { color: var(--qry-accent); }
-.qry-table .qry-num { text-align: right; font-variant-numeric: tabular-nums; }
+.qry-table .qry-num { text-align: end; font-variant-numeric: tabular-nums; }
 .qry-table td.qry-idx { color: var(--qry-text-subtle); }
 .qry-table tbody tr:hover { background: var(--qry-tint); }
 .qry-table tbody tr[tabindex] { cursor: pointer; }   /* sortableTable with onRow */
@@ -396,13 +434,22 @@ button.qry-card:disabled { opacity: .55; cursor: not-allowed; }
     background: var(--qry-surface); color: var(--qry-text); box-shadow: var(--qry-shadow-lg);
 }
 .qry-popover[popover] { padding: .8rem 1rem; }
+/* toggletips(): a .qry-help shown on demand behind its (i) */
+.qry-help-button { display: inline-grid; place-items: center; width: 1.25rem; height: 1.25rem; margin-inline: .3rem; padding: 0; vertical-align: .1em;
+    border: 1px solid var(--qry-line-strong); border-radius: 50%; background: var(--qry-surface); color: var(--qry-text-muted); font: italic 700 .72rem/1 Georgia, serif; cursor: pointer; }
+.qry-help-button:is(:hover, [aria-expanded="true"]) { border-color: var(--qry-accent); color: var(--qry-accent); }
+.qry-help[popover] { max-width: min(92vw, 20rem); font-size: .88rem; line-height: 1.45; }
 :is(.qry-menu, .qry-popover):popover-open { animation: qry-pop var(--qry-speed) var(--qry-ease); }
 .qry-menu:popover-open { display: grid; gap: 1px; min-width: max(10rem, anchor-size(width)); }
 .qry-menu > :is(button, a, [role="menuitem"]) {
     display: flex; align-items: center; gap: .6rem; width: 100%; padding: .45rem .7rem; border: 0; border-radius: var(--qry-radius-sm);
-    background: none; color: var(--qry-tone, var(--qry-text)); font: 500 .92rem var(--qry-font); text-align: start; text-decoration: none; white-space: nowrap; cursor: pointer;
+    background: none; color: var(--qry-tone, var(--qry-text)); font: 400 .92rem var(--qry-font); text-align: start; text-decoration: none; white-space: nowrap; cursor: pointer;
 }
-.qry-menu > :is(button, a, [role="menuitem"]):is(:hover, :focus-visible) { background: var(--qry-tint); outline: none; }
+.qry-menu > :is(button, a, [role="menuitem"]):is(:hover, :focus-visible) { background: var(--qry-tint); outline: 2px solid transparent; }
+.qry-menu > :is(button, a, [role="menuitem"]):focus-visible { box-shadow: inset 3px 0 0 var(--qry-accent); }   /* the tint alone is 1.3:1: a bar marks the focus */
+.qry-menu > * > .qry-icon { flex: none; color: var(--qry-text-muted); }
+.qry-menu > * > kbd { margin-inline-start: auto; padding: 0; padding-inline-start: 1rem; border: 0; background: none; font: .8rem var(--qry-font); color: var(--qry-text-subtle); }   /* its shortcut, at the end */
+.qry-menu > [aria-current]:not([aria-current="false"]) { color: var(--qry-accent); font-weight: 600; }   /* where you are (a view switcher) */
 .qry-menu > .highlight { color: var(--qry-highlight-text); }
 .qry-menu > :disabled { opacity: .5; cursor: not-allowed; }
 .qry-menu > hr { width: 100%; margin: .25rem 0; border: 0; border-top: 1px solid var(--qry-line); }
@@ -436,28 +483,29 @@ button.qry-card:disabled { opacity: .55; cursor: not-allowed; }
    end side; `.start` puts it on the other. Same makeDialog, [data-close], Escape and backdrop as any dialog;
    --qry-sheet-w sizes it. It scrolls its own content; the page behind stays where it was. */
 .qry-dialog.sheet {
-    width: min(92vw, var(--qry-sheet-w, 22rem)); height: 100dvh; max-height: none; margin: 0 0 0 auto;
-    border-width: 0 0 0 1px; border-radius: 0; overflow: auto; overscroll-behavior: contain;
+    width: min(92vw, var(--qry-sheet-w, 22rem)); height: 100dvh; max-height: none; margin: 0; margin-inline-start: auto;
+    border-width: 0; border-inline-start-width: 1px; border-radius: 0; overflow: auto; overscroll-behavior: contain;
 }
-.qry-dialog.sheet.start { margin: 0 auto 0 0; border-width: 0 1px 0 0; }
+.qry-dialog.sheet.start { margin-inline: 0 auto; border-inline-width: 0 1px; }
+.qry-dialog.sheet > .qry-dialog-head { position: sticky; top: -1.3rem; z-index: 1; margin-top: -1.3rem; padding-top: 1.3rem; background: var(--qry-surface); }   /* its × stays in reach as it scrolls */
 .qry-dialog.sheet[open] { animation: qry-sheet var(--qry-speed) var(--qry-ease); }
 .qry-dialog.sheet.start[open] { animation-name: qry-sheet-start; }
-@keyframes qry-sheet { from { opacity: 0; transform: translateX(1.5rem); } }
-@keyframes qry-sheet-start { from { opacity: 0; transform: translateX(-1.5rem); } }
+@keyframes qry-sheet { from { opacity: 0; transform: translateX(calc(1.5rem * var(--qry-dir))); } }
+@keyframes qry-sheet-start { from { opacity: 0; transform: translateX(calc(-1.5rem * var(--qry-dir))); } }
 
-.qry-toasts { position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); z-index: 1000; display: grid; gap: .5rem; max-width: min(92vw, 24rem); }
+/* --qry-toasts-offset (optional): lift the stack above a fixed footer or status bar */
+.qry-toasts { position: fixed; inset-inline-end: 1rem; bottom: calc(1rem + var(--qry-toasts-offset, 0px) + env(safe-area-inset-bottom, 0px)); z-index: 1000; display: grid; gap: .5rem; max-width: min(92vw, 24rem); }
 .qry-toast {
-    padding: .7rem 1rem .7rem calc(1rem + 4px); border-radius: var(--qry-radius);
-    background: linear-gradient(var(--qry-tone, var(--qry-accent)) 0 0) left / 4px 100% no-repeat, var(--qry-surface); color: var(--qry-text); box-shadow: var(--qry-shadow-lg); cursor: pointer;
+    display: flex; align-items: start; gap: .6rem; padding: .7rem 1rem; padding-inline-start: calc(1rem + 4px); border-radius: var(--qry-radius);
+    background: linear-gradient(var(--qry-tone, var(--qry-accent)) 0 0) var(--qry-start) / 4px 100% no-repeat, var(--qry-surface); color: var(--qry-text); box-shadow: var(--qry-shadow-lg); cursor: pointer;
     animation: qry-pop var(--qry-speed) var(--qry-ease); transition: opacity var(--qry-speed), transform var(--qry-speed);
 }
-.qry-toast { display: flex; align-items: start; gap: .6rem; }
 /* inside a modal dialog (toast() puts the stack there): above the dialog's own content, on the viewport */
 dialog > .qry-toasts { position: fixed; }
 .qry-toast-text { flex: 1; }
-.qry-toast-close { margin: -.2rem -.4rem -.2rem 0; padding: 0 .3rem; border: 0; border-radius: var(--qry-radius-sm); background: none; color: var(--qry-text-muted); font: 1.1rem/1.2 var(--qry-font); cursor: pointer; }
+.qry-toast-close { margin-block: -.2rem; margin-inline-end: -.4rem; padding: 0 .3rem; border: 0; border-radius: var(--qry-radius-sm); background: none; color: var(--qry-text-muted); font: 1.1rem/1.2 var(--qry-font); cursor: pointer; }
 .qry-toast-close:hover { color: var(--qry-text); background: var(--qry-tint); }
-.qry-toast.is-leaving { opacity: 0; transform: translateX(12px); }
+.qry-toast.is-leaving { opacity: 0; transform: translateX(calc(12px * var(--qry-dir))); }
 
 /* icons (qry-app.js: <i data-icon> drawn by icons.watch, or icon()): stroked in the text's colour; a filled shape says so itself */
 .qry-icon { inline-size: 1.25em; block-size: 1.25em; flex: none; vertical-align: -.25em; fill: none; stroke: currentColor;
@@ -487,7 +535,7 @@ i[data-icon] { display: contents; }                    /* the host of a drawn ic
 .qry-app { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; grid-template-columns: minmax(0, 1fr); }   /* never wider than the screen */
 .qry-app-body { display: flex; min-height: 0; }
 .qry-content { flex: 1 1 auto; min-width: 0; padding: var(--qry-gap); overflow: auto; }
-.qry-sidebar { flex: 0 0 15rem; width: 15rem; display: flex; flex-direction: column; gap: .2rem; padding: .7rem; background: var(--qry-surface); border-right: 1px solid var(--qry-line); transition: width var(--qry-speed) var(--qry-ease), flex-basis var(--qry-speed) var(--qry-ease); overflow: hidden; }
+.qry-sidebar { flex: 0 0 15rem; width: 15rem; display: flex; flex-direction: column; gap: .2rem; padding: .7rem; background: var(--qry-surface); border-inline-end: 1px solid var(--qry-line); transition: width var(--qry-speed) var(--qry-ease), flex-basis var(--qry-speed) var(--qry-ease); overflow: hidden; }
 .qry-sidebar :where(a, button):not(.qry-btn) { display: flex; align-items: center; gap: .6rem; padding: .5rem .6rem; border: 0; border-radius: var(--qry-radius-sm); background: none; color: var(--qry-text); font: 500 .94rem var(--qry-font); text-decoration: none; white-space: nowrap; cursor: pointer; }
 .qry-sidebar :where(a, button):not(.qry-btn):hover { background: var(--qry-tint); }
 .qry-sidebar [aria-current]:not([aria-current="false"]) { background: var(--qry-tint); color: var(--qry-accent); }
@@ -505,7 +553,7 @@ i[data-icon] { display: contents; }                    /* the host of a drawn ic
 .qry-overlay { position: fixed; inset: 0; z-index: 39; background: var(--qry-scrim); opacity: 0; pointer-events: none; transition: opacity var(--qry-speed); }
 .qry-overlay.is-visible { opacity: 1; pointer-events: auto; }
 @media (max-width: 768px) {
-    .qry-sidebar.mobile { position: fixed; inset: 0 auto 0 0; z-index: 40; transform: translateX(-100%); transition: transform var(--qry-speed) var(--qry-ease); box-shadow: var(--qry-shadow-lg); }
+    .qry-sidebar.mobile { position: fixed; inset-block: 0; inset-inline-start: 0; z-index: 40; transform: translateX(calc(-100% * var(--qry-dir))); transition: transform var(--qry-speed) var(--qry-ease); box-shadow: var(--qry-shadow-lg); }
     .qry-sidebar.mobile.is-open { transform: none; }
 }
 
@@ -514,13 +562,16 @@ i[data-icon] { display: contents; }                    /* the host of a drawn ic
    Both asides are optional drawers: a tab bar on top stays pinned while the drawer scrolls.
    ═══════════════════════════════════════════════════════════════════════════ */
 .qry-workspace { --qry-aside-w: 240px; --qry-aside-end-w: 280px;   /* px: makeSplitter reads and writes them */
-    height: 100vh; width: 100%; overflow: hidden; display: grid; grid-template-rows: auto 1fr auto; grid-template-columns: minmax(0, 1fr); background: var(--qry-bg); }   /* never wider than the screen */
+    height: 100vh; width: 100%; overflow: hidden; display: grid; grid-template-rows: auto 1fr; grid-auto-rows: auto; grid-template-columns: minmax(0, 1fr); background: var(--qry-bg); }   /* never wider than the screen; header · body, then a console and the footer */
 .qry-workspace-header, .qry-workspace-footer { display: flex; align-items: center; gap: .5rem; padding: 0 .7rem; background: var(--qry-surface); }
 .qry-workspace-header { height: 3rem; border-bottom: 1px solid var(--qry-line-strong); }
 .qry-workspace-footer { height: 2rem; border-top: 1px solid var(--qry-line-strong); font-size: .78rem; color: var(--qry-text-muted); }
 .qry-workspace-body { min-height: 0; display: flex; }
-.qry-workspace-aside { flex: 0 0 var(--qry-aside-w); width: var(--qry-aside-w); min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: auto; background: var(--qry-surface); border-right: 1px solid var(--qry-line); }
-.qry-workspace-aside.end { flex-basis: var(--qry-aside-end-w); width: var(--qry-aside-end-w); border-right: 0; border-left: 1px solid var(--qry-line); }
+.qry-workspace-aside { flex: 0 0 var(--qry-aside-w); width: var(--qry-aside-w); min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: auto; background: var(--qry-surface); border-inline-end: 1px solid var(--qry-line); }
+.qry-workspace-aside.end { flex-basis: var(--qry-aside-end-w); width: var(--qry-aside-end-w); border-inline-end: 0; border-inline-start: 1px solid var(--qry-line); }
+/* makeSplitter puts .is-resizing on the container while its handle is dragged */
+.is-resizing { -webkit-user-select: none; user-select: none; }
+.is-resizing iframe { pointer-events: none; }                                /* a frame under the pointer would take the drag */
 .qry-workspace-aside > .qry-tabs { position: sticky; top: 0; z-index: 1; flex: none; background: var(--qry-surface); }
 /* a drawer closes with its splitter: is-aside-collapsed (the start one), is-end-collapsed (the end one) */
 .qry-workspace.is-aside-collapsed :is(.qry-workspace-aside:not(.end), .qry-workspace-aside:not(.end) + .qry-split),
@@ -528,6 +579,7 @@ i[data-icon] { display: contents; }                    /* the host of a drawn ic
 .qry-workspace-main { flex: 1 1 auto; min-width: 0; min-height: 0; position: relative; display: flex; overflow: hidden; }
 
 .qry-split { flex: 0 0 6px; cursor: col-resize; position: relative; touch-action: none; }
+@media (pointer: coarse) { .qry-split::before { content: ''; position: absolute; inset: 0 -10px; } }   /* a finger needs more than 6 px */
 .qry-split::after { content: ''; position: absolute; inset: 0 2px; border-radius: 2px; background: var(--qry-line); transition: background var(--qry-speed); }
 .qry-split:hover::after, .qry-split.is-dragging::after { background: var(--qry-accent); }
 .qry-split.horizontal { cursor: row-resize; }
@@ -541,11 +593,76 @@ i[data-icon] { display: contents; }                    /* the host of a drawn ic
     .qry-workspace.mobile { height: auto; min-height: 100vh; min-height: 100dvh; overflow: visible; }
     .qry-workspace.mobile .qry-workspace-header { position: sticky; top: 0; z-index: 20; height: auto; min-height: 3rem; flex-wrap: wrap; padding-block: .35rem; }   /* its controls wrap, never off-screen */
     .qry-workspace.mobile .qry-workspace-body { flex-direction: column; }
-    .qry-workspace.mobile .qry-workspace-aside { flex: none; width: auto; overflow: visible; border-right: 0; border-bottom: 1px solid var(--qry-line); }
-    .qry-workspace.mobile .qry-workspace-aside.end { border-left: 0; border-top: 1px solid var(--qry-line); }
+    .qry-workspace.mobile .qry-workspace-aside { flex: none; width: auto; overflow: visible; border-inline-end: 0; border-bottom: 1px solid var(--qry-line); }
+    .qry-workspace.mobile .qry-workspace-aside.end { border-inline-start: 0; border-top: 1px solid var(--qry-line); }
     .qry-workspace.mobile .qry-split { display: none; }
     .qry-workspace.mobile .qry-workspace-main, .qry-workspace.mobile .qry-content { overflow: visible; }
 }
+
+/* console: <section id="console" class="qry-console" hidden></section>, filled by makeConsole — in a
+   .qry-workspace between the body and the footer (a row of its own), elsewhere where it stands. A
+   terminal: dark by default (makeConsole sets data-theme="dark": the app's own knobs, in their dark
+   form — its accent, its tones), an accent edge on top, a head (icon + title, the count, the
+   filters as a segmented pill with their counts, icon actions) over the lines (time · level ·
+   source · text; warnings and errors in their tone, a bar on their edge). Its height is
+   --qry-console-h (px: its top edge is a makeSplitter handle). */
+.qry-console { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); block-size: var(--qry-console-h, 15rem); max-block-size: 80vh; min-block-size: 0;
+    border-top: 2px solid var(--qry-accent); background: var(--qry-bg); color: var(--qry-text);
+    transition: opacity var(--qry-speed) var(--qry-ease), translate var(--qry-speed) var(--qry-ease); }
+@starting-style { .qry-console:not([hidden]) { opacity: 0; translate: 0 .6rem; } }
+.qry-console .qry-icon { flex: none; inline-size: 1rem; block-size: 1rem; }
+.qry-console-resize { position: absolute; inset: -5px 0 auto; z-index: 2; block-size: 8px; cursor: row-resize; touch-action: none; }
+.qry-console-resize::after { content: ''; position: absolute; inset: 3px 0; background: var(--qry-accent); opacity: 0; transition: opacity var(--qry-speed-fast); }
+.qry-console-resize:is(:hover, :focus-visible, .is-dragging)::after { opacity: 1; }
+.qry-console-resize:focus-visible { outline: 2px solid transparent; }
+.qry-console-head { display: flex; align-items: center; gap: .4rem; padding: .3rem .5rem; overflow-x: auto; scrollbar-width: thin; border-bottom: 1px solid var(--qry-line); background: var(--qry-surface); font-size: .8rem; white-space: nowrap; }   /* narrow: one row that scrolls */
+.qry-console-title { display: inline-flex; align-items: center; gap: .4rem; padding: .2rem .4rem; border: 0; border-radius: var(--qry-radius-sm); background: none; color: var(--qry-text-strong); font: 700 .82rem var(--qry-font); cursor: pointer; }
+.qry-console-title .qry-icon { color: var(--qry-accent); }
+.qry-console-title:is(:hover, :focus-visible) { background: var(--qry-tint); outline: 2px solid transparent; }
+.qry-console-title:focus-visible { box-shadow: inset 0 -2px 0 var(--qry-accent); }
+.qry-console-count { padding: 0 .45rem; border: 1px solid var(--qry-line-strong); border-radius: 999px; color: var(--qry-text-muted); font: 600 .68rem/1.5 var(--qry-font); }
+.qry-console-filters { display: inline-flex; padding: 2px; gap: 2px; border: 1px solid var(--qry-line); border-radius: 999px; background: var(--qry-bg); }
+.qry-console-filter { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .6rem; border: 0; border-radius: 999px; background: none; color: var(--qry-text-muted); font: 600 .74rem/1.4 var(--qry-font); cursor: pointer; transition: background var(--qry-speed-fast), color var(--qry-speed-fast); }
+.qry-console-filter .qry-icon { inline-size: .9rem; block-size: .9rem; }
+.qry-console-filter[data-filter="warn"] .qry-icon { color: var(--qry-warn); }
+.qry-console-filter[data-filter="error"] .qry-icon { color: var(--qry-danger); }
+.qry-console-filter:is(:hover, :focus-visible) { color: var(--qry-text); background: var(--qry-tint); outline: 2px solid transparent; }
+.qry-console-filter:focus-visible { box-shadow: inset 0 -2px 0 var(--qry-accent); }
+.qry-console-filter[aria-pressed="true"] { background: var(--qry-accent); color: var(--qry-on-accent); }
+.qry-console-filter[aria-pressed="true"] .qry-icon { color: inherit; }
+.qry-console-n { min-inline-size: 1.2rem; padding: 0 .3rem; border-radius: 999px; background: var(--qry-tint); font-size: .66rem; text-align: center; font-variant-numeric: tabular-nums; }
+.qry-console-act { display: inline-grid; place-items: center; min-inline-size: 1.8rem; block-size: 1.8rem; padding: 0 .4rem; border: 0; border-radius: var(--qry-radius-sm); background: none; color: var(--qry-text-muted); font: 600 .76rem var(--qry-font); cursor: pointer; transition: background var(--qry-speed-fast), color var(--qry-speed-fast); }
+.qry-console-act:is(:hover, :focus-visible) { background: var(--qry-tint); color: var(--qry-text-strong); outline: 2px solid transparent; }
+.qry-console-act:focus-visible { box-shadow: inset 0 -2px 0 var(--qry-accent); }
+.qry-console-body { overflow: auto; padding: .25rem 0; font: .78rem/1.55 var(--qry-font-mono); scrollbar-width: thin; }
+.qry-console-body:empty::before { content: attr(data-empty); display: block; padding: 1.2rem; color: var(--qry-text-subtle); font: italic .8rem var(--qry-font); text-align: center; }
+.qry-console-body:focus-visible { outline: 2px solid var(--qry-accent); outline-offset: -2px; }
+.qry-console-row { position: relative; display: grid; grid-template-columns: max-content var(--qry-console-lv, 1.1rem) minmax(0, 1fr); align-items: baseline; gap: .6rem; inline-size: 100%; padding: .1rem .7rem; border: 0; border-bottom: 1px solid color-mix(in oklab, var(--qry-line) 55%, transparent); background: none; color: inherit; font: inherit; text-align: start; }
+.qry-console-row > time { color: var(--qry-text-subtle); font-variant-numeric: tabular-nums; }
+.qry-console-level { display: inline-flex; align-self: center; justify-content: center; font: 700 .58rem/1 var(--qry-font); letter-spacing: .03em; text-transform: uppercase; color: var(--qry-text-muted); }
+.qry-console-level .qry-icon { inline-size: .95rem; block-size: .95rem; }
+.qry-console-source { display: inline-block; margin-inline-end: .5rem; padding: 0 .35rem; border-radius: var(--qry-radius-sm); background: var(--qry-tint); color: var(--qry-text-muted); font-size: .72rem; }
+.qry-console-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.qry-console-body:has(.qry-console-level.is-word) { --qry-console-lv: 2.9rem; }   /* a level shown as its word (no icon registered): room for it, every row aligned */
+.qry-console-row[data-level="debug"] .qry-console-text { color: var(--qry-text-muted); }
+.qry-console-row[data-level="info"] .qry-console-level { color: var(--qry-accent); }
+.qry-console-row[data-level="warn"] { --qry-tone: var(--qry-warn); }
+.qry-console-row[data-level="error"] { --qry-tone: var(--qry-danger); }
+.qry-console-row:is([data-level="warn"], [data-level="error"]) { color: var(--qry-tone); background: light-dark(color-mix(in oklab, var(--qry-tone) 7%, var(--qry-surface-grey)), color-mix(in oklab, var(--qry-tone) 12%, var(--qry-surface-grey))); }
+.qry-console-row:is([data-level="warn"], [data-level="error"])::before { content: ''; position: absolute; inset-block: 0; inset-inline-start: 0; inline-size: 3px; background: var(--qry-tone); }
+.qry-console-row:is([data-level="warn"], [data-level="error"]) .qry-console-level { color: inherit; }
+.qry-console-row[data-level="error"] .qry-console-text { font-weight: 600; }
+button.qry-console-row { cursor: pointer; }
+button.qry-console-row:hover { background: var(--qry-tint); }
+button.qry-console-row:focus-visible { outline: 2px solid var(--qry-accent); outline-offset: -2px; }
+@media (max-width: 30rem) {                                     /* a phone: the text gets the room */
+    .qry-console-row { grid-template-columns: var(--qry-console-lv, 1.1rem) minmax(0, 1fr); } .qry-console-row > time { display: none; }
+    .qry-console-filter:has(.qry-icon) > span:not(.qry-console-n) { display: none; } .qry-console-count { display: none; }
+}
+/* the toggle's count of the warnings and errors come while it was closed */
+:is(button, a, [role="button"]):has(> .qry-console-badge) { position: relative; }   /* not every element of the page */
+.qry-console-badge { position: absolute; inset-block-start: -.35rem; inset-inline-end: -.35rem; min-inline-size: 1.1rem; padding: 0 .25rem; border-radius: 999px;
+    background: var(--qry-tone, var(--qry-accent)); color: var(--qry-on-accent); font: 700 .62rem/1.1rem var(--qry-font); text-align: center; pointer-events: none; }
 
 .qry-drop-overlay { position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; background: color-mix(in srgb, var(--qry-accent) 18%, transparent); opacity: 0; pointer-events: none; transition: opacity var(--qry-speed-fast); }
 .qry-drop-overlay.is-visible { opacity: 1; }
@@ -554,26 +671,26 @@ i[data-icon] { display: contents; }                    /* the host of a drawn ic
 /* ═══════════════════════════════════════════════════════════════════════════
    SITE — defaults for the qry-web page helpers (a page may style its own instead)
    ═══════════════════════════════════════════════════════════════════════════ */
-/* viewer: <dialog class="qry-viewer"><button class="close">…<figure><img><figcaption></figure>
+/* viewer: <dialog class="qry-viewer"><button class="close" data-close>…<figure><img><figcaption></figure>
    <button data-go="-1">‹</button><button data-go="1">›</button></dialog> */
-.qry-viewer { width: 100vw; height: 100vh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: color-mix(in oklab, var(--qry-ink) 94%, transparent); color: var(--qry-ink-text); }
+.qry-viewer { color-scheme: dark; width: 100vw; height: 100vh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: color-mix(in oklab, var(--qry-ink) 94%, transparent); color: var(--qry-ink-text); }
 .qry-viewer::backdrop { background: transparent; }
 .qry-viewer figure { margin: 0; height: 100%; display: grid; grid-template-rows: 1fr auto; place-items: center; padding: 3.5rem 1rem 1rem; }
 .qry-viewer img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .qry-viewer figcaption { padding: .6rem; font-size: .92rem; color: var(--qry-ink-text); }
-.qry-viewer-pos { opacity: .75; margin-left: .5rem; font-variant-numeric: tabular-nums; }
+.qry-viewer-pos { opacity: .75; margin-inline-start: .5rem; font-variant-numeric: tabular-nums; }
 .qry-viewer button { position: absolute; display: grid; place-items: center; width: 3rem; height: 3rem; border: 0; border-radius: 50%; background: color-mix(in oklab, var(--qry-ink-text) 12%, transparent); color: var(--qry-ink-text); font-size: 1.6rem; cursor: pointer; }
 .qry-viewer button:hover { background: color-mix(in oklab, var(--qry-ink-text) 24%, transparent); }
-.qry-viewer .close { top: 1rem; right: 1rem; }
-.qry-viewer [data-go="-1"] { left: 1rem; top: 50%; transform: translateY(-50%); }
-.qry-viewer [data-go="1"] { right: 1rem; top: 50%; transform: translateY(-50%); }
+.qry-viewer .close { top: 1rem; inset-inline-end: 1rem; }
+.qry-viewer [data-go="-1"] { inset-inline-start: 1rem; top: 50%; transform: translateY(-50%); }
+.qry-viewer [data-go="1"] { inset-inline-end: 1rem; top: 50%; transform: translateY(-50%); }
 
 /* reveal: hidden until seen — only when JavaScript runs (reveal() adds .qry-js) */
 .qry-js [data-reveal]:not(.is-in) { opacity: 0; transform: translateY(14px); }
 [data-reveal] { transition: opacity var(--qry-speed-slow) var(--qry-ease), transform var(--qry-speed-slow) var(--qry-ease); transition-delay: var(--qry-delay, 0s); }
 
 /* back to top */
-.qry-to-top { position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); z-index: 30; display: grid; place-items: center; width: 2.8rem; height: 2.8rem; border-radius: 50%; background: var(--qry-surface); color: var(--qry-text); box-shadow: var(--qry-shadow-lg); text-decoration: none; transition: opacity var(--qry-speed), visibility var(--qry-speed); }
+.qry-to-top { position: fixed; inset-inline-end: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); z-index: 30; display: grid; place-items: center; width: 2.8rem; height: 2.8rem; border-radius: 50%; background: var(--qry-surface); color: var(--qry-text); box-shadow: var(--qry-shadow-lg); text-decoration: none; transition: opacity var(--qry-speed), visibility var(--qry-speed); }
 .qry-to-top.is-hidden { opacity: 0; visibility: hidden; }
 
 /* films(): one play button over the poster (the video's parent is the positioned box) */
@@ -601,7 +718,13 @@ a.is-current { color: var(--qry-accent); }
     }
 }
 
+/* makeLaser: a full-window canvas over the page (dialogs, in the top layer, stay above it) */
+.qry-laser { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 2147483000; }
+html.is-laser, html.is-laser * { cursor: none !important; }   /* a layered !important beats any page rule: the dot is the cursor */
+html.is-laser :is(:modal, :popover-open), html.is-laser :is(:modal, :popover-open) * { cursor: auto !important; }   /* the top layer covers the dot: the cursor comes back there */
+
 /* $.tip — the core's shared tooltip, skinned */
+
 #qry-tooltip { max-width: 18rem; padding: .45rem .7rem; border: 1px solid var(--qry-line); border-radius: var(--qry-radius-sm); background: var(--qry-surface); color: var(--qry-text); box-shadow: var(--qry-shadow-lg); font: .82rem/1.4 var(--qry-font); }
 #qry-tooltip-title { font-weight: 700; color: var(--qry-text-strong); }
 #qry-tooltip-content { color: var(--qry-text-muted); }
@@ -612,27 +735,19 @@ a.is-current { color: var(--qry-accent); }
 /* ═══════════════════════════════════════════════════════════════════════════
    UTILITIES
    ═══════════════════════════════════════════════════════════════════════════ */
-.qry-animate { animation: qry-fade-in var(--qry-speed) var(--qry-ease) both; }
 .qry-stagger > * { animation: qry-fade-in var(--qry-speed) var(--qry-ease) both; animation-delay: calc(var(--qry-i, 0) * 50ms); }
 .qry-stagger > :nth-child(2) { --qry-i: 1; } .qry-stagger > :nth-child(3) { --qry-i: 2; } .qry-stagger > :nth-child(4) { --qry-i: 3; }
 .qry-stagger > :nth-child(5) { --qry-i: 4; } .qry-stagger > :nth-child(6) { --qry-i: 5; } .qry-stagger > :nth-child(n+7) { --qry-i: 6; }
 @keyframes qry-fade-in { from { opacity: 0; transform: translateY(6px); } }
-.qry-safe-top { padding-top: env(safe-area-inset-top, 0px); }
-.qry-safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
-.qry-safe-x { padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
-.qry-safe-y { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
-.qry-safe-all { padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
-.qry-no-select { user-select: none; }
-.qry-touch-none { touch-action: none; }
-.qry-touch-pan-x { touch-action: pan-x; }
-.qry-touch-pan-y { touch-action: pan-y; }
-.qry-touch-manip { touch-action: manipulation; }   /* no double-tap zoom delay on buttons */
 @media print {
     :root, [data-theme] { color-scheme: light !important; }           /* paper is light */
-    .qry-header, .qry-sidebar, .qry-toasts, .qry-to-top, .qry-overlay, .qry-skip, .qry-drop-overlay, #qry-tooltip, .qry-dev-console { display: none !important; }
+    .qry-header, .qry-sidebar, .qry-toasts, .qry-to-top, .qry-overlay, .qry-skip, .qry-drop-overlay, #qry-tooltip, .qry-console { display: none !important; }
     [data-reveal] { opacity: 1 !important; transform: none !important; }
     .qry-workspace { height: auto; overflow: visible; }
     body { background: #fff; color: #000; }
+    /* Chrome prints without background graphics by default: a light code block, and the fills that ARE the state kept */
+    .qry-code { background: none; color: var(--qry-text); border: 1px solid var(--qry-line-strong); }
+    :is(.qry-slide.title, .qry-btn, .qry-chip, .qry-switch, progress, meter, .qry-calendar-grid button, .qry-badge) { print-color-adjust: exact; }
 }
 }
 
@@ -645,11 +760,143 @@ a.is-current { color: var(--qry-accent); }
     .qry-host-where code { font: .85rem var(--qry-font-mono); overflow-wrap: anywhere; }
     .qry-host-list { list-style: none; margin: 0; padding: .3rem; height: 260px; overflow-y: auto;
                      border: 1px solid var(--qry-line); border-radius: var(--qry-radius-sm); }
-    .qry-host-list button { display: block; width: 100%; text-align: left; padding: .3rem .5rem; border: 0;
+    .qry-host-list button { display: block; width: 100%; text-align: start; padding: .3rem .5rem; border: 0;
                             border-radius: var(--qry-radius-sm); background: none; color: var(--qry-text); font: inherit; cursor: pointer; }
     .qry-host-list button:hover { background: var(--qry-tint); }
     .qry-host-list .qry-host-file { color: var(--qry-text-muted); }
-    .qry-host-list .qry-host-folder::before { content: '📁\a0'; }
-    .qry-host-list .qry-host-file::before { content: '📄\a0'; }
+    .qry-host-list .qry-host-folder::before { content: '📁\a0' / ''; }
+    .qry-host-list .qry-host-file::before { content: '📄\a0' / ''; }
     .qry-host-note:empty { display: none; }
+}
+
+/* qry-slides.js's deck: a handout when reading (cards down the page), one 16:9 slide when presenting */
+@layer qry.components {
+    .qry-deck { --qry-slide-w: min(100vw, 177.78vh); touch-action: manipulation; display: grid; gap: 1.5rem; max-width: 72rem; margin-inline: auto;
+                padding: 1.5rem 1rem 5rem; grid-template-columns: minmax(0, 1fr); }
+    .qry-slide { position: relative; display: flex; flex-direction: column; gap: .8em; padding: 1.6em 2em; border: 1px solid var(--qry-line);
+                 border-radius: var(--qry-radius-lg); background: var(--qry-surface); box-shadow: var(--qry-shadow); scroll-margin-top: 1rem;
+                 font-size: clamp(1rem, .9rem + .4vw, 1.25rem); overflow-wrap: anywhere; }
+    .qry-slide > :is(h1, h2, h3) { margin: 0; font-family: var(--qry-font-display, var(--qry-font)); color: var(--qry-text-strong); line-height: 1.15; }
+    .qry-slide > h2 { font-size: 1.6em; }
+    .qry-slide :is(p, ul, ol) { margin: 0; }
+    .qry-slide :is(ul, ol) { display: grid; gap: .35em; padding-inline-start: 1.3em; }
+    .qry-slide figure { margin: 0; display: grid; gap: .4em; justify-items: center; }
+    .qry-slide figure :is(img, svg, canvas, video) { max-width: 100%; height: auto; border-radius: var(--qry-radius-sm); }
+    .qry-slide mark { padding-inline: .15em; border-radius: 3px; background: var(--qry-highlight); color: var(--qry-on-highlight); }
+    .qry-slide figcaption { font-size: .8em; color: var(--qry-text-muted); text-align: center; }
+    .qry-slide.title { min-height: 24rem; justify-content: center; align-items: flex-start; background: var(--qry-accent); color: var(--qry-on-accent); border: 0; }
+    .qry-slide.title :focus-visible { outline-color: currentColor; }   /* the accent ring on an accent ground: none */
+    .qry-slide.title > :is(h1, h2) { font-size: 2.6em; color: inherit; }
+    .qry-slide.title p { font-size: 1.15em; opacity: .9; }
+    .qry-slide.chapter { min-height: 12rem; justify-content: center; background: var(--qry-soft); }
+    .qry-slide.chapter > h2 { font-size: 2.2em; color: var(--qry-accent); }
+    .qry-slide [data-widget] { min-height: 8rem; }
+    .qry-notes { padding: .6em .9em; border-radius: var(--qry-radius-sm); background: var(--qry-surface-grey); color: var(--qry-text-muted); font-size: .85em; }
+    .qry-notes::before { content: '🗒\a0' / ''; }
+
+    /* numbered: chapter.slide, by CSS counters (the headings stay as written) */
+    .qry-deck.numbered { counter-reset: qry-chapter qry-slide; }
+    .qry-deck.numbered .qry-slide.chapter { counter-increment: qry-chapter; counter-set: qry-slide 0; }   /* set, not reset: a sibling's reset nests in Chromium */
+    .qry-deck.numbered .qry-slide:not(.chapter, .title) { counter-increment: qry-slide; }
+    .qry-deck.numbered .qry-slide.chapter > h2::before { content: counter(qry-chapter) '. '; }
+    .qry-deck.numbered .qry-slide:not(.chapter, .title) > h2::before { content: counter(qry-chapter) '.' counter(qry-slide) '\a0\a0'; color: var(--qry-text-subtle); font-weight: 600; }
+    .qry-deck.numbered:not(:has(.chapter)) .qry-slide:not(.title) > h2::before { content: counter(qry-slide) '\a0\a0'; }
+
+    /* the toolbar (fades while nobody moves: makeIdle), the progress, the contents */
+    .qry-slides-bar { position: fixed; inset-block-end: max(.8rem, env(safe-area-inset-bottom, 0px)); inset-inline-end: .8rem; z-index: 20;
+                      display: flex; align-items: center; gap: .1rem; padding: .25rem; border: 1px solid var(--qry-line); border-radius: 999px;
+                      background: var(--qry-glass, var(--qry-surface)); box-shadow: var(--qry-shadow-lg); backdrop-filter: blur(8px);
+                      transition: opacity var(--qry-speed-slow) var(--qry-ease); }
+    .qry-slides-bar.is-idle { opacity: 0; }
+    .qry-slides-bar .qry-btn { border-radius: 999px; min-width: 2.2rem; }
+    .qry-slides-count { padding-inline: .4rem; font: 600 .8rem var(--qry-font-mono); color: var(--qry-text-muted); font-variant-numeric: tabular-nums; }
+    .qry-slides-progress { position: fixed; inset: 0 0 auto; z-index: 20; height: 3px; pointer-events: none;
+                           background: var(--qry-accent); transform-origin: left; transform: scaleX(var(--qry-slides-progress, 0));
+                           transition: transform var(--qry-speed) var(--qry-ease); }
+    .qry-slides-contents { position: fixed; inset-block: 0; inset-inline-start: 0; z-index: 30; width: min(19rem, 86vw); overflow-y: auto; padding: 1rem .8rem 4rem;
+                           background: var(--qry-surface); border-inline-end: 1px solid var(--qry-line); box-shadow: var(--qry-shadow-lg);
+                           transform: translateX(calc(-101% * var(--qry-dir))); visibility: hidden;
+                           transition: transform var(--qry-speed) var(--qry-ease), visibility 0s var(--qry-speed); }
+    .qry-slides-contents.is-open { transform: none; visibility: visible; transition: transform var(--qry-speed) var(--qry-ease); }
+    .qry-slides-contents h2 { margin: 0 .4rem .6rem; font-size: 1rem; color: var(--qry-text-strong); }
+    @media (width >= 1200px) {                                        /* reading on a wide screen: the drawer sits beside the handout */
+        html:has(.qry-slides-contents.is-open) .qry-deck:not(.is-presenting) { margin-inline-start: max(19rem, calc((100vw - 72rem) / 2)); }
+        html:has(.qry-slides-contents.is-open):not(:has(.qry-deck.is-presenting)) .qry-slides-contents { box-shadow: none; }
+    }
+    .qry-slides-toc, .qry-slides-toc ol { margin: 0; padding: 0; list-style: none; display: grid; gap: .1rem; font-size: .9rem; }
+    .qry-slides-toc ol { margin-block: .1rem .5rem; font-size: .95em; }
+    .qry-slides-toc-n { flex: 0 0 2.4em; color: var(--qry-text-subtle); font-variant-numeric: tabular-nums; }
+    .qry-slides-toc-n:empty { display: none; }
+    .qry-slides-toc > li > a { font-weight: 600; }
+    .qry-slides-toc a { display: flex; gap: .4em; padding: .2rem .4rem; border-radius: var(--qry-radius-sm); color: var(--qry-text); text-decoration: none; }
+    .qry-slides-toc a:hover { background: var(--qry-tint); }
+    .qry-slides-toc a[aria-current] { background: var(--qry-soft); color: var(--qry-accent); }
+
+    @media screen {   /* printing while presenting prints the whole deck, not the slide on screen */
+        /* presenting: the current slide alone, 16:9, as large as the window allows; its type scales with it */
+        .qry-deck.is-presenting { touch-action: pan-y pinch-zoom; position: fixed; inset: 0; z-index: 10; max-width: none; padding: 0; place-items: center; background: var(--qry-bg); overflow: hidden; }
+        .qry-deck.is-presenting > .qry-slide:not([aria-current]) { position: absolute; visibility: hidden; pointer-events: none; }   /* not display: none — it would stop counting */
+        .qry-deck.is-presenting > .qry-slide { box-sizing: border-box; width: var(--qry-slide-w); aspect-ratio: 16 / 9; min-height: 0; overflow: hidden;
+                                               padding: 2.4em 3.2em; border-radius: 0; border: 0; box-shadow: none; font-size: calc(var(--qry-slide-w) / 52 * var(--qry-slide-fit, 1)); }   /* --qry-slide-fit: makeSlides' autofit */
+        .qry-deck.is-presenting > .qry-slide.is-overflowing { overflow-y: auto; }   /* too long even at 60 %: scroll, never cut */
+        .qry-deck.is-presenting > .qry-slide > [data-widget] { flex: 1 1 auto; min-height: 0; }   /* a widget takes the room left */
+        .qry-deck.is-presenting .qry-notes { display: none; }
+        .qry-deck.is-presenting [data-step] { transition: opacity var(--qry-speed) var(--qry-ease); }
+        .qry-deck.is-presenting [data-step]:not(.is-in) { visibility: hidden; opacity: 0; }   /* its place kept: nothing jumps */
+    }
+
+    /* .widescreen: every slide is 16:9, always — reading (the type scaled to the card's width, container units),
+       presenting, and printed: one 16:9 page per slide (Ctrl+P → PDF), every step shown, no chrome */
+    .qry-deck.widescreen { container-type: inline-size; page: qry-slide; }
+    @media (width >= 600px) {   /* a phone reads a plain handout: a 16:9 card 360 px wide would set its text at 6 px */
+        .qry-deck.widescreen:not(.is-presenting) > .qry-slide { box-sizing: border-box; aspect-ratio: 16 / 9; min-height: 0; overflow: hidden;
+            padding: 2.4em 3.2em; font-size: calc(100cqw / 52 * var(--qry-slide-fit, 1)); }
+        .qry-deck.widescreen:not(.is-presenting) > .qry-slide.is-overflowing { overflow-y: auto; }
+    }
+    .qry-deck.widescreen .qry-notes { display: none; }   /* a 16:9 slide has no room for the speaker's notes: they stay in the source */
+    @page qry-slide { size: 254mm 142.875mm; margin: 0; }
+    @media print {
+        .qry-deck.widescreen { display: block; max-width: none; margin: 0; padding: 0; }
+        .qry-deck.widescreen > .qry-slide { width: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; break-after: page; break-inside: avoid; overflow: hidden;
+            box-sizing: border-box; aspect-ratio: 16 / 9; min-height: 0; padding: 2.4em 3.2em; font-size: calc(100cqw / 52 * var(--qry-slide-fit, 1)); }   /* also when printed while presenting */
+        .qry-deck.widescreen > .qry-slide.is-overflowing { overflow: hidden; }
+        .qry-deck.widescreen > .qry-slide:not(:has(~ .qry-slide)) { break-after: auto; }   /* no blank page after the last one */
+        .qry-slides-contents { display: none !important; }
+        .qry-deck.widescreen [data-step] { visibility: visible; opacity: 1; }
+    }
+
+    /* makeQuiz */
+    script.qry-quiz { display: none; }                            /* the questions' JSON stays beside its quiz: never shown */
+    .qry-quiz:not(script) { display: grid; gap: .7em; max-width: 40em; padding: 1em; border: 1px solid var(--qry-line); border-radius: var(--qry-radius); background: var(--qry-bg); font-size: .9em; }
+    .qry-quiz-meta { font-size: .8em; color: var(--qry-text-muted); }
+    .qry-quiz progress { width: 100%; height: .4em; }
+    .qry-quiz-question { font-weight: 600; color: var(--qry-text-strong); }
+    .qry-quiz-answers { gap: .4em; }
+    .qry-quiz-answer { justify-content: flex-start; text-align: start; white-space: normal; height: auto; padding-block: .5em; }
+    .qry-quiz-answer:disabled { opacity: 1; }
+    .qry-quiz-answer.ok::after { content: ' ✓'; font-weight: 700; }   /* not by colour alone */
+    .qry-quiz-answer.danger::after { content: ' ✗'; font-weight: 700; }
+    .qry-quiz-score { font-size: 1.3em; font-weight: 700; color: var(--qry-text-strong); }
+    @media print {
+        .qry-slides-bar, .qry-slides-progress, .qry-laser { display: none !important; }
+        .qry-slide { break-inside: avoid; box-shadow: none; }
+    }
+}
+
+/* Windows high contrast: the system colours take over — the states drawn by fills come back as Highlight, and a
+   switch, a progress bar and a calendar keep their shapes */
+@layer qry.utilities {
+    @media (forced-colors: active) {
+        .qry-switch { border: 1px solid CanvasText; }
+        .qry-switch::after { background: CanvasText; }
+        .qry-switch:checked { background: Highlight; }
+        :is(.qry-chip, .qry-btn, .qry-console-filter)[aria-pressed="true"], .qry-seg > label:has(:checked),
+        .qry-calendar-grid button[aria-pressed="true"], .qry-sidebar [aria-current]:not([aria-current="false"]), .qry-slides-toc a[aria-current] {
+            forced-color-adjust: none; background: Highlight; color: HighlightText; }
+        .qry-tab { border-bottom-color: Canvas; }
+        .qry-tab[aria-selected="true"] { border-bottom-color: Highlight; }
+        .qry-calendar-grid button[aria-current="date"] { outline: 1px solid CanvasText; outline-offset: -2px; }
+        :is(a, button).qry-card:is([aria-pressed="true"], [aria-current]:not([aria-current="false"])) { outline: 2px solid Highlight; }
+        progress, meter { forced-color-adjust: none; border: 1px solid CanvasText; background: Canvas; --qry-stripe: Highlight; }
+    }
 }

@@ -9,8 +9,7 @@
   <!-- qry 3, vendored under /shared (nothing is fetched): qry-ui → the Sugarcube look → qry.js → modules (each imports the icon set, /shared/js/icons.js) -->
   <link rel="stylesheet" href="/shared/vendor/qry/qry-ui.css">
   <link rel="stylesheet" href="/shared/sugarcube.css">
-  <script src="/shared/vendor/qry/qry.js"></script>
-  <script>try { const t = JSON.parse(localStorage.getItem('jexter:theme')); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}</script>
+  <script src="/shared/vendor/qry/qry.js" data-theme-persist="jexter:theme"></script>   <!-- the saved theme before the first paint; theme.init reads the key here -->
 
   <style>
     /* ── Jexter — one fixed normalization. Clean light-first chrome on qry-ui tokens,
@@ -385,6 +384,7 @@
   // runs at module init and calls defaultLanes(), so a `const` further down is in the temporal
   // dead zone and throws before the app ever paints.
   const MAX_LANES = 3;
+  const kept = $.store('jexter:');   // the settings kept in this browser, over their defaults (never throws)
   const cfg = loadCfg();          // { mode:'source'|'folder'|'manual', suffix }
   let outDir = null;              // chosen output-folder handle for 'folder' mode — remembered across restarts (IndexedDB)
   // lanes: how many documents convert AT ONCE. Half the cores, capped at MAX_LANES — the engine
@@ -393,8 +393,8 @@
   // recommendation and it is enforced here, not just used as a default: the browser can queue a
   // hundred files in one drop, and nothing else bounds what it fires at the engine.
   function defaultLanes(){ return Math.max(1, Math.min(MAX_LANES, Math.floor((navigator.hardwareConcurrency || 4) / 2))); }
-  function loadCfg(){ const d = { mode:'source', suffix:'-normalized', interval:3, recursive:false, lanes:defaultLanes(), moveDone:false, doneName:'Done' }; try { return Object.assign(d, JSON.parse(localStorage.getItem('jexter.cfg')||'{}')); } catch { return d; } }
-  function saveCfg(){ try { localStorage.setItem('jexter.cfg', JSON.stringify({ mode:cfg.mode, suffix:cfg.suffix, interval:cfg.interval, recursive:cfg.recursive, lanes:cfg.lanes, moveDone:cfg.moveDone, doneName:cfg.doneName })); } catch {} }
+  function loadCfg(){ return { mode:'source', suffix:'-normalized', interval:3, recursive:false, lanes:defaultLanes(), moveDone:false, doneName:'Done', ...kept.get('cfg', {}) }; }
+  function saveCfg(){ kept.set('cfg', { mode:cfg.mode, suffix:cfg.suffix, interval:cfg.interval, recursive:cfg.recursive, lanes:cfg.lanes, moveDone:cfg.moveDone, doneName:cfg.doneName }); }
   // Declared up here, like MAX_LANES: boot() may run applyCfgUI during module evaluation, and a const
   // further down is still in its temporal dead zone then.
   const MODE_HELP = {
@@ -739,14 +739,14 @@ java -cp sugarcube-jexter.jar sugarcube.jexter.ui.jx.Jexter --hotfolder ./inbox 
 
   // ── boot + wiring ──
   const api = makeDialog('#api-dialog'), settings = makeDialog('#cfg-drawer');
-  boot({ title:'Jexter', theme: { persist: 'jexter:theme' }, ready(){
-      syncThemeIcon();
+  boot({ title:'Jexter', ready(){
+      $('#btn-theme').html(() => `<i data-icon="${theme.isDark() ? 'sun' : 'moon'}"></i>`);   // the icon follows the mode
       render(); fillApiDoc(); initCfgUI();
       if (!(FSA && window.showDirectoryPicker)) $('#hot').css('display','none');
 
       makeMenu('#app-menu');
       const on = {
-        '#btn-theme': () => { theme.toggle(); syncThemeIcon(); },
+        '#btn-theme': theme.toggle,
         // The menu entries call the SAME handlers the header buttons did — one path per action,
         // so nothing drifts the day one of them changes.
         '#m-files':  chooseFiles,
@@ -795,7 +795,7 @@ java -cp sugarcube-jexter.jar sugarcube.jexter.ui.jx.Jexter --hotfolder ./inbox 
     }});
 
   function openCfg(){ settings.open(); }
-  function syncThemeIcon(){ $('#btn-theme').html(`<i data-icon="${theme.isDark() ? 'sun':'moon'}"></i>`); }
+
 
   // ── settings drawer wiring ──
   function initCfgUI(){

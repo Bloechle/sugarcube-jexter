@@ -24,17 +24,15 @@ import { emit } from './events.js';
 const tools = [];
 let tool = 'home';
 
-const DEV_KEY = 'prism.dev';
+const kept = $.store('prism:');                               // never throws
 export function devMode() {
-  try {
-    const q = new URLSearchParams(location.search);
-    if (q.has('dev') || location.hash === '#dev') { localStorage.setItem(DEV_KEY, '1'); return true; }
-    return localStorage.getItem(DEV_KEY) === '1';
-  } catch { return false; }
+  const q = new URLSearchParams(location.search);
+  if (q.has('dev') || location.hash === '#dev') { kept.set('dev', true); return true; }
+  return kept.get('dev', false) === true;
 }
 
 export function setDevMode(on) {
-  try { on ? localStorage.setItem(DEV_KEY, '1') : localStorage.removeItem(DEV_KEY); } catch {}
+  if (on) kept.set('dev', true); else kept.remove('dev');
   if (!on && toolOf(tool)?.experimental) setTool('home');   // never strand the reader on a hidden tab
   renderTabs();
 }

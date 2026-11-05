@@ -14,22 +14,23 @@
  *   DIALOGS     toast · ask (any dialog) · alert · confirm · prompt (ask, pre-set) · makeDialog (a page's own <dialog>)
  *   THEME       theme.{mode,toggle,isDark,init} · boot
  *   FILES       copy · download · saveFile · openFile · readFiles · zip
- *   LAYOUT      makeTabs · makeMenu · makeSplitter · makeSidebar · makeAutoHideHeader · makeZoomPan · makeIdle
- *   CANVAS      makeCanvas (sharp, themed, redrawn) · makeInk (freehand: signatures, notes)
+ *   LAYOUT      makeTabs · makeMenu · makePopover · toggletips · makeSplitter · makeSidebar · makeDrawer · makeAutoHideHeader · makeZoomPan
+ *   CANVAS      makeInk (freehand: signatures, notes) · makeLaser (a talk's laser pointer) — on qry-web's makeCanvas
  *   CHARTS      makeChart (dots, lines, bars, rules — plain SVG in the theme's tokens)
- *   INPUT       makeKeyboard · makeSlider (a custom slider's keys + ARIA) · makeDropZone (drop, paste and choose)
+ *   INPUT       makeKeyboard · makeSlider (a custom slider's keys + ARIA) · makeCalendar (a month to pick a day) · makeDropZone (drop, paste and choose)
+ *   CONSOLE     makeConsole (the app's log in a drawer: its own lines, console.*, errors — F2)
  *   SERVER      makeEvents (one SSE stream: online, last(name), on(name))
  *   ICONS       icons.add · icons.watch (boot starts it) · icon   (qry draws none: the app registers its own)
- *   DEVICE      makeWakeLock · makePwa (service worker, updates, install, offline copy)
+ *   DEVICE      makePwa (service worker, updates, install, offline copy) — the wake lock is qry-web's
  *   TABLES      makeTable · makeChips · infoRow
  *
  * Requires qry.js 3.x (global `$`) and qry-web.js beside this file.
  *
- * @version 3.0.0
+ * @version 3.6.0
  * @author  Jean-Luc Bloechle with Claude.ai
  * @license MIT
  */
-import { labels } from './qry-web.js';
+import { labels, format, busy, makeCanvas, makeChoice } from './qry-web.js';
 
 export * from './qry-web.js';
 
@@ -44,7 +45,6 @@ const _scope = () => {
 // DIALOGS — native <dialog> and a toast stack, styled by qry-ui.css
 // ════════════════════════════════════════════════════════════════════════════
 
-let _dialogs = 0;
 /** @private — a click on a modal dialog's backdrop: the target is the dialog itself AND the
  *  point is outside its box (its own padding is the dialog too). */
 const _backdrop = (dlg, e) => {
@@ -80,11 +80,11 @@ const _backdrop = (dlg, e) => {
  *      { label: 'Send', tone: 'primary', value: () => ({ why: body.querySelector(':checked').value, note: body.querySelector('textarea').value }) }] });
  */
 export const ask = ({ title, body, buttons = [], dismiss, dismissible = true, role = 'dialog', class: cls = '' } = {}) => new Promise((resolve) => {
-    const id = `qry-dlg-${_dialogs += 1}`, back = document.activeElement;
+    const id = $.uid('qry-dlg'), back = document.activeElement;
     const dlg = $.create('dialog', { class: `qry-dialog ${cls}`.trim(), role: role === 'dialog' ? null : role, 'aria-describedby': `${id}-body`,
         'aria-labelledby': title ? `${id}-title` : `${id}-body` });
     dlg.html($.html`${title && $.html`<h2 class="qry-dialog-title" id="${id}-title">${title}</h2>`}<div class="qry-dialog-body" id="${id}-body"></div>
-        <div class="qry-dialog-actions">${buttons.map((b, i) => $.html`<button type="button" class="qry-btn ${b.tone}" data-act="${i}">${b.label}</button>`)}</div>`);
+        <div class="qry-dialog-actions">${buttons.map((b, i) => $.html`<button type="button" class="qry-btn ${b.tone ?? ''}" data-act="${i}">${b.label}</button>`)}</div>`);
     const box = dlg.querySelector('.qry-dialog-body');
     if (body instanceof Node) box.add(body);
     else if (typeof body === 'string' || typeof body === 'number') box.add($.create('p', { text: body }));
@@ -99,14 +99,14 @@ export const ask = ({ title, body, buttons = [], dismiss, dismissible = true, ro
         if (!btn || running) return;
         const b = buttons[+btn.dataset.act];
         if (typeof b.value !== 'function') return done(b.value);
-        running = true; btn.attr('aria-busy', 'true');
-        try { const v = await b.value(); error.hidden = true; done(v); }
+        running = true;
+        try { const v = await busy(btn, b.value); error.hidden = true; done(v); }
         catch (err) { error.text(err?.message || String(err)).hidden = false; }      // stays open: say why
-        finally { running = false; btn.attr('aria-busy', null); }
+        finally { running = false; }
     });
     dlg.on('cancel', (e) => { e.preventDefault(); if (dismissible && !running) done(dismiss); });     // Escape
     dlg.on('close', () => {
-        if (!dismissible && !answered) return dlg.showModal();          // closed by the browser itself: again
+        if (!answered && (running || !dismissible)) return dlg.showModal();   // closed by the browser itself (a second Escape), or while a button runs: again
         dlg.remove(); if (back?.isConnected) back.focus(); resolve(value);
     });
     dlg.mount(document.body).showModal();
@@ -139,30 +139,43 @@ export const makeDialog = (dialog, { close = '[data-close]', onClose } = {}) => 
  *  modal dialog when there is one (the top layer would cover it otherwise). Its text is a live
  *  region: polite, or assertive for a 'danger' toast. A tone colours it (ok · warn · danger ·
  *  purple · accent; none = neutral). The controller updates the text (a progress) or closes it.
+ *  `id`: one toast per id — a toast whose id is still shown is UPDATED (text, tone, its time
+ *  restarted), never stacked again (« Saved » after every keystroke, « Connection lost » every retry).
  *  @param {string} msg  plain text
- *  @param {{tone?: string, duration?: number}} [opts]  duration in ms (default 3000); 0 = until closed
+ *  @param {{tone?: string, duration?: number, id?: string}} [opts]  duration in ms (default 3000); 0 = until closed
  *  @returns {{ element: Element, update: (msg: string) => void, close: () => void }}
- *  @example toast('Saved', { tone: 'ok' })
+ *  @example toast('Saved', { tone: 'ok', id: 'save' })
  *  @example const t = toast('Packing…', { duration: 0 }); … t.update('Packing 3 / 10'); … t.close()
  */
-export const toast = (msg, { tone = '', duration = 3000 } = {}) => {
+const _toasts = new Map();                                             // id → set() of the toast shown under it
+/** @private — the stack of toasts in `host` (the page, or the open modal dialog), made on first use. */
+const _stack = (host) => host.querySelector(':scope > .qry-toasts') ?? $.create('div', { class: 'qry-toasts' }).mount(host);
+export const toast = (msg, { tone = '', duration = 3000, id } = {}) => {
+    if (id != null && _toasts.has(id)) return _toasts.get(id)(msg, tone, duration);
     let host = document.body;
     try { host = [...document.querySelectorAll('dialog:modal')].at(-1) ?? host; } catch { /* no :modal here: the page */ }
-    const stack = host.querySelector(':scope > .qry-toasts') ?? $.create('div', { class: 'qry-toasts' }).mount(host);
-    const text = $.create('span', { class: 'qry-toast-text', role: tone === 'danger' ? 'alert' : 'status' });
-    let current = msg;
-    const t = $.create('div', { class: `qry-toast ${tone}`.trim() }, text,
-        $.create('button', { type: 'button', class: 'qry-toast-close', 'aria-label': labels.dismiss, text: '×' }));
-    let timer = 0, closed = false;
-    const close = () => { closed = true; clearTimeout(timer); t.cls('+is-leaving'); setTimeout(() => t.remove(), $.reduced ? 0 : $.motion()); };
+    const text = $.create('span', { class: 'qry-toast-text' });
+    const t = $.create('div', {}, text, $.create('button', { type: 'button', class: 'qry-toast-close', 'aria-label': labels.dismiss, text: '×' }));
+    let timer = 0, closed = false, current = msg;
+    const close = () => {
+        if (closed) return;
+        closed = true; clearTimeout(timer); _toasts.delete(id);
+        t.cls('+is-leaving'); setTimeout(() => t.remove(), $.reduced ? 0 : $.motion());
+    };
+    const controller = { element: t, update: (m) => { current = m; if (text.textContent) text.text(m); }, close };
+    /** text, tone and time — at creation, and again for a toast shown under the same id */
+    const set = (m, tn, d) => {
+        t.attr('class', `qry-toast ${tn}`.trim()); text.attr('role', tn === 'danger' ? 'alert' : 'status');
+        controller.update(m);                                            // before the first frame: the text it fills (below)
+        clearTimeout(timer); if (d) timer = setTimeout(close, d);
+        return controller;
+    };
     t.on('click', close);
-    stack.add(t);
+    _stack(host).add(t);
     requestAnimationFrame(() => text.text(current));                     // filled once in the live region: announced
-    if (host !== document.body) host.on('close', () => {                  // the dialog closes: the toast outlives it
-        if (!closed) (document.body.querySelector(':scope > .qry-toasts') ?? $.create('div', { class: 'qry-toasts' }).mount(document.body)).add(t);
-    }, { once: true });
-    if (duration) timer = setTimeout(close, duration);
-    return { element: t, update: (m) => { current = m; text.text(m); }, close };
+    if (host !== document.body) host.on('close', () => { if (!closed) _stack(document.body).add(t); }, { once: true });   // the dialog closes: the toast outlives it
+    if (id != null) _toasts.set(id, set);
+    return set(msg, tone, duration);
 };
 
 /** A message to acknowledge (an alertdialog).  @example await alert('Export finished.') */
@@ -194,9 +207,6 @@ export const prompt = (message, { title = '', value = '', placeholder = '', ok =
 // THEME — light / dark / system, boot
 // ════════════════════════════════════════════════════════════════════════════
 
-/** @private — the OS colour scheme, asked lazily (importing the module touches nothing). */
-let _osQuery = null;
-const _os = () => (_osQuery ??= matchMedia('(prefers-color-scheme: dark)'));
 
 /** Light / dark / system, through ONE hook: `data-theme` on <html> (qry-ui.css turns it
  *  into the native color-scheme; without it, the OS decides). `mode()` reads the choice, `mode(m)`
@@ -204,12 +214,17 @@ const _os = () => (_osQuery ??= matchMedia('(prefers-color-scheme: dark)'));
  *  the attribute and follows the OS live. Every change — mode(m), or the OS while on 'system' —
  *  puts EVERY `<meta name="theme-color">` (media-scoped ones included) on the page ground
  *  (`ground`, default --qry-bg) — never throwing — and fires `qry:theme` on <html> with { mode, dark }.
+ *  `isDark()` is reactive: read in an effect or a binding, it follows every change
+ *  (`btn.attr('aria-pressed', theme.isDark)`, `icon.attr('data-icon', () => theme.isDark() ? 'sun' : 'moon')`).
  *  A closure: its functions can be handed around (`btn.on('click', theme.toggle)`).
- *  No flash before the module runs: in <head>, after the stylesheet and the theme-color meta
- *  (same key, same ground token) — the README has it.
+ *  No flash before the module runs: qry.js itself puts the saved choice on <html> as it loads — load it
+ *  in <head>, after the stylesheet. An app's own key is written ONCE, on that script tag
+ *  (`<script src="qry.js" data-theme-persist="floop:theme">`): init's default `persist` reads it.
  *  @example theme.init(); theme.toggle(); theme.mode('system'); theme.mode() → 'system'; theme.isDark()
  *  @example theme.init({ persist: 'floop:theme', ground: '--floop-paper' })   // the app's own key and ground
  */
+/** @private — what qry.js's own script tag says of the theme (its data-theme-* attributes). */
+const _themeTag = () => document.querySelector('script[data-theme-persist], script[data-theme-initial]')?.dataset ?? {};
 export const theme = (() => {
     let key = 'qry:theme', groundToken = '--qry-bg', watching = false;
     const bar = () => {                      // every theme-color meta on the page ground; never throws
@@ -220,30 +235,34 @@ export const theme = (() => {
             if (c) for (const m of metas) m.content = c;
         } catch { /* no colour to read here (a test sandbox): the metas stay as they are */ }
     };
-    const isDark = () => {
-        const t = document.documentElement.dataset.theme;
-        return t ? t === 'dark' : _os().matches;
-    };
-    /** @param {'light'|'dark'|'system'} [m]  without it: the saved choice ('system' by default) */
+    let changes = null, initial = 'system';  // changes: a signal, made on first use (importing stays inert), bumped by every change
+    const os = () => $.media('(prefers-color-scheme: dark)');
+    const changed = () => { if (changes) changes.value += 1; };
+    const dark = () => { const t = document.documentElement.dataset.theme; return t ? t === 'dark' : os().peek(); };
+    const isDark = () => { (changes ??= $.signal(0)).value; return dark(); };   // read in an effect (an icon, a chart): it follows
+    /** @param {'light'|'dark'|'system'} [m]  without it: the saved choice (init's `initial` when none: 'system') */
     const mode = (...m) => {
-        if (!m.length) return $.store().get(key, 'system');
+        if (!m.length) return $.store().get(key, initial);
         const html = document.documentElement;
         html.attr('data-theme', m[0] === 'system' ? null : m[0]);
         $.store().set(key, m[0]);
         bar();
-        html.trigger('qry:theme', { mode: m[0], dark: isDark() });
+        changed();
+        html.trigger('qry:theme', { mode: m[0], dark: dark() });   // untracked: mode() in an effect never follows the theme
         return m[0];
     };
     return {
         mode, isDark,
-        toggle: () => mode(isDark() ? 'light' : 'dark'),
-        /** Apply the saved choice (default: follow the OS), and follow the OS while on 'system'.
-         *  @param {{persist?: string, ground?: string}} [opts]  persist: the localStorage key of the
-         *  choice (default 'qry:theme'); ground: the token (or CSS colour) of the page ground the
-         *  browser bar takes (default '--qry-bg' — an app not on qry-ui.css names its own) */
-        init({ persist = 'qry:theme', ground = '--qry-bg' } = {}) {
-            key = persist; groundToken = ground;
-            if (!watching) { watching = true; _os().addEventListener('change', () => { if (mode() === 'system') mode('system'); }); }
+        toggle: () => mode(dark() ? 'light' : 'dark'),
+        /** Apply the saved choice, and follow the OS while on 'system'. The key and the first-visit mode
+         *  default to what qry.js's script tag says (`data-theme-persist`, `data-theme-initial`): written once.
+         *  @param {{persist?: string, initial?: 'light'|'dark'|'system', ground?: string}} [opts]  persist: the
+         *  localStorage key of the choice (else 'qry:theme'); initial: the mode before any choice (else 'system');
+         *  ground: the token (or CSS colour) of the page ground the browser bar takes (default '--qry-bg' — an app
+         *  not on qry-ui.css names its own) */
+        init({ persist = _themeTag().themePersist || 'qry:theme', initial: first = _themeTag().themeInitial || 'system', ground = '--qry-bg' } = {}) {
+            key = persist; initial = first; groundToken = ground;
+            if (!watching) { watching = true; $.watch(os(), () => { if (mode() === 'system') mode('system'); }); }
             return mode(mode());
         },
     };
@@ -342,13 +361,15 @@ export const saveFile = async (data, name, { type = 'application/octet-stream', 
     } else if (window.showSaveFilePicker) {
         const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')) : '';   // 'a.ocd.epub' → '.epub': one extension per type
         const asked = performance.now();
+        let picked = null;
         try {
-            return await write(await window.showSaveFilePicker({ suggestedName: name, types: _types(ext), ...(startIn && { startIn }), ...(id && { id }) }));
+            picked = await window.showSaveFilePicker({ suggestedName: name, types: _types(ext), ...(startIn && { startIn }), ...(id && { id }) });
         } catch (e) {
             // the user cancelled — unless the "cancel" came back faster than any hand: the dialog was
             // never SHOWN (a headless or locked-down browser answers AbortError at once) → the other way
             if (e?.name === 'AbortError' && performance.now() - asked > _NOT_SHOWN) return null;
         }                                                     // refused here: the other way
+        if (picked) return write(picked);                     // a file was chosen: a build or write that fails rejects — never a second build, never a download
     }
     const blob = await make();
     if (fallback) {                                           // the app's own way: null / false = the user cancelled there
@@ -409,7 +430,7 @@ const _unzip = (u8) => {
         if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('damaged zip directory');
         const len = dv.getUint16(p + 28, true);
         entries.set(utf8.decode(u8.subarray(p + 46, p + 46 + len)),
-            { method: dv.getUint16(p + 10, true), size: dv.getUint32(p + 20, true), offset: dv.getUint32(p + 42, true) });
+            { method: dv.getUint16(p + 10, true), crc: dv.getUint32(p + 16, true), size: dv.getUint32(p + 20, true), usize: dv.getUint32(p + 24, true), offset: dv.getUint32(p + 42, true) });
         p += 46 + len + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
     }
     const read = async (name) => {
@@ -417,10 +438,14 @@ const _unzip = (u8) => {
         if (!e) return null;
         if (e.size === 0xFFFFFFFF) throw new Error('zip64 archives are not supported');
         const start = e.offset + 30 + dv.getUint16(e.offset + 26, true) + dv.getUint16(e.offset + 28, true);
+        if (start + e.size > u8.length) throw new Error(`damaged zip entry (${name})`);
         const raw = u8.subarray(start, start + e.size);
-        if (e.method === 0) return raw;
-        if (e.method !== 8) throw new Error(`unsupported zip compression (${e.method})`);
-        return new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+        if (e.method !== 0 && e.method !== 8) throw new Error(`unsupported zip compression (${e.method})`);
+        let n = 0;                                                       // never more than it declares: a zip bomb stops at its own word
+        const cap = new TransformStream({ transform(c, ctl) { if ((n += c.length) > e.usize) ctl.error(new Error(`zip entry larger than declared (${name})`)); else ctl.enqueue(c); } });
+        const out = e.method === 0 ? raw : new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw')).pipeThrough(cap)).arrayBuffer());
+        if (out.length !== e.usize || _crc32(out) !== e.crc) throw new Error(`damaged zip entry (${name})`);
+        return out;
     };
     return { names: [...entries.keys()], read };
 };
@@ -430,7 +455,12 @@ const _unzip = (u8) => {
  *  Values as Excel stores them: numbers and dates as numbers (a date is a serial day). */
 const _xlsx = async (u8) => {
     const { read } = _unzip(u8), utf8 = new TextDecoder();
-    const doc = async (name) => { const b = await read(name); return b && new DOMParser().parseFromString(utf8.decode(b), 'application/xml'); };
+    const doc = async (name) => {
+        const b = await read(name); if (!b) return null;
+        const d = new DOMParser().parseFromString(utf8.decode(b), 'application/xml');
+        if (d.getElementsByTagName('parsererror').length) throw new Error(`damaged workbook (${name})`);   // DOMParser never throws: it would cut the sheet
+        return d;
+    };
     const tags = (node, name) => [...node.getElementsByTagNameNS('*', name)];
     const book = await doc('xl/workbook.xml');
     const first = book && tags(book, 'sheet')[0];
@@ -448,12 +478,16 @@ const _xlsx = async (u8) => {
     for (const row of tags(sheet, 'row')) {
         const cells = [];
         for (const c of tags(row, 'c')) {
-            const type = c.getAttribute('t'), v = tags(c, 'v')[0]?.textContent ?? '';
-            cells[col(c.getAttribute('r') || '')] = type === 's' ? shared[+v] ?? ''
+            const type = c.getAttribute('t'), v = tags(c, 'v')[0]?.textContent ?? '', at = c.getAttribute('r');
+            const k = at ? col(at) : cells.length;                       // `r` is optional: the next cell
+            if (!(k >= 0 && k < 16384)) throw new Error('not an Excel workbook (a cell out of range)');   // Excel's own limits: no array sized by a file
+            cells[k] = type === 's' ? shared[+v] ?? ''
                 : type === 'inlineStr' ? tags(c, 't').map((t) => t.textContent).join('')
                 : type === 'b' ? (v === '1' ? 'TRUE' : 'FALSE') : v;
         }
-        lines[(+row.getAttribute('r') || lines.length + 1) - 1] = Array.from(cells, (t) => cell(t ?? '')).join('\t');
+        const r = +row.getAttribute('r') || lines.length + 1;
+        if (!(r >= 1 && r <= 1048576)) throw new Error('not an Excel workbook (a row out of range)');
+        lines[r - 1] = Array.from(cells, (t) => cell(t ?? '')).join('\t');
     }
     return Array.from(lines, (l) => l ?? '').join('\n');
 };
@@ -584,7 +618,7 @@ export const makeTabs = (tabsOpt = '.qry-tab', { panels: panelsOpt = '.qry-panel
         cur = name;
         for (const t of tabs) {
             const sel = t.attr(attr) === name;
-            t.attr({ 'aria-selected': String(sel), tabindex: sel ? '0' : '-1' });
+            t.attr({ 'aria-selected': sel, tabindex: sel ? '0' : '-1' });
         }
         for (const p of panels) p.hidden = !(p.attr(attr) || '').split(' ').includes(name);
         onChange?.(name);
@@ -595,7 +629,7 @@ export const makeTabs = (tabsOpt = '.qry-tab', { panels: panelsOpt = '.qry-panel
         t.attr('role', 'tab').on('click', () => select(t.attr(attr)), on);
         t.on('keydown', (e) => {
             const i = tabs.indexOf(t), n = tabs.length;
-            const j = { ArrowRight: i + 1, ArrowDown: i + 1, ArrowLeft: i - 1 + n, ArrowUp: i - 1 + n, Home: 0, End: n - 1 }[e.key];
+            const j = { ArrowRight: i + 1, ArrowDown: i + 1, ArrowLeft: i - 1 + n, ArrowUp: i - 1 + n, Home: 0, End: n - 1 }[$.key(e)];
             if (j === undefined) return;
             e.preventDefault();
             tabs[j % n].focus();
@@ -613,7 +647,9 @@ export const makeTabs = (tabsOpt = '.qry-tab', { panels: panelsOpt = '.qry-panel
  *  container / variable. `from: 'end'` sizes a pane measured from the container's right (or
  *  bottom) edge — the end aside, an inspector — and turns the keys round to match.
  *  Live updates flow through `onResize` (every move); commit-once work belongs in `onEnd`.
- *  The handle is a focusable separator: ←/→ (↑/↓ on the y axis) move it by 16 px.
+ *  The handle is a focusable separator: ←/→ (↑/↓ on the y axis) move it by 16 px. While it is
+ *  dragged, the handle is `is-dragging` and its container `is-resizing` (qry-ui.css stops text
+ *  selection and the panes' transitions there; a page may calm a heavy view too).
  *  Double-click resets to `initial` (or clears the variable). `size()` reads the size (px, or null
  *  before any), `size(px)` sets it. `persist: 'key'` keeps the size the user left across visits
  *  ($.store; the saved one wins over `initial`).
@@ -654,16 +690,17 @@ export const makeSplitter = (handle, {
     };
     const at = (e) => {                                  // the pointer's distance from the measured edge
         const r = box.getBoundingClientRect(), p = y ? e.clientY : e.clientX;
-        return sign > 0 ? p - r[y ? 'top' : 'left'] : r[y ? 'bottom' : 'right'] - p;
+        const fromLow = (sign > 0) !== (!y && getComputedStyle(box).direction === 'rtl');   // the start edge is the right one in RTL
+        return fromLow ? p - r[y ? 'top' : 'left'] : r[y ? 'bottom' : 'right'] - p;
     };
     el.attr({ role: 'separator', tabindex: '0', 'aria-orientation': y ? 'horizontal' : 'vertical', 'aria-valuemin': min });
     el.onDrag(({ phase, event }) => {
-        if (phase === 'start') { el.cls('+is-dragging'); onStart?.(current() ?? at(event)); }
+        if (phase === 'start') { el.cls('+is-dragging'); box.cls('+is-resizing'); onStart?.(current() ?? at(event)); }   // the container too: an iframe under the pointer, a transition to pause
         else if (phase === 'move') write(at(event));
-        else { el.cls('-is-dragging'); onEnd(current()); }
+        else { el.cls('-is-dragging'); box.cls('-is-resizing'); onEnd(current()); }
     }, on);
     el.on('keydown', (e) => {
-        const d = { ArrowLeft: -16, ArrowRight: 16, ArrowUp: -16, ArrowDown: 16 }[e.key];
+        const d = { ArrowLeft: -16, ArrowRight: 16, ArrowUp: -16, ArrowDown: 16 }[$.key(e)];
         if (!d || (y !== (e.key === 'ArrowUp' || e.key === 'ArrowDown'))) return;
         e.preventDefault();
         onEnd(write((current() ?? span() / 2) + d * sign));
@@ -693,24 +730,55 @@ export const makeSplitter = (handle, {
  *  @example const nav = makeSidebar('.qry-sidebar'); nav.toggle()
  */
 export const makeSidebar = (sidebar, { button = '#qry-collapse', overlay = '#qry-overlay', onChange } = {}) => {
-    const el = $(sidebar), ov = $.opt(overlay), btn = $.opt(button), small = matchMedia('(max-width: 768px)');
+    const el = $(sidebar), ov = $.opt(overlay), btn = $.opt(button), small = $.media('(max-width: 768px)');
     const { on, off } = _scope();
-    const isExpanded = () => (small.matches ? el.cls('?is-open') : !el.cls('?is-collapsed'));
+    const isExpanded = () => (small.peek() ? el.cls('?is-open') : !el.cls('?is-collapsed'));
     let last = null;
     const expanded = () => {
         const v = isExpanded();
-        btn?.attr('aria-expanded', String(v));
+        btn?.attr('aria-expanded', v);
         if (v !== last) { const first = last === null; last = v; if (!first) onChange?.(v); }
     };
     const open = () => { el.cls('+is-open'); ov?.cls('+is-visible'); expanded(); };
     const close = () => { el.cls('-is-open'); ov?.cls('-is-visible'); expanded(); };
-    const toggle = () => { if (!small.matches) { el.cls('~is-collapsed'); expanded(); } else if (el.cls('?is-open')) close(); else open(); };
+    const toggle = () => { if (!small.peek()) { el.cls('~is-collapsed'); expanded(); } else if (el.cls('?is-open')) close(); else open(); };
     ov?.on('click', close, on);
     btn?.on('click', toggle, on);
     document.on('keydown', (e) => { if (e.key === 'Escape' && el.cls('?is-open')) close(); }, on);
-    small.addEventListener('change', close, on);                      // crossing the breakpoint: a clean state
+    const stop = $.watch(small, close);                                // crossing the breakpoint: a clean state
     expanded();
-    return { open, close, toggle, isExpanded, destroy: off };
+    return { open, close, toggle, isExpanded, destroy() { off(); stop(); } };
+};
+
+/** A workspace drawer that opens and closes — the start aside of a `.qry-workspace`, or its `.end`
+ *  one — with its splitter (qry-ui.css: `is-aside-collapsed` / `is-end-collapsed` on the workspace).
+ *  The `button` toggles it (aria-expanded, aria-controls); `persist` keeps it open or closed across
+ *  visits; `narrow` (a media query) closes it whenever the window becomes that narrow — the room goes
+ *  to the main view, the drawer stays one click away. `active` is a signal, true while it is open (bind an icon to it).
+ *  @param {string|Element} aside  the `.qry-workspace-aside` (`.end` for the end one)
+ *  @param {{button?: string|Element, persist?: string, narrow?: string, onChange?: (open: boolean) => void}} [opts]
+ *  @returns {{ active: {value: boolean}, isOpen: () => boolean, open: () => void, close: () => void, toggle: () => void, destroy: () => void }}
+ *  @example makeDrawer('#inspector', { button: '#inspector-btn', persist: 'app:inspector', narrow: '(max-width: 900px)' })
+ */
+export const makeDrawer = (aside, { button, persist, narrow, onChange } = {}) => {
+    const el = $(aside), ws = el.closest('.qry-workspace') ?? el.parentElement, btn = button ? $(button) : null;
+    const cls = el.cls('?end') ? 'is-end-collapsed' : 'is-aside-collapsed', { on, off } = _scope();
+    const active = $.signal(true, persist ? { persist } : undefined);   // true while it is open
+    if (!el.id) el.id = $.uid('qry-drawer');
+    const stops = [
+        $.effect(() => { ws.cls(cls, !active.value); }),
+        $.watch(active, (v) => onChange?.(v)),
+        ...(narrow ? [$.effect(() => { if ($.media(narrow).value) active.value = false; })] : []),
+    ];
+    btn?.attr({ 'aria-controls': el.id, 'aria-expanded': active }).on('click', () => { active.value = !active.peek(); }, on);
+    return {
+        active,
+        isOpen: () => active.peek(),
+        open: () => { active.value = true; },
+        close: () => { active.value = false; },
+        toggle: () => { active.value = !active.peek(); },
+        destroy() { off(); for (const s of stops) s(); btn?.attr({ 'aria-controls': null, 'aria-expanded': null }); ws.cls(`-${cls}`); },
+    };
 };
 
 /** Hide a sticky `.qry-header` on scroll-down, reveal on scroll-up (class `is-hidden`) — more room
@@ -743,63 +811,99 @@ export const makeAutoHideHeader = (header = '.qry-header', { scroll = '.qry-cont
     return { destroy() { off(); cancelAnimationFrame(raf); h.cls('-is-hidden'); } };
 };
 
-/** Pan + zoom a large content element inside a scrollable stage (`.qry-stage`).
- *  Zoom sets the content's CSS width in % (100% = fit at zoom 1), so the stage's own
- *  scrollbars track the overflow; the content can be a div, an <img> or a <canvas>.
- *  Ctrl/⌘ + wheel zooms toward the cursor (plain wheel with `wheelModifier: false`), a drag
- *  pans, two fingers pinch, a double-click toggles zoom; drags starting on an interactive
- *  child (`noPan`) are left alone. The content is resolved live (it may be swapped).
- *  @param {string|Element} stage  the scroll container
+/** Pan + zoom a content element inside a stage — two models, ONE set of gestures:
+ *  - `mode: 'scroll'` (default): zoom sets the content's CSS width in % (100% = fit at zoom 1) in a
+ *    scrollable stage (`.qry-stage`), whose own scrollbars track the overflow — a long plan, a page.
+ *  - `mode: 'view'`: the content keeps its own size (an image, a drawing, a canvas of fixed logical size)
+ *    and is placed by a transform — translate(x, y) scale(fit × zoom), zoom 1 = fitted and centred in the
+ *    stage (overflow hidden); `view()` gives { zoom, scale, x, y }.
+ *  `apply(view, content)` replaces the writing (a canvas redrawn, a --zoom variable); the anchor is
+ *  measured on the content's box, so content centred or padded in the stage stays under the cursor.
+ *  Ctrl/⌘ + wheel zooms toward the cursor (plain wheel with `wheelModifier: false`) — in proportion to
+ *  the wheel's delta, so a trackpad zooms smoothly and a mouse notch by `wheelStep` —, a drag pans, two
+ *  fingers pinch, a double-click toggles the zoom; drags starting on an interactive child (`noPan`)
+ *  are left alone. The content is resolved live (it may be swapped).
+ *  @param {string|Element} stage  the container
  *  @param {Object} [opts]
  *  @param {string|Element} [opts.content]  zoom target (default: the stage's first element child)
+ *  @param {'scroll'|'view'} [opts.mode='scroll']
  *  @param {number} [opts.min=0.25] @param {number} [opts.max=8]
  *  @param {number} [opts.step=1.25]  button / dblclick factor
- *  @param {number} [opts.wheelStep=1.1]  wheel factor per notch
+ *  @param {number} [opts.wheelStep=1.1]  factor of one wheel notch (100 px of delta)
  *  @param {boolean}[opts.wheelModifier=true]  require Ctrl/⌘ for wheel-zoom
  *  @param {boolean}[opts.doubleClick=true]  a double-click toggles the zoom
  *  @param {string} [opts.noPan]  selector of children that do NOT start a pan
+ *  @param {(view: {zoom:number, scale:number, x:number, y:number}, content: Element) => void} [opts.apply]
  *  @param {Function} [opts.onZoom]  (zoom:number) → void
- *  @param {Function} [opts.onPan]   (scrollLeft:number, scrollTop:number) → void
- *  @returns {{ zoom:(z?:number)=>number, zoomIn, zoomOut, zoomAt:(factor, clientX?, clientY?)=>void, fit, destroy }}   zoom() reads, zoom(z) sets
+ *  @param {Function} [opts.onPan]   (x:number, y:number) → void   (scroll: the scroll offsets; view: the content's offset)
+ *  @returns {{ zoom:(z?:number)=>number, view:()=>{zoom:number, scale:number, x:number, y:number}, zoomIn, zoomOut, zoomAt:(factor, clientX?, clientY?)=>void, fit, destroy }}   zoom() reads, zoom(z) sets
  *  (A pinch that ends with one finger still down continues as a pan from there.)
  *  @example const view = makeZoomPan('#stage', { content: '#canvas', onZoom: () => scheduleRender() })
+ *  @example makeZoomPan('#stage', { mode: 'view', content: '#photo' })   // a photo at its own size, fitted, zoomed by transform
  */
 export const makeZoomPan = (stage, {
-    content, min = 0.25, max = 8, step = 1.25, wheelStep = 1.1, wheelModifier = true, doubleClick = true,
+    content, mode = 'scroll', min = 0.25, max = 8, step = 1.25, wheelStep = 1.1, wheelModifier = true, doubleClick = true,
     noPan = 'a,button,input,select,textarea,label,[contenteditable],[data-no-pan]',
-    onZoom, onPan,
+    apply, onZoom, onPan,
 } = {}) => {
-    const s = $(stage);
+    const s = $(stage), byView = mode === 'view';
     const { on, off } = _scope();
     const target = () => (content ? $(content) : s.firstElementChild);
-    let z = 1;
-    const apply = () => target()?.css('width', z * 100 + '%');
-    const set = (nz) => { const prev = z; z = $.clamp(nz, min, max); apply(); onZoom?.(z); return z / prev; };
-    const zoomAt = (factor, cx, cy) => {               // keep the viewport point (cx, cy) fixed
-        const r = s.getBoundingClientRect();
-        if (cx == null) { cx = r.left + s.clientWidth / 2; cy = r.top + s.clientHeight / 2; }
-        const x = s.scrollLeft + (cx - r.left), y = s.scrollTop + (cy - r.top);
-        const ratio = set(z * factor);
-        s.scrollLeft = x * ratio - (cx - r.left);
-        s.scrollTop = y * ratio - (cy - r.top);
+    let z = 1, x = 0, y = 0;                                         // view: the content's offset in the stage (px)
+    const fitScale = () => {                                          // view: the scale that fits the content's own size
+        const c = target(), w = c?.offsetWidth, h = c?.offsetHeight;
+        return byView && w && h ? Math.min(s.clientWidth / w, s.clientHeight / h) : 1;
+    };
+    const view = () => ({ zoom: z, scale: fitScale() * z, x, y });
+    const paint = () => {
+        const c = target();
+        if (!c) return;
+        if (apply) apply(view(), c);
+        else if (byView) c.css({ transformOrigin: '0 0', transform: `translate(${x}px, ${y}px) scale(${fitScale() * z})` });
+        else c.css('width', z * 100 + '%');
+    };
+    const center = () => {                                            // view at zoom 1: fitted and centred
+        const c = target(), k = fitScale();
+        if (c) { x = (s.clientWidth - c.offsetWidth * k) / 2; y = (s.clientHeight - c.offsetHeight * k) / 2; }
+    };
+    const zoomAt = (factor, cx, cy) => {               // keep the point under (cx, cy) where it is
+        const nz = $.clamp(z * factor, min, max), c = target(), r = s.getBoundingClientRect();
+        if (nz === z || !c) return;
+        if (cx == null) { cx = r.left + s.clientLeft + s.clientWidth / 2; cy = r.top + s.clientTop + s.clientHeight / 2; }
+        if (byView) {
+            const k = nz / z, px = cx - r.left - s.clientLeft, py = cy - r.top - s.clientTop;
+            x = px - (px - x) * k; y = py - (py - y) * k; z = nz; paint();
+        } else {
+            const a = c.getBoundingClientRect(), fx = a.width ? (cx - a.left) / a.width : 0, fy = a.height ? (cy - a.top) / a.height : 0;
+            z = nz; paint();
+            const b = c.getBoundingClientRect();                       // where that point went: scroll it back under the cursor
+            s.scrollLeft += b.left + fx * b.width - cx; s.scrollTop += b.top + fy * b.height - cy;
+        }
+        onZoom?.(z);
+    };
+    let from = null;                                                  // a pan: where the pointer and the view were when it began
+    const panFrom = (e) => { from = { cx: e.clientX, cy: e.clientY, x: byView ? x : s.scrollLeft, y: byView ? y : s.scrollTop }; };
+    const panTo = (e) => {                                            // measured from the start: no rounding piles up
+        const dx = e.clientX - from.cx, dy = e.clientY - from.cy;
+        if (byView) { x = from.x + dx; y = from.y + dy; paint(); onPan?.(x, y); }
+        else { s.scrollLeft = from.x - dx; s.scrollTop = from.y - dy; onPan?.(s.scrollLeft, s.scrollTop); }
     };
     s.on('wheel', (e) => {
         if (wheelModifier && !(e.ctrlKey || e.metaKey)) return;
         e.preventDefault();
-        zoomAt(e.deltaY < 0 ? wheelStep : 1 / wheelStep, e.clientX, e.clientY);
+        const px = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? s.clientHeight : 1);   // lines, pages → px
+        zoomAt(wheelStep ** (-px / 100), e.clientX, e.clientY);
     }, { ...on, passive: false });
     // one pointer registry drives both the one-pointer pan and the two-pointer pinch
     const pts = new Map();
-    let sx = 0, sy = 0, sl = 0, st = 0, pinch = 0;
-    const panFrom = (e) => { sx = e.clientX; sy = e.clientY; sl = s.scrollLeft; st = s.scrollTop; };
+    let pinch = 0;
     const pair = () => [...pts.values()];
     const dist = () => { const [a, b] = pair(); return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); };
     s.on('pointerdown', (e) => {
         if ((e.pointerType === 'mouse' && e.button !== 0) || e.target.closest?.(noPan)) return;
         pts.set(e.pointerId, e);
-        s.setPointerCapture(e.pointerId);
-        if (pts.size === 2) { pinch = dist(); s.cls('-is-grabbing'); }
-        else { panFrom(e); s.cls('+is-grabbing'); }
+        try { s.setPointerCapture(e.pointerId); } catch { /* a synthetic event */ }
+        if (pts.size === 2) { pinch = dist(); s.cls('-is-grabbing'); } else { panFrom(e); s.cls('+is-grabbing'); }
     }, on);
     s.on('pointermove', (e) => {
         if (!pts.has(e.pointerId)) return;
@@ -808,10 +912,7 @@ export const makeZoomPan = (stage, {
             const d = dist(), [a, b] = pair();
             if (pinch) zoomAt(d / pinch, (a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2);
             pinch = d;
-        } else {
-            s.scrollLeft = sl - (e.clientX - sx); s.scrollTop = st - (e.clientY - sy);
-            onPan?.(s.scrollLeft, s.scrollTop);
-        }
+        } else panTo(e);
     }, on);
     s.on('pointerup pointercancel', (e) => {
         pts.delete(e.pointerId);
@@ -820,49 +921,44 @@ export const makeZoomPan = (stage, {
         if (!pts.size) s.cls('-is-grabbing');
     }, on);
     s.on('dblclick', (e) => { if (doubleClick && !e.target.closest?.(noPan)) zoomAt(z > 1 ? 1 / z : step * step, e.clientX, e.clientY); }, on);
-    apply();
+    const fit = () => { z = 1; if (byView) center(); else s.scrollLeft = s.scrollTop = 0; paint(); onZoom?.(z); };
+    if (byView) { s.css('overflow', 'hidden'); center(); }
+    paint();
     return {
-        zoom: (...v) => { if (v.length) set(v[0]); return z; },
+        zoom: (...v) => { if (v.length) zoomAt(v[0] / z); return z; },
+        view,
         zoomIn: () => zoomAt(step),
         zoomOut: () => zoomAt(1 / step),
         zoomAt,
-        fit: () => { set(1); s.scrollLeft = s.scrollTop = 0; },
+        fit,
         destroy: off,
     };
 };
 
-let _anchors = 0;
 /** A menu on the native popover: `<button popovertarget="m">⋯</button>` +
  *  `<div id="m" popover class="qry-menu"><button data-value="copy">Copy</button><hr>…</div>`.
  *  The browser already opens, closes, light-dismisses and handles Escape; qry-ui.css places it
  *  under its button with CSS anchor positioning (flipping at the viewport edges). makeMenu adds
  *  what a menu needs on top: an explicit anchor, the ARIA menu pattern (roles, aria-haspopup,
  *  aria-expanded), focus on the first item, ↑/↓/Home/End between items, Tab closes, a click
- *  on an item calls onSelect and closes. Items can be added later: they are read on open.
+ *  on an item calls onSelect and closes (an item marked `data-keep` keeps it open: a size − / +).
+ *  Items can be added later: they are read on open. A menu built in a row not yet in the page finds
+ *  its button in that row (its root node), and is given an id when it has none.
  *  Without makeMenu, `.qry-menu` / `.qry-popover` still open and anchor (implicit anchor).
- *  @param {string|Element} menu  the popover element (it needs an id)
+ *  @param {string|Element} menu  the popover element
  *  @param {Object} [opts]
- *  @param {string|Element} [opts.button]  its trigger (default: the `[popovertarget=<id>]` button)
+ *  @param {string|Element} [opts.button]  its trigger (default: the `[popovertarget=<id>]` button beside it)
  *  @param {(value:string, item:Element)=>void} [opts.onSelect]  value = data-value, else the text
  *  @returns {{ open:()=>void, close:()=>void, toggle:()=>void, isOpen:()=>boolean, destroy:()=>void }}
  *  @example makeMenu('#more', { onSelect: (v) => v === 'export' && exportCsv() })
  */
 export const makeMenu = (menu, { button, onSelect } = {}) => {
-    const m = $(menu);
-    const b = $.opt(button ?? `[popovertarget="${CSS.escape(m.id)}"]`);
     const { on, off } = _scope();
-    const anchor = `--qry-anchor-${_anchors += 1}`;
-    if (!m.hasAttribute('popover')) m.attr('popover', '');
-    m.attr('role', 'menu').css('position-anchor', anchor);
-    b?.attr({ popovertarget: m.id, 'aria-haspopup': 'menu', 'aria-expanded': 'false' }).css('anchor-name', anchor);
+    const { m, b, controller } = _anchored(menu, button, on, off);
+    m.attr('role', 'menu');
+    b?.attr('aria-haspopup', 'menu');
     const items = () => m.find(':scope > :is(button, a, [role="menuitem"])').filter((i) => !i.disabled && !i.hidden);
-    const isOpen = () => m.matches(':popover-open');
-    m.on('beforetoggle', (e) => {                         // synchronous: ARIA is right before anyone looks
-        const open = e.newState === 'open';
-        b?.attr('aria-expanded', String(open));
-        if (open) items().forEach((i) => i.attr({ role: 'menuitem', tabindex: '-1' }));
-        else if (m.contains(document.activeElement)) b?.focus();
-    }, on);
+    m.on('beforetoggle', (e) => { if (e.newState === 'open') items().forEach((i) => i.attr({ role: 'menuitem', tabindex: '-1' })); }, on);
     m.on('toggle', (e) => { if (e.newState === 'open') items()[0]?.focus(); }, on);   // focusable once shown
     m.on('keydown', (e) => {
         if (e.key === 'Tab') { m.hidePopover(); return; }
@@ -876,84 +972,83 @@ export const makeMenu = (menu, { button, onSelect } = {}) => {
         const item = e.target.closest?.('button, a, [role="menuitem"]');
         if (!item || !m.contains(item) || item.disabled) return;
         onSelect?.(item.dataset.value ?? item.textContent.trim(), item);
-        m.hidePopover();
+        if (!item.hasAttribute('data-keep')) m.hidePopover();
     }, on);
-    return {
+    return controller;
+};
+
+/** @private — a popover anchored to its button: the menu's and makePopover's common ground. The popover
+ *  gets an id (if none) and `popover`; the button (given, else the `[popovertarget]` beside it — in its
+ *  root, so a row not yet in the page works) gets popovertarget and an explicit CSS anchor (qry-ui.css
+ *  places the popover under it, flipping at the edges); aria-expanded follows in `beforetoggle` (sync);
+ *  closing with the focus inside gives it back to the button. → { m, b, controller }. */
+const _anchored = (popover, button, on, off) => {
+    const m = $(popover);
+    if (!m.id) m.id = $.uid('qry-pop');
+    if (!m.hasAttribute('popover')) m.attr('popover', '');
+    const b = button != null ? $.opt(button) : m.getRootNode().querySelector(`[popovertarget="${CSS.escape(m.id)}"]`);
+    const anchor = `--${$.uid('qry-anchor')}`;
+    m.css('position-anchor', anchor);
+    b?.attr({ popovertarget: m.id, 'aria-expanded': false }).css('anchor-name', anchor);
+    const isOpen = () => m.matches(':popover-open');
+    m.on('beforetoggle', (e) => {                         // synchronous: ARIA is right before anyone looks
+        const open = e.newState === 'open';
+        b?.attr('aria-expanded', open);
+        if (!open && m.contains(document.activeElement)) b?.focus();
+    }, on);
+    return { m, b, controller: {
         open: () => { if (!isOpen()) m.showPopover(); },
         close: () => { if (isOpen()) m.hidePopover(); },
         toggle: () => m.togglePopover(),
         isOpen,
         destroy: off,
-    };
+    } };
 };
 
-/** Chrome that steps aside while nobody moves: after `after` ms without a pointer move, a key or a
- *  touch, `el` gets the class `is-idle` (your CSS fades the bar, hides the cursor) and `onIdle`
- *  runs; the next move takes it away (`onActive`). Never idle while `busy()` says so (a menu open, a
- *  drag) or while the keyboard's focus is inside `el` (a button just clicked does not hold it).
- *  `keys: false` follows the pointer alone: a key neither wakes it nor holds it (chrome over a
- *  stimulus that the keyboard drives). `wake(ms)` shows the chrome now, for `ms` at least.
- *  @param {string|Element} el  what goes idle (often the page, or a player)
- *  @param {{after?: number, keys?: boolean, busy?: () => boolean, onIdle?: Function, onActive?: Function}} [opts]
- *  @returns {{ wake: (ms?: number) => void, isIdle: () => boolean, destroy: () => void }}
- *  @example makeIdle('#stage', { after: 2500, busy: () => menu.isOpen() })   // CSS: #stage.is-idle .bar { opacity: 0 }
+/** A panel on the native popover, anchored to its button — help, a picker, a few settings:
+ *  `<button popovertarget="p">?</button><div id="p" class="qry-popover">…</div>`. The browser opens,
+ *  light-dismisses and closes it on Escape; makePopover adds the anchor (under its button, flipping
+ *  at the edges), aria-expanded, and the focus given back to the button on close.
+ *  @param {string|Element} panel  the popover element
+ *  @param {{button?: string|Element}} [opts]  its trigger (default: the `[popovertarget=<id>]` button beside it)
+ *  @returns {{ open:()=>void, close:()=>void, toggle:()=>void, isOpen:()=>boolean, destroy:()=>void }}
+ *  @example makePopover('#units-help')
  */
-export const makeIdle = (el, { after = 2500, keys = true, busy, onIdle, onActive } = {}) => {
-    const box = $(el), { on, off } = _scope();
-    let timer = 0, until = 0;
-    const idle = () => {
-        if (busy?.() || (keys && box.querySelector(':focus-visible')) || Date.now() < until) return arm(Math.max(after / 4, until - Date.now()));   // the KEYBOARD's focus holds it (a clicked Play does not)
-        if (!box.cls('?is-idle')) { box.cls('+is-idle'); onIdle?.(); }
-    };
-    const arm = (ms) => { clearTimeout(timer); timer = setTimeout(idle, ms); };
-    const wake = (ms = after) => { if (ms > after) until = Date.now() + ms; if (box.cls('?is-idle')) { box.cls('-is-idle'); onActive?.(); } arm(Math.max(ms, after)); };
-    for (const type of ['pointermove', 'pointerdown', 'wheel', ...(keys ? ['keydown'] : [])]) document.on(type, () => wake(), { ...on, passive: true });
-    arm(after);
-    return { wake, isIdle: () => box.cls('?is-idle'), destroy() { off(); clearTimeout(timer); box.cls('-is-idle'); } };
-};
-
-// ════════════════════════════════════════════════════════════════════════════
-// CANVAS — sharp at any pixel density, in the theme's colours, redrawn when needed
-// ════════════════════════════════════════════════════════════════════════════
-
-/** A canvas that stays sharp and in the theme: its bitmap follows its CSS box ×
- *  devicePixelRatio, and `draw(ctx, { width, height, dpr, color })` runs again on resize, on a
- *  theme change (qry:theme, the OS) and on redraw() — once per frame at most. The context is
- *  scaled: draw in CSS px. `color(token)` resolves a --qry-* token where the canvas is (a canvas
- *  cannot read CSS variables) — cached until the theme changes, so a 60 fps loop may call it freely. Size the canvas with CSS (e.g. width: 100%; height: 240px, or
- *  width: 100% alone to keep its aspect).
- *  @param {string|HTMLCanvasElement} canvas
- *  @param {{draw?: Function}} [opts]
- *  @returns {{ canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, redraw: () => void, destroy: () => void }}
- *  @example makeCanvas('#chart', { draw(ctx, { width, height, color }) { ctx.fillStyle = color('--qry-accent'); ctx.fillRect(0, 0, width / 2, height); } })
- */
-export const makeCanvas = (canvas, { draw } = {}) => {
-    const c = $(canvas), ctx = c.getContext('2d');
+export const makePopover = (panel, { button } = {}) => {
     const { on, off } = _scope();
-    let size = { width: 0, height: 0 }, raf = 0;
-    const colors = new Map();
-    const color = (token) => colors.get(token) ?? colors.set(token, $.color(token, c)).get(token);
-    const paint = () => {
-        raf = 0;
-        if (!size.width || !size.height) return;
-        const dpr = devicePixelRatio || 1, w = Math.round(size.width * dpr), h = Math.round(size.height * dpr);
-        if (c.width !== w || c.height !== h) {
-            const box = c.getBoundingClientRect();
-            c.width = w; c.height = h;
-            const r = c.getBoundingClientRect();                       // its box moved: sized by its attributes, not by CSS — pin it
-            if (Math.abs(r.width - box.width) > 0.5 || Math.abs(r.height - box.height) > 0.5) c.css({ width: box.width + 'px', height: box.height + 'px' });
-        }
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.clearRect(0, 0, size.width, size.height);
-        draw?.(ctx, { ...size, dpr, color });
-    };
-    const redraw = () => { raf ||= requestAnimationFrame(paint); };
-    const retheme = () => { colors.clear(); redraw(); };
-    c.onResize((s) => { size = s; redraw(); }, on);
-    document.documentElement.on('qry:theme', retheme, on);
-    _os().addEventListener('change', retheme, on);
-    return { canvas: c, ctx, redraw, destroy() { off(); cancelAnimationFrame(raf); } };
+    const { m, controller } = _anchored(panel, button, on, off);
+    m.cls('+qry-popover');
+    return controller;
 };
+
+/** Toggle tips: every `.qry-help` under `root` — there now or added later — becomes a popover behind a
+ *  small (i) button put before it (named labels.help), anchored there (makePopover). Write the help where
+ *  it reads best, after a field or in a step; it shows on demand and never takes room.
+ *  @param {Element|Document} [root=document]
+ *  @param {{signal?: AbortSignal}} [opts]
+ *  @example toggletips()   // <label>Gain <input …></label><p class="qry-help">Above 3, the signal clips.</p>
+ */
+export const toggletips = (root = document, { signal } = {}) => {
+    const made = new Set();
+    const wire = (help) => {
+        if (help.hasAttribute('popover')) return;
+        const b = $.create('button', { type: 'button', class: 'qry-help-button', 'aria-label': labels.help, text: 'i' });
+        help.before(b);
+        made.add({ help, b, ctrl: makePopover(help, { button: b }) });
+    };
+    const scan = () => { for (const h of (root.querySelectorAll ? root : document).querySelectorAll('.qry-help')) wire(h); };
+    scan();
+    const watch = new MutationObserver(scan);
+    watch.observe(root === document ? document.documentElement : root, { childList: true, subtree: true });
+    signal?.addEventListener('abort', () => {
+        watch.disconnect();
+        for (const { help, b, ctrl } of made) { ctrl.destroy(); b.remove(); help.removeAttribute('popover'); }
+    }, { once: true });
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// CANVAS — ink and a laser pointer, on qry-web's makeCanvas
+// ════════════════════════════════════════════════════════════════════════════
 
 /** Freehand ink on a canvas — a signature, a note on a page. Strokes are points in CSS px,
  *  captured from mouse, finger or pen (coalesced events: smooth lines), drawn sharp and in the
@@ -1016,6 +1111,55 @@ export const makeInk = (canvas, { lineWidth = 2.2, color = '--qry-text', onChang
     };
 };
 
+/** A laser pointer for a talk: a dot that follows the mouse with a short fading trail, the cursor
+ *  hidden while it is on (html.is-laser). One full-window canvas that takes no pointer events, drawn
+ *  in a theme token (makeCanvas: sharp, follows the theme). `active` is a SIGNAL — bind a button's
+ *  aria-pressed to it, or write it; `toggle()` flips it; `persist` keeps it across reloads.
+ *  @param {{persist?: string, color?: string, trail?: number}} [opts]  color: a --qry-* token (--qry-danger); trail in ms (350)
+ *  @returns {{ active: Signal<boolean>, toggle: () => void, destroy: () => void }}
+ *  @example const laser = makeLaser({ persist: 'talk:laser' }); $('#laser').attr('aria-pressed', laser.active).on('click', laser.toggle)
+ */
+export const makeLaser = ({ persist, color = '--qry-danger', trail = 350 } = {}) => {
+    const { on, off } = _scope();
+    const canvas = $.create('canvas', { class: 'qry-laser', 'aria-hidden': 'true' });
+    const active = $.signal(false, persist ? { persist } : undefined);
+    let points = [], at = null;
+    document.body.add(canvas);
+    const view = makeCanvas(canvas, {
+        draw(ctx, { color: c }) {
+            const now = performance.now();
+            points = points.filter((p) => now - p.t < trail);
+            ctx.strokeStyle = ctx.fillStyle = c(color);
+            ctx.lineCap = 'round';
+            for (let i = 1; i < points.length; i += 1) {                 // older = thinner and fainter
+                const k = 1 - (now - points[i].t) / trail;
+                ctx.globalAlpha = 0.6 * k; ctx.lineWidth = 2 + 6 * k;
+                ctx.beginPath(); ctx.moveTo(points[i - 1].x, points[i - 1].y); ctx.lineTo(points[i].x, points[i].y); ctx.stroke();
+            }
+            ctx.globalAlpha = 1;
+            if (at) { ctx.beginPath(); ctx.arc(at.x, at.y, 7, 0, Math.PI * 2); ctx.fill(); }
+            if (points.length > 1) view.redraw();                        // the trail is still fading
+        },
+    });
+    document.on('pointermove', (e) => {
+        if (!active.value || e.pointerType === 'touch') return;
+        at = { x: e.clientX, y: e.clientY, t: performance.now() };
+        points.push(at); view.redraw();
+    }, { ...on, passive: true });
+    document.documentElement.on('pointerleave', () => { at = null; points = []; view.redraw(); }, on);   // out of the window (or into an iframe)
+    const stop = $.effect(() => {
+        const lit = active.value;
+        canvas.hidden = !lit;
+        document.documentElement.cls('is-laser', lit);
+        if (!lit) { at = null; points = []; }
+    });
+    return {
+        active,
+        toggle: () => { active.value = !active.value; },
+        destroy() { off(); stop(); view.destroy(); canvas.remove(); document.documentElement.cls('-is-laser'); },
+    };
+};
+
 // ════════════════════════════════════════════════════════════════════════════
 // CHARTS — plain SVG, drawn for its box, in the theme's tokens
 // ════════════════════════════════════════════════════════════════════════════
@@ -1025,6 +1169,8 @@ const _acc = (f) => (typeof f === 'function' ? f : (d) => d?.[f]);
 
 /** @private — nice ticks (1, 2, 5 × 10ⁿ) covering [lo, hi], about `n` of them (whole numbers only
  *  with `integer`: counts, trial numbers). */
+/** @private — min / max without spreading (Math.min(...a) overflows the stack past ~150 000 values). */
+const _least = (a) => a.reduce((m, v) => (v < m ? v : m), Infinity), _most = (a) => a.reduce((m, v) => (v > m ? v : m), -Infinity);
 const _ticks = (lo, hi, n = 5, integer = false) => {
     if (!(hi > lo)) { const w = Math.abs(lo) || 1; lo -= w / 2; hi += w / 2; }
     const raw = (hi - lo) / Math.max(1, n), mag = 10 ** Math.floor(Math.log10(raw)), f = raw / mag;
@@ -1051,16 +1197,17 @@ const _ticks = (lo, hi, n = 5, integer = false) => {
  *  Axes: `x` / `y` = { label, min, max, ticks (about how many, default 5), format: (v) => text, zero,
  *  integer (whole-number ticks only: counts, trial numbers) } — a domain from the data unless given,
  *  extended to nice ticks; bars always include 0. A band's bars are at most 72 px wide.
- *  No data: the chart says `labels.empty`. The SVG is role="img", named by `label`.
+ *  No data: the chart says `labels.empty`. The SVG is role="img", named by `label` — a string, or a
+ *  function read in the same effect (a name in the page's language, a year that changes).
  *  @param {string|Element} el  the chart's box
- *  @param {{marks: Array|Function, x?: Object, y?: Object, label?: string}} opts
+ *  @param {{marks: Array|Function, x?: Object, y?: Object, label?: string|Function}} opts
  *  @returns {{ readonly svg: SVGSVGElement|null, redraw: () => void, destroy: () => void }}
  *  @example makeChart('#rt', { label: 'RT per trial', y: { label: 'ms', zero: true },
  *    marks: () => [{ type: 'dot', data: trials.value, x: 'n', y: 'rt', tone: (t) => (t.ok ? 'accent' : 'danger') }] })
  */
 export const makeChart = (el, { marks = [], x: xo = {}, y: yo = {}, label = '' } = {}) => {
     const box = $(el), { on, off } = _scope();
-    let size = { width: 0, height: 0 }, svg = null, list = [];
+    let size = { width: 0, height: 0 }, svg = null, list = [], name = '';
     const draw = () => {
         const { width: W, height: H } = size;
         if (!W || !H) return;
@@ -1080,15 +1227,15 @@ export const makeChart = (el, { marks = [], x: xo = {}, y: yo = {}, label = '' }
             if (m.type === 'bar') yv.push(0);
         }
         if (yo.zero) yv.push(0);
-        const svgEl = $.svg('svg', { class: 'qry-chart', width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': label || null });
+        const svgEl = $.svg('svg', { class: 'qry-chart', width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': name || null });
         if (!yv.length || (!band && !xv.length)) {
             svgEl.add($.svg('text', { class: 'qry-chart-empty', x: W / 2, y: H / 2, 'text-anchor': 'middle', 'dominant-baseline': 'middle', text: labels.empty }));
             return svgEl;
         }
         const fx = xo.format ?? ((v) => String(v)), fy = yo.format ?? ((v) => String(v));
-        const ty = _ticks(yo.min ?? Math.min(...yv), yo.max ?? Math.max(...yv), yo.ticks ?? 5, yo.integer);
+        const ty = _ticks(yo.min ?? _least(yv), yo.max ?? _most(yv), yo.ticks ?? 5, yo.integer);
         const ylo = yo.min ?? ty.lo, yhi = yo.max ?? ty.hi, yt = ty.ticks.filter((v) => v >= ylo - 1e-9 && v <= yhi + 1e-9);
-        const tx = band ? null : _ticks(xo.min ?? Math.min(...xv), xo.max ?? Math.max(...xv), xo.ticks ?? 5, xo.integer);
+        const tx = band ? null : _ticks(xo.min ?? _least(xv), xo.max ?? _most(xv), xo.ticks ?? 5, xo.integer);
         const xlo = band ? 0 : xo.min ?? tx.lo, xhi = band ? 0 : xo.max ?? tx.hi;
         const chars = Math.max(...yt.map((v) => fy(v).length));
         const L = 10 + chars * 6.6 + (yo.label ? 16 : 0), R = 10, T = 10, B = 22 + (xo.label ? 16 : 0);
@@ -1141,12 +1288,13 @@ export const makeChart = (el, { marks = [], x: xo = {}, y: yo = {}, label = '' }
     };
     const paint = () => { const next = draw(); if (next) { if (svg?.isConnected) svg.replaceWith(next); else box.add(next); svg = next; } };
     box.onResize((s) => { size = s; paint(); }, on);
-    const stop = typeof marks === 'function' ? $.effect(() => { list = marks() ?? []; paint(); }) : ((list = marks), null);
+    const read = () => { list = (typeof marks === 'function' ? marks() : marks) ?? []; name = typeof label === 'function' ? label() : label; };
+    const stop = typeof marks === 'function' || typeof label === 'function' ? $.effect(() => { read(); paint(); }) : (read(), null);
     return { get svg() { return svg; }, redraw: paint, destroy() { off(); stop?.(); svg?.remove(); svg = null; } };
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-// INPUT — keyboard shortcuts, drop zone
+// INPUT — keyboard shortcuts, sliders, a calendar, drop zone
 // ════════════════════════════════════════════════════════════════════════════
 
 /** Global keyboard shortcuts, in ONE syntax — the one `aria-keyshortcuts` uses:
@@ -1154,12 +1302,15 @@ export const makeChart = (el, { marks = [], x: xo = {}, y: yo = {}, label = '' }
  *  "Shift+N", "Alt+E", "Control+S" (Control = Ctrl or ⌘), "Control+Shift+Z". A letter compares
  *  case-insensitively and its modifiers must match exactly (Control+Z is not Control+Shift+Z, and
  *  "e" never fires with Alt); a digit or a symbol ("1", "?") ignores Shift (layouts differ: digits
- *  need Shift in French). `add(shortcut, fn, { prevent, inFields })` registers and returns a remover
- *  (`inFields: true`: a Control / ⌘ shortcut fires in a field too — an editor's Control+S);
+ *  need Shift in French). `add(shortcut, fn, { prevent, inFields, repeat })` registers and returns a remover
+ *  (`inFields: true`: a Control / ⌘ shortcut, or a function key — F1 for the help — fires in a field too: an editor's Control+S;
+ *  `repeat: false`: a key HELD fires once — Start, Next, a toggle — its repeats taken and ignored);
+ *  a handler that returns `false` declines: the key goes on to the next one and to the browser.
  *  `destroy()` removes everything.
  *  A shortcut never steals a key from something that owns it: skipped when the event was already
  *  handled (defaultPrevented), while typing in a field (a text-like INPUT, TEXTAREA, SELECT,
- *  [contenteditable] — also inside a web component), while a modal dialog is open, and — for a key
+ *  [contenteditable] — also inside a web component), while a modal dialog is open or the focus is in an
+ *  open popover (a menu: its keys are its own), and — for a key
  *  without Control — when the control focused FROM THE KEYBOARD uses that very key (a button or link: Space /
  *  Enter; a checkbox or radio: Space and the arrows; a range: the arrows, Home / End, Page Up / Down;
  *  a tab, menu item, option, slider, separator: those and Space / Enter). A button just CLICKED keeps no key: Space after a click on Play is the
@@ -1172,7 +1323,7 @@ export const makeChart = (el, { marks = [], x: xo = {}, y: yo = {}, label = '' }
  *  Opt-in, because a page may already handle the keys it documents (then both would act); one
  *  declarative keyboard per page is enough.
  *  @param {{declarative?: boolean}} [opts]
- *  @returns {{ add:(shortcut:string, fn:(e:KeyboardEvent)=>void, opts?:{prevent?:boolean, inFields?:boolean})=>(()=>void), destroy:()=>void }}
+ *  @returns {{ add:(shortcut:string, fn:(e:KeyboardEvent)=>(void|false), opts?:{prevent?:boolean, inFields?:boolean, repeat?:boolean})=>(()=>void), destroy:()=>void }}
  *  @example
  *  const keys = makeKeyboard({ declarative: true });   // + <button aria-keyshortcuts="1">…</button>
  *  keys.add('Space', () => player.toggle());
@@ -1221,11 +1372,13 @@ export const makeKeyboard = ({ declarative = false } = {}) => {
         const t = e.composedPath()[0];                 // the real field, even in a shadow root
         const typing = t instanceof Element && _typing(t);
         if (t instanceof Element && !typing && !(e.ctrlKey || e.metaKey) && _owned(t, e.key, pointer)) return;
+        if (t instanceof Element && t.closest(':popover-open')) return;   // a menu, a picker: the focus there owns the keys
         const modal = document.querySelector('dialog:modal');
         if (!modal) for (const h of handlers) {                        // nothing registered fires behind an open modal
-            if ((typing && !(h.inFields && (e.ctrlKey || e.metaKey))) || !_lists(h.shortcut, e)) continue;   // a field keeps its keys — but an editor's Control+S
-            if (h.prevent !== false) e.preventDefault();
-            h.fn(e);
+            if ((typing && !(h.inFields && (e.ctrlKey || e.metaKey || /^F\d{1,2}$/.test(e.key)))) || !_lists(h.shortcut, e)) continue;   // a field keeps its keys — but an editor's Control+S, and a function key (it types nothing)
+            if (e.repeat && !h.repeat) { if (h.prevent) e.preventDefault(); return; }   // held: once
+            if (h.fn(e) === false) continue;                           // declined: the next one, then the browser
+            if (h.prevent) e.preventDefault();
             return;
         }
         if (!declarative || typing) return;
@@ -1236,7 +1389,7 @@ export const makeKeyboard = ({ declarative = false } = {}) => {
         hit.click();
     }, on);
     return {
-        add: (shortcut, fn, { prevent = true, inFields = false } = {}) => { const h = { shortcut, fn, prevent, inFields }; handlers.add(h); return () => handlers.delete(h); },
+        add: (shortcut, fn, { prevent = true, inFields = false, repeat = true } = {}) => { const h = { shortcut, fn, prevent, inFields, repeat }; handlers.add(h); return () => handlers.delete(h); },
         destroy() { off(); handlers.clear(); },
     };
 };
@@ -1266,6 +1419,96 @@ export const makeSlider = (el, { value, min = 0, max = 100, step = 1, page = ste
         value.value = wrap ? min + ((((next - min) % span) + span) % span) : $.clamp(next, min, max);
     }, on);
     return { destroy() { off(); stop(); } };
+};
+
+/** A month to pick a day from — a booking page's calendar, a date picker's popover. It builds
+ *  its markup in `el` (a `.qry-calendar`): a head (previous · « octobre 2026 » · next) and a
+ *  grid of the month's days, the week starting where the language says (lundi in fr, Sunday in
+ *  en-US). Days are LOCAL `YYYY-MM-DD` strings (format.day).
+ *  - Keys (the ARIA grid pattern): arrows ± 1 day / 1 week, Home / End the week's ends, Page Up /
+ *    Down a month (Shift: a year) — the month follows the focus; Enter or Space chooses. One tab stop.
+ *  - `marks(day)` → `{ tone, label }` or nothing: a dot in a tone (ok warn danger accent…) under the
+ *    number, its label read after the date. It runs in an effect, with `lang`: the grid follows any
+ *    signal they read (the month's bookings arriving, the page's language changing).
+ *  - `onChange(day)` when a day is chosen (a click, a key, `selected(d)`); `onMonth('YYYY-MM')` when
+ *    the month shown changes, and once at creation — load that month's marks there.
+ *  The chosen day is aria-pressed, today aria-current="date"; the arrows' names are
+ *  `labels.previousMonth` / `labels.nextMonth`.
+ *  @param {string|Element} el
+ *  @param {{selected?: string, lang?: string|(() => string), marks?: (day: string) => ({tone?: string, label?: string}|null|undefined),
+ *           onChange?: (day: string) => void, onMonth?: (month: string) => void}} [opts]
+ *  @returns {{ selected: (day?: string) => string, month: (month?: string) => string, element: Element, destroy: () => void }}
+ *  @example
+ *  const cal = makeCalendar('#calendar', { lang: () => lang.value, onChange: (d) => { day.value = d; },
+ *      onMonth: (m) => load(m), marks: (d) => states.value[d] === 'full' ? { tone: 'danger', label: 'Full' } : null });
+ */
+export const makeCalendar = (el, { selected: start = format.day(), lang, marks, onChange, onMonth } = {}) => {
+    const box = $(el).cls('+qry-calendar'), { on, off } = _scope(), id = $.uid('qry-calendar');
+    const day = $.signal(start), month = $.signal(start.slice(0, 7)), cursor = $.signal(start);   // cursor: the day with the tab stop
+    const locale = () => (typeof lang === 'function' ? lang() : lang) || document.documentElement.lang || navigator.language;
+    const at = (d) => new Date(`${d}T12:00`);
+    const plus = (m, n) => { const [y, mo] = m.split('-').map(Number); return format.day(0, new Date(y, mo - 1 + n, 1)).slice(0, 7); };
+    const firstDay = (loc) => {                                                 // Intl: 1 = Monday … 7 = Sunday
+        try { const l = new Intl.Locale(loc).maximize(); return ((l.getWeekInfo?.() ?? l.weekInfo)?.firstDay ?? 1) % 7; } catch { return 1; }
+    };
+    box.html($.html`<div class="qry-calendar-head">
+        <button type="button" class="qry-btn ghost icon sm qry-calendar-previous" data-step="-1" aria-label="${labels.previousMonth}"></button>
+        <span class="qry-calendar-title" id="${id}" aria-live="polite"></span>
+        <button type="button" class="qry-btn ghost icon sm qry-calendar-next" data-step="1" aria-label="${labels.nextMonth}"></button>
+      </div><table class="qry-calendar-grid" role="grid" aria-labelledby="${id}"><thead></thead><tbody></tbody></table>`);
+    const title = box.querySelector('.qry-calendar-title'), head = box.querySelector('thead'), body = box.querySelector('tbody');
+
+    const stop = $.effect(() => {
+        const loc = locale(), m = month.value, chosen = day.value, focus = cursor.value, today = format.day();
+        const first = at(`${m}-01`), count = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+        const start = firstDay(loc), blanks = (first.getDay() - start + 7) % 7;
+        const tab = focus.startsWith(m) ? focus : chosen.startsWith(m) ? chosen : `${m}-01`;
+        const long = (d) => at(d).toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        const weekday = (i, style) => new Date(2024, 0, 7 + start + i).toLocaleDateString(loc, { weekday: style });   // 2024-01-07 is a Sunday
+        const had = box.contains(document.activeElement) && document.activeElement.matches('[data-day]');
+        title.textContent = first.toLocaleDateString(loc, { month: 'long', year: 'numeric' });
+        head.html($.html`<tr>${[0, 1, 2, 3, 4, 5, 6].map((i) => $.html`<th scope="col" abbr="${weekday(i, 'long')}">${weekday(i, 'short')}</th>`)}</tr>`);
+        const cells = [...Array(blanks).fill(null), ...Array.from({ length: count }, (_, i) => `${m}-${String(i + 1).padStart(2, '0')}`)];
+        while (cells.length % 7) cells.push(null);
+        body.html($.html`${Array.from({ length: cells.length / 7 }, (_, w) => $.html`<tr>${cells.slice(w * 7, w * 7 + 7).map((d) => {
+            if (!d) return $.html`<td></td>`;
+            const mark = marks?.(d) || null;
+            return $.html`<td><button type="button" data-day="${d}" tabindex="${d === tab ? 0 : -1}" aria-pressed="${d === chosen}"
+                aria-current="${d === today ? 'date' : 'false'}" aria-label="${long(d)}${mark?.label ? `, ${mark.label}` : ''}">${Number(d.slice(8))}${mark
+                && $.html`<span class="qry-calendar-mark ${mark.tone ?? 'accent'}" aria-hidden="true"></span>`}</button></td>`;
+        })}</tr>`)}`);
+        if (had) body.querySelector(`[data-day="${tab}"]`)?.focus();
+    });
+
+    const show = (m) => { if (m === month.peek()) return; month.value = m; onMonth?.(m); };
+    const choose = (d) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d ?? '')) return;
+        const changed = d !== day.peek();
+        $.batch(() => { cursor.value = d; day.value = d; show(d.slice(0, 7)); });
+        if (changed) onChange?.(d);
+    };
+    box.delegate('[data-step]', 'click', function () { show(plus(month.peek(), Number(this.dataset.step))); }, on);
+    box.delegate('[data-day]', 'click', function () { choose(this.dataset.day); }, on);
+    box.delegate('[data-day]', 'keydown', function (e) {
+        const d = this.dataset.day, col = [...this.closest('tr').children].indexOf(this.parentElement);
+        const months = e.shiftKey ? 12 : 1;
+        const sameDay = (m) => { const last = new Date(Number(m.slice(0, 4)), Number(m.slice(5)), 0).getDate(); return `${m}-${String(Math.min(Number(d.slice(8)), last)).padStart(2, '0')}`; };
+        const next = { ArrowRight: format.day(1, at(d)), ArrowLeft: format.day(-1, at(d)), ArrowDown: format.day(7, at(d)), ArrowUp: format.day(-7, at(d)),
+            Home: format.day(-col, at(d)), End: format.day(6 - col, at(d)),
+            PageDown: sameDay(plus(d.slice(0, 7), months)), PageUp: sameDay(plus(d.slice(0, 7), -months)) }[$.key(e)];
+        if (!next || e.ctrlKey || e.metaKey || e.altKey) return;
+        e.preventDefault();
+        cursor.value = next;
+        show(next.slice(0, 7));
+        body.querySelector(`[data-day="${next}"]`)?.focus();
+    }, on);
+    onMonth?.(month.peek());
+    return {
+        selected: (...a) => { if (a.length) choose(a[0]); return day.peek(); },
+        month: (...a) => { if (a.length) show(a[0]); return month.peek(); },
+        element: box,
+        destroy() { off(); stop(); },
+    };
 };
 
 /** Files by drag and drop — and by paste (a screenshot, a copied file) with `paste: true`.
@@ -1337,6 +1580,198 @@ export const makeDropZone = (target = document.body, { onFiles, accept = '', pas
         enable(v = true) { enabled = !!v; if (!enabled) show(false); picker?.attr('aria-disabled', enabled ? null : 'true'); },
         isEnabled: () => enabled,
         destroy() { off(); show(false); if (!found) ov.remove(); },
+    };
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// CONSOLE — the app's log in a drawer: its own lines, console.*, the errors
+// ════════════════════════════════════════════════════════════════════════════
+
+const _LEVELS = ['debug', 'log', 'info', 'warn', 'error'];
+/** @private — a level's weight: the filters and the badge count warn (3) and error (4). */
+const _rank = (level) => _LEVELS.indexOf(level);
+/** @private — one logged value as text: an Error by its stack, an object as JSON. */
+const _say = (v) => {
+    if (v instanceof Error) return v.stack?.includes(v.message) ? v.stack : `${v}\n${v.stack ?? ''}`.trim();
+    if (v !== null && typeof v === 'object') { try { return JSON.stringify(v, null, 2); } catch { return String(v); } }
+    return String(v);
+};
+/** The console's icons, by role — names of the app's set (icons.add): a role whose name is not
+ *  registered shows its text instead (qry draws none). Lucide's names, the set our apps use. */
+const _CONSOLE_ICONS = { console: 'terminal', all: 'list', warn: 'triangle-alert', error: 'circle-x', info: 'info', debug: 'bug', copy: 'copy', clear: 'eraser', close: 'x' };
+
+/** The console of an app — the drawer every tool of ours had its own copy of (F2, a footer button):
+ *  the lines the app writes (`log`), and with `capture` what `console.*` says and every uncaught
+ *  error or rejected promise. Give it an element — `<section id="console" class="qry-console" hidden>`,
+ *  in a `.qry-workspace` between its body and its footer (qry-ui.css makes it a row there) — and it
+ *  is filled: a resize handle on its top edge (makeSplitter: drag, ↑/↓, double-click resets; the height
+ *  in `--qry-console-h`), a head (the title — a click closes —, the count, what the element held:
+ *  your own controls, then All · Warnings · Errors, Copy, Clear, ×) and the lines (`role="log"`: time,
+ *  level, `source`, text). The lines come in once per frame, at most `max` are kept, and the view
+ *  follows the end unless you scrolled up.
+ *  - `button`: its toggle(s) — `aria-expanded`, `aria-controls`, `aria-keyshortcuts` are set; while it
+ *    is closed, a `.qry-console-badge` on each counts the warnings and errors (`.warn`, or `.danger`
+ *    once an error came) — open, it goes.
+ *  - `shortcut` (default 'F2', aria-keyshortcuts' syntax; null: none) toggles it from anywhere, a field
+ *    or an open dialog included (a function key types nothing; the log is what one reads then);
+ *    Escape closes it while the focus is inside — the focus goes back to its button.
+ *  - `autoOpen: 'error'` (or 'warn') opens it at the first such line, once — until clear().
+ *  - `onSelect(entry)`: a line logged with `data` is a button that calls it (an error's line in an editor).
+ *  - `persist: 'app:console'`: open or closed and the filter are kept ($.store), the height under `<key>:height`.
+ *  - `theme`: 'dark' (default: a console reads as a terminal, whatever the page's mode — the app's
+ *    accent and tones in their dark form) or 'page' (it follows the page).
+ *  - `icons`: { role: name } over the defaults ({ console: 'terminal', all: 'list', warn:
+ *    'triangle-alert', error: 'circle-x', info: 'info', debug: 'bug', copy: 'copy', clear: 'eraser',
+ *    close: 'x' }) — names of the app's icons.add set; a role left unregistered (or set to null)
+ *    shows its word, never a missing-icon square.
+ *  The filters count their lines (Warnings: warnings and errors; Errors). destroy() puts console.*
+ *  back (unless someone patched it since) and the element's own children.
+ *  @param {string|Element} panel  the element it fills
+ *  @param {{button?: string|Element|Element[], capture?: boolean, max?: number, shortcut?: string|null, autoOpen?: false|'warn'|'error', onSelect?: (entry: {time: number, level: string, text: string, source?: string, data?: any}) => void, persist?: string, theme?: 'dark'|'page', icons?: Object<string, string|null>}} [opts]
+ *  `log`'s `time` (ms since the epoch, default now) dates a line as its source did (a server's own clock).
+ *  @returns {{ element: Element, log: (text: any, opts?: {level?: 'debug'|'log'|'info'|'warn'|'error', source?: string, data?: any, time?: number}) => void, clear: () => void, text: () => string, copy: () => Promise<boolean>, filter: (level?: 'all'|'warn'|'error') => string, open: () => void, close: () => void, toggle: () => void, isOpen: () => boolean, destroy: () => void }}
+ *  @example const con = makeConsole('#console', { button: '#console-btn', capture: true, persist: 'app:console' });
+ *           con.log('Image loaded: 1920 × 1080');  con.log('No ./images folder', { level: 'warn', source: 'loader' })
+ *  @example makeConsole('#console', { button: '#console-btn', onSelect: (e) => editor.goTo(e.data.line) })
+ *           .log(err.message, { level: 'error', source: `L${err.line}`, data: { line: err.line } })
+ */
+export const makeConsole = (panel, { button, capture = false, max = 1000, shortcut = 'F2', autoOpen = false, onSelect, persist, theme: mode = 'dark', icons: names = {} } = {}) => {
+    const box = $(panel), buttons = $.all(button), { on, off } = _scope();
+    const glyph = (role) => { const n = { ..._CONSOLE_ICONS, ...names }[role]; return n && icons.has(n) ? icon(n) : null; };
+    const dark = mode === 'dark' && !box.hasAttribute('data-theme');
+    const store = persist ? $.store() : null, saved = store?.get(persist, null) ?? {};
+    let level = ['warn', 'error'].includes(saved.filter) ? saved.filter : 'all';
+    const own = [...box.childNodes];
+    if (!box.id) box.id = $.uid('qry-console');
+    box.cls('+qry-console').attr('aria-label', box.attr('aria-label') || labels.console);
+    if (dark) box.dataset.theme = 'dark';                          // its own ground: a terminal in any page
+    const act = (name, label) => { const g = glyph(name);              // an icon button (named by its label), else its word
+        return $.html`<button type="button" class="qry-console-act" data-act="${name}" ${g ? $.html`aria-label="${label}" title="${label}"` : ''}>${g ?? label}</button>`; };
+    box.html($.html`<div class="qry-console-resize"></div>
+        <div class="qry-console-head">
+          <button type="button" class="qry-console-title">${glyph('console')}<span>${labels.console}</span></button>
+          <span class="qry-console-count" hidden></span>
+          <span class="qry-spacer"></span>
+          <span class="qry-console-filters" role="group" aria-label="${labels.level}">${[['all', labels.all], ['warn', labels.warnings], ['error', labels.errors]].map(([v, l]) =>
+              $.html`<button type="button" class="qry-console-filter" data-filter="${v}">${glyph(v)}<span>${l}</span>${v !== 'all' && $.html`<span class="qry-console-n" data-n="${v}" hidden></span>`}</button>`)}</span>
+          ${act('copy', labels.copy)}${act('clear', labels.clear)}${act('close', labels.close)}
+        </div>
+        <div class="qry-console-body" role="log" tabindex="0" aria-label="${box.attr('aria-label')}" data-empty="${labels.empty}"></div>`);
+    const head = box.querySelector('.qry-console-head'), body = box.querySelector('.qry-console-body'), count = head.querySelector('.qry-console-count');
+    head.querySelector('.qry-spacer').after(...own);              // the element's own controls: in the head
+    const badges = buttons.map((b) => {
+        b.attr({ 'aria-controls': box.id, 'aria-expanded': 'false', 'aria-keyshortcuts': shortcut || null });
+        return $.create('span', { class: 'qry-console-badge', hidden: true }).mount(b);
+    });
+
+    const entries = [], entryOf = new WeakMap();
+    let queue = [], frame = 0, unseen = 0, worst = 0, opened = false;
+    const shows = (e) => level === 'all' || _rank(e.level) >= _rank(level);
+    const isOpen = () => !box.hidden;
+    const keep = () => store?.set(persist, { open: isOpen(), filter: level });
+    const badge = () => badges.forEach((s) => { s.text(unseen > 99 ? '99+' : String(unseen)).cls(worst > 3 ? '-warn +danger' : '+warn -danger'); s.hidden = !unseen; });
+    const counted = () => {                                       // the lines, and on each filter its own
+        count.text(format.plural(entries.length, labels.lines)); count.hidden = !entries.length;
+        const n = { warn: 0, error: 0 };
+        for (const e of entries) { if (e.level === 'error') n.error += 1; if (_rank(e.level) >= 3) n.warn += 1; }
+        head.querySelectorAll('[data-n]').forEach((s) => { const k = n[s.dataset.n]; s.text(k > 999 ? '999+' : String(k)); s.hidden = !k; });
+    };
+    const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+    const row = (e) => {
+        const r = $.create(onSelect && e.data !== undefined ? 'button' : 'div', { class: 'qry-console-row', 'data-level': e.level });
+        if (r.tagName === 'BUTTON') r.type = 'button';
+        r.html($.html`<time datetime="${new Date(e.time).toISOString()}">${clock(e.time)}</time><span class="qry-console-level${e.level !== 'log' && !glyph(e.level) ? ' is-word' : ''}" title="${e.level}">${e.level === 'log' ? '' : glyph(e.level) ?? e.level}${e.level !== 'log' && glyph(e.level) && $.html`<span class="qry-sr-only">${e.level}</span>`}</span><span class="qry-console-text">${e.source != null && $.html`<span class="qry-console-source">${e.source}</span>`}${e.text}</span>`);
+        r.hidden = !shows(e);
+        entryOf.set(r, e);
+        return r;
+    };
+    const flush = () => {                                         // once per frame: a print loop pays one layout, not one per line
+        frame = 0;
+        const end = body.scrollTop + body.clientHeight >= body.scrollHeight - 8;
+        body.append(...queue.map(row));
+        queue = [];
+        while (body.childElementCount > max) body.firstElementChild.remove();
+        counted();
+        if (end) body.scrollTop = body.scrollHeight;
+    };
+    const show = (open) => {
+        if (open === isOpen()) return;
+        if (!open && box.contains(document.activeElement)) {                // the focus leaves with it: back to its button
+            const b = buttons.find((x) => x.checkVisibility());
+            if (b) b.focus(); else document.activeElement.blur();
+        }
+        box.hidden = !open;
+        buttons.forEach((b) => b.attr('aria-expanded', open));
+        if (open) { unseen = worst = 0; badge(); body.scrollTop = body.scrollHeight; }
+        keep();
+    };
+    const log = (text, { level: lv = 'log', source, data, time = Date.now() } = {}) => {
+        const e = { time, level: _LEVELS.includes(lv) ? lv : 'log', text: _say(text), source, data };
+        entries.push(e); queue.push(e);
+        if (entries.length > max) entries.shift();
+        if (queue.length > max) queue.shift();                    // a hidden tab draws no frame: the queue stays bounded
+        if (!frame) frame = requestAnimationFrame(flush);
+        if (autoOpen && !opened && !isOpen() && _rank(e.level) >= _rank(autoOpen)) { opened = true; show(true); }
+        if (!isOpen() && _rank(e.level) >= 3) { unseen += 1; worst = Math.max(worst, _rank(e.level)); badge(); }
+    };
+    const clear = () => {
+        entries.length = 0; queue = []; body.empty();
+        unseen = worst = 0; opened = false;
+        badge(); counted();
+    };
+    const text = () => entries.filter(shows).map((e) => [clock(e.time), e.level === 'log' ? '' : e.level, e.source ?? '', e.text].filter(Boolean).join('  ')).join('\n');
+    const filter = (...v) => {
+        if (v.length && ['all', 'warn', 'error'].includes(v[0])) {
+            level = v[0];
+            for (const r of body.children) r.hidden = !shows(entryOf.get(r));
+            keep();
+        }
+        head.querySelectorAll('[data-filter]').forEach((b) => b.attr('aria-pressed', b.dataset.filter === level));
+        return level;
+    };
+
+    head.on('click', (e) => {
+        const b = e.target.closest('button');
+        if (b?.dataset.filter) filter(b.dataset.filter);
+        else if (b?.matches('.qry-console-title, [data-act="close"]')) show(false);
+        else if (b?.dataset.act === 'clear') clear();
+        else if (b?.dataset.act === 'copy') { const t = text(); if (t) copy(t); }
+    }, on);
+    if (onSelect) body.delegate('button.qry-console-row', 'click', function () { onSelect(entryOf.get(this)); }, on);
+    box.on('keydown', (e) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); show(false); } }, on);
+    buttons.forEach((b) => b.on('click', () => show(!isOpen()), on));
+    if (shortcut) document.on('keydown', (e) => { if (!e.defaultPrevented && _lists(shortcut, e)) { e.preventDefault(); show(!isOpen()); } }, on);
+    const split = makeSplitter(box.querySelector('.qry-console-resize'), { container: box, axis: 'y', from: 'end', prop: '--qry-console-h', min: 96,
+        max: () => innerHeight * 0.8, persist: persist && `${persist}:height` });
+
+    const patched = [];
+    if (capture) {
+        for (const lv of _LEVELS) {
+            const original = console[lv], wrapper = (...args) => { original.apply(console, args); log(args.map(_say).join(' '), { level: lv }); };
+            console[lv] = wrapper;
+            patched.push([lv, original, wrapper]);
+        }
+        window.on('error', (e) => log(e.error ?? e.message, { level: 'error', source: e.filename ? `${e.filename.split('/').pop()}:${e.lineno}` : undefined }), on);
+        window.on('unhandledrejection', (e) => log(e.reason, { level: 'error' }), on);
+    }
+
+    if (saved.open != null) box.hidden = !saved.open;               // kept, else as the markup has it
+    buttons.forEach((b) => b.attr('aria-expanded', isOpen()));
+    filter();
+    return {
+        element: box, log, clear, text, filter, isOpen,
+        copy: () => { const t = text(); return t ? copy(t) : Promise.resolve(false); },
+        open: () => show(true),
+        close: () => show(false),
+        toggle: () => show(!isOpen()),
+        destroy() {
+            off(); split.destroy(); cancelAnimationFrame(frame);
+            for (const [lv, original, wrapper] of patched) if (console[lv] === wrapper) console[lv] = original;
+            badges.forEach((s) => s.remove());
+            if (dark) delete box.dataset.theme;
+            buttons.forEach((b) => b.attr({ 'aria-controls': null, 'aria-expanded': null, 'aria-keyshortcuts': null }));
+            box.empty().append(...own);
+        },
     };
 };
 
@@ -1448,35 +1883,8 @@ export const icon = (name, { size, label, class: cls = '' } = {}) => {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-// DEVICE — the screen awake, an app that installs, works offline and updates itself
+// DEVICE — an app that installs, works offline and updates itself
 // ════════════════════════════════════════════════════════════════════════════
-
-/** Keep the screen awake while `when` holds — a signal or a function read in an effect (a
- *  metronome playing, a score on the music stand). The lock is taken again when the page comes
- *  back (the browser drops it when the tab is hidden); without the API it does nothing.
- *  @param {{when?: {value: boolean}|(() => boolean)}} [opts]  default: always
- *  @returns {{ isHeld: () => boolean, destroy: () => void }}
- *  @example makeWakeLock({ when: () => playing.value })
- */
-export const makeWakeLock = ({ when = () => true } = {}) => {
-    const { on, off } = _scope();
-    let lock = null, want = false, asking = false;
-    const release = () => { lock?.release().catch(() => {}); lock = null; };
-    const take = async () => {
-        if (!want || lock || asking || document.hidden || !navigator.wakeLock) return;
-        asking = true;                                                    // one request at a time: never two locks
-        try {
-            const l = await navigator.wakeLock.request('screen');
-            l.addEventListener('release', () => { if (lock === l) lock = null; });
-            lock = l;
-            if (!want) release();                                         // turned off while asking
-        } catch { /* refused (a battery saver, no user gesture yet): the screen may sleep */ }
-        finally { asking = false; }
-    };
-    const stop = $.effect(() => { want = !!(typeof when === 'function' ? when() : when.value); if (want) take(); else release(); });
-    document.on('visibilitychange', () => { if (!document.hidden) take(); }, on);
-    return { isHeld: () => !!lock, destroy() { off(); stop(); want = false; release(); } };
-};
 
 /** Make a page an installable app: register its service worker, offer each NEW version once
  *  it is ready (never a half-updated page), and give an install button what it needs.
@@ -1586,55 +1994,58 @@ export const infoRow = (label, value, { tone = '', class: cls = '' } = {}) => $.
     $.create('span', { class: 'qry-info-label' }, label ?? ''),
     $.create('span', { class: `qry-info-value ${tone}`.trim() }, value ?? ''));
 
-/** A wrap of toggle buttons (`.qry-chip`, aria-pressed) — filters, a choice among a few. Items
- *  are strings or objects; `key` and `label` are accessors (a function or a property name;
- *  default: the item's key|name|label, else the item itself); a label may be a Node (a colour
- *  dot and a name; text stays text). `selected` is a key or an array of keys; `onClick(item, key)`
- *  fires per chip. `selected()` reads the pressed keys, `selected(keys)` moves the highlight without
- *  rebuilding; `name` labels the group.
+/** A wrap of toggle buttons (`.qry-chip`) bound to a signal — filters, a choice among a few: the chips
+ *  are built from `items`, the choice is makeChoice's (a click sets `value`, aria-pressed follows; an
+ *  ARRAY signal = several chips at once). Items are strings or objects; `key` and `label` are accessors
+ *  (a function or a property name; default: the item's key|name|label, else the item itself); a label
+ *  may be a Node (a colour dot and a name; text stays text). `name` labels the group.
  *  @param {Array} items
- *  @param {{selected?: any, onClick?: Function, key?: string|Function, label?: string|Function, name?: string, class?: string}} [opts]
- *  @returns {{ element: Element, selected: (keys?: any|any[]) => any[]|void, destroy: () => void }}
- *  @example const c = makeChips(formats, { selected: current, name: 'Format', onClick: (f) => pick(f.key) }); box.add(c.element); c.selected(next)
+ *  @param {{value: *}} value   a signal: the key chosen (or the array of keys)
+ *  @param {{key?: string|Function, label?: string|Function, name?: string, class?: string}} [opts]
+ *  @returns {{ element: Element, destroy: () => void }}
+ *  @example const format = $.signal('pdf'); box.add(makeChips(formats, format, { name: 'Format' }).element)
  */
-export const makeChips = (items, { selected, onClick, key = (i) => i?.key ?? i?.name ?? i?.label ?? i, label = (i) => i?.label ?? i?.name ?? i, name, class: cls = '' } = {}) => {
-    const keyOf = _acc(key), labelOf = _acc(label), { on, off } = _scope();
-    const element = $.create('div', { class: `qry-chips ${cls}`.trim(), role: 'group', 'aria-label': name ?? null });
-    const pills = items.map((item) => {
-        const k = keyOf(item);
-        const chip = $.create('button', { type: 'button', class: 'qry-chip', 'data-key': k }, labelOf(item)).mount(element);
-        if (onClick) chip.on('click', () => onClick(item, k), on);
-        return { k, chip };
-    });
-    const select = (sel) => {
-        const keys = [].concat(sel);
-        for (const { k, chip } of pills) chip.attr('aria-pressed', String(keys.includes(k)));
-    };
-    select(selected);
-    const read = () => pills.filter(({ chip }) => chip.attr('aria-pressed') === 'true').map(({ k }) => k);
-    return { element, selected: (...keys) => (keys.length ? select(keys[0]) : read()), destroy() { off(); element.remove(); } };
+export const makeChips = (items, value, { key = (i) => i?.key ?? i?.name ?? i?.label ?? i, label = (i) => i?.label ?? i?.name ?? i, name, class: cls = '' } = {}) => {
+    const keyOf = _acc(key), labelOf = _acc(label);
+    const element = $.create('div', { class: `qry-chips ${cls}`.trim(), 'aria-label': name ?? null },
+        ...items.map((item) => $.create('button', { type: 'button', class: 'qry-chip', 'data-value': keyOf(item) }, labelOf(item))));
+    const choice = makeChoice(element, value);
+    return { element, destroy() { choice.destroy(); element.remove(); } };
+};
+
+/** @private — scroll `el` into view inside its nearest scrolling ancestor only (never the page). */
+const _inView = (el) => {
+    let box = el.parentElement;
+    while (box && box !== document.body && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
+    if (!box || box === document.body) return;
+    const r = el.getBoundingClientRect(), b = box.getBoundingClientRect(), head = el.closest('table')?.tHead?.offsetHeight ?? 0;
+    if (r.top < b.top + head) box.scrollTop -= b.top + head - r.top;    // under a sticky header: below it
+    else if (r.bottom > b.bottom) box.scrollTop += r.bottom - b.bottom;
 };
 
 /** A sortable table (`.qry-table`). Each header is a button (click or keyboard) that sorts by its
  *  column; a `numeric` column sorts numerically and aligns right. Values are escaped; a column's
  *  `format(value, row)` returns text (escaped too) or $.html`…`. Rows that `onRow` activates are
  *  focusable buttons in the row sense: a click, Enter or Space. `update(rows)` and
- *  `sortBy(key, dir?)` refresh in place.
+ *  `sortBy(key, dir?)` refresh in place. `sort: false` keeps the rows in the order given (a log, the
+ *  trials of a session: plain headers). `current(row)` marks the row that is current (aria-current) and
+ *  keeps it in view inside the table's own scroll box — never scrolling the page.
  *  @param {Array<{key:string, label:string, numeric?:boolean, format?:(v:*, row:object)=>string}>} columns
  *  @param {Array<object>} rows
  *  @param {Object} [opts]
  *  @param {boolean} [opts.numbered]  a 1-based column first (header labels.position)
- *  @param {{key:string, dir:'asc'|'desc'}} [opts.sort]  default: the first numeric column desc, else the first column asc
+ *  @param {{key:string, dir:'asc'|'desc'}|false} [opts.sort]  default: the first numeric column desc, else the first column asc; false: as given
+ *  @param {(row:object)=>boolean} [opts.current]  the current row (aria-current="true", kept in view)
  *  @param {(row:object, tr:Element)=>void} [opts.onRow]  body-row activation (click, Enter or Space on the focused row)
  *  @param {string} [opts.empty=labels.empty]
  *  @param {string} [opts.class]  extra class on the table
  *  @returns {{ element: HTMLTableElement, update: (rows: object[]) => void, sortBy: (key: string, dir?: string) => void, destroy: () => void }}
  *  @example const t = makeTable(columns, fonts, { numbered: true, onRow: (f) => pick(f) }); box.add(t.element); t.update(next)
  */
-export const makeTable = (columns, rows, { numbered = false, sort, onRow, empty = labels.empty, class: cls = '' } = {}) => {
+export const makeTable = (columns, rows, { numbered = false, sort, current, onRow, empty = labels.empty, class: cls = '' } = {}) => {
     const col = (k) => columns.find((c) => c.key === k);
-    const first = columns.find((c) => c.numeric) ?? columns[0];
-    const state = sort ? { ...sort } : { key: first.key, dir: first.numeric ? 'desc' : 'asc' };
+    const first = columns.find((c) => c.numeric) ?? columns[0], sorts = sort !== false;
+    const state = sort ? { ...sort } : { key: sorts ? first.key : null, dir: first.numeric ? 'desc' : 'asc' };
     const { on, off } = _scope();
     let data = [...(rows ?? [])], view = [];           // view: the sorted rows, index-aligned to the body <tr>s
     const element = $.create('table', { class: `qry-table ${cls}`.trim() });
@@ -1645,13 +2056,16 @@ export const makeTable = (columns, rows, { numbered = false, sort, onRow, empty 
     const arrow = (c) => c.key === state.key && $.html` <span aria-hidden="true">${state.dir === 'asc' ? '▲' : '▼'}</span>`;   // aria-sort says it
     const cell = (c, r) => (c.format ? c.format(r[c.key], r) : r[c.key] ?? labels.missing);
     const render = () => {
-        view = data.toSorted((a, b) => (state.dir === 'asc' ? cmp(a, b) : cmp(b, a)));
+        view = sorts ? data.toSorted((a, b) => (state.dir === 'asc' ? cmp(a, b) : cmp(b, a))) : data;
         const num = (c) => (c.numeric ? 'qry-num' : '');
-        element.html($.html`<thead><tr>${numbered && $.html`<th scope="col" class="qry-num qry-idx">${labels.position}</th>`}${columns.map((c) =>
-            $.html`<th scope="col" class="${num(c)}" aria-sort="${sorted(c)}"><button type="button" data-key="${c.key}">${c.label}${arrow(c)}</button></th>`)}</tr></thead>
-            <tbody>${view.length ? view.map((r, i) => $.html`<tr data-i="${i}"${onRow && $.raw(' tabindex="0"')}>${numbered && $.html`<td class="qry-num qry-idx">${i + 1}</td>`}${columns.map((c) =>
+        const head = (c) => (sorts ? $.html`<th scope="col" class="${num(c)}" aria-sort="${sorted(c)}"><button type="button" data-key="${c.key}">${c.label}${arrow(c)}</button></th>`
+            : $.html`<th scope="col" class="${num(c)}">${c.label}</th>`);
+        element.html($.html`<thead><tr>${numbered && $.html`<th scope="col" class="qry-num qry-idx">${labels.position}</th>`}${columns.map(head)}</tr></thead>
+            <tbody>${view.length ? view.map((r, i) => $.html`<tr data-i="${i}"${onRow && $.raw(' tabindex="0"')}${current?.(r) && $.raw(' aria-current="true"')}>${numbered && $.html`<td class="qry-num qry-idx">${i + 1}</td>`}${columns.map((c) =>
                 $.html`<td class="${num(c)}">${cell(c, r)}</td>`)}</tr>`)
             : $.html`<tr class="qry-table-empty"><td colspan="${columns.length + (numbered ? 1 : 0)}">${empty}</td></tr>`}</tbody>`);
+        const at = current && element.querySelector('tbody tr[aria-current]');
+        if (at) _inView(at);
     };
     element.delegate('th button[data-key]', 'click', function () {
         const k = this.dataset.key;

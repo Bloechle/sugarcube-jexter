@@ -9,8 +9,7 @@
     <!-- qry 3, vendored under /shared (nothing is fetched): qry-ui → the Sugarcube look → qry.js → modules (each imports the icon set, /shared/js/icons.js) -->
     <link rel="stylesheet" href="/shared/vendor/qry/qry-ui.css">
     <link rel="stylesheet" href="/shared/sugarcube.css">
-    <script src="/shared/vendor/qry/qry.js"></script>
-    <script>try { const t = JSON.parse(localStorage.getItem('pdfinspector:theme')); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}</script>
+    <script src="/shared/vendor/qry/qry.js" data-theme-persist="pdfinspector:theme"></script>   <!-- the saved theme before the first paint; theme.init reads the key here -->
     <link rel="stylesheet" href="pdfinspector.css">
 </head>
 

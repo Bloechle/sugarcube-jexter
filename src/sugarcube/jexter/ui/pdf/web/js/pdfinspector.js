@@ -439,7 +439,6 @@ async function downloadImage(im) {
 }
 
 // ── boot ──────────────────────────────────────────────────────────────────────
-function syncThemeIcon() { $('#btn-theme').html(`<i data-icon="${theme.isDark() ? 'sun' : 'moon'}"></i>`); }
 
 // ── render-stage callbacks (the iframe calls these on the parent) ──────────────
 window.shell = {
@@ -485,7 +484,8 @@ function init() {
             case 'doc': if (!docMeta) toast('Open a document first.', { tone: 'warn' }); else drawer.open(); break;
         }
     } });
-    $('#btn-theme').on('click', () => { theme.toggle(); syncThemeIcon(); stageApi()?.setTheme(theme.isDark()); });
+    $('#btn-theme').html(() => `<i data-icon="${theme.isDark() ? 'sun' : 'moon'}"></i>`).on('click', theme.toggle);   // the icon follows the mode
+    $.watch(theme.isDark, (dark) => stageApi()?.setTheme(dark));                            // and so does the stage frame
 
     // lightbox controls — close paths first (these must always attach), then the stage pan/zoom.
     $('#lb-in').on('click', () => lbZoom(1.25));
@@ -505,4 +505,4 @@ function init() {
 
     status('Ready'); openWelcome();
 }
-boot({ title: 'PDF Inspector', theme: { persist: 'pdfinspector:theme' }, ready: () => { init(); syncThemeIcon(); } });
+boot({ title: 'PDF Inspector', ready: init });   // the theme's key is on qry.js's tag

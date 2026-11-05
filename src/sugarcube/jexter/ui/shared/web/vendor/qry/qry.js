@@ -12,7 +12,7 @@
  * `signal` option: abort its AbortController and everything it wired goes away — ONE teardown
  * model. Setters given a signal or a function follow it (see SETTERS).
  *
- * @version 3.0.0
+ * @version 3.6.0
  * @author Jean-Luc Bloechle with Claude.ai
  * @license MIT
  */
@@ -38,11 +38,13 @@ const _nil = () => document.createElement('qry-nil');
  *  @example const el = $('#chart')
  *  @example const el = $('main .title')
  */
+/** @private — an #id by getElementById (an id like #1a is no valid selector), anything else by querySelector. */
+const _find = (s) => (s[0] === '#' && /^#[\w-]+$/.test(s) ? document.getElementById(s.slice(1)) : document.querySelector(s));
 const $ = (s) => {
     if (s instanceof Element) return s;
     let el = null;
     try {
-        el = typeof s === 'string' && s[0] === '#' && /^#[\w-]+$/.test(s) ? document.getElementById(s.slice(1)) : document.querySelector(s);
+        el = typeof s === 'string' ? _find(s) : document.querySelector(s);
     } catch { console.warn(`$(${JSON.stringify(s)}) — invalid selector`); return _nil(); }
     if (!el) console.warn(`$(${JSON.stringify(s)}) — not found`);
     return el ?? _nil();
@@ -62,8 +64,11 @@ $.all = (s) => (typeof s === 'string' ? [...document.querySelectorAll(s)] : s in
  *  @returns {Element|undefined}
  *  @example $.opt('#save')?.show()
  */
-$.opt = (s) => s instanceof Element ? s
-    : (typeof s === 'string' && s ? document.querySelector(s) ?? undefined : undefined);
+$.opt = (s) => {
+    if (s instanceof Element) return s;
+    if (typeof s !== 'string' || !s) return undefined;
+    try { return _find(s) ?? undefined; } catch { return undefined; }   // an invalid selector: nothing, as $() answers
+};
 
 /** @private — a child worth inserting: null / undefined / false are nothing (as in $.html). */
 const _some = (c) => c != null && c !== false;
@@ -174,7 +179,9 @@ EventTarget.prototype.trigger = function (evt, detail) {
 // _bind: a plain value is applied; a signal or a function is FOLLOWED — re-applied whenever
 // what it reads changes. The LAST write to a slot wins: el.text(a) then el.text(b) (or
 // el.text('x')) stops following a. A binding keeps following while its element is detached
-// (put it back and it is up to date) and goes away with the element (it holds it weakly).
+// (put it back and it is up to date) and goes away with the element (it holds it weakly — unless the
+// function itself captures the element, `row.cls('on', () => sel.value === row.id)`: then the signal holds it;
+// read what you need before, `const id = row.id`).
 // A getter is a call WITHOUT the argument: el.text(undefined) clears, it does not read.
 
 const _slots = new WeakMap();                       // element → Map(slot → stop)
@@ -293,13 +300,19 @@ Element.prototype.hide = function () { return Element.prototype.show.call(this, 
 // 8. ATTRIBUTES — on Element
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Get / set / remove (null, undefined, false) / set multiple (object) attributes.
+/** @private — the ARIA attributes that are STATES: true / false (or a token where "false" is valid). */
+const _ARIA_STATES = /^aria-(atomic|busy|checked|current|disabled|expanded|grabbed|hidden|invalid|modal|multiline|multiselectable|pressed|readonly|required|selected)$/;
+
+/** Get / set / remove (null, undefined, false) / set multiple (object) attributes. An ARIA STATE
+ *  (aria-pressed, -expanded, -selected, -checked, -current, -busy, -hidden, -disabled, -invalid…) is
+ *  written as ARIA spells it: true → "true", false → "false" (null removes) — so a boolean or a signal of one binds.
  *  @example el.attr('href')              → '/page'
  *  @example el.attr('href', '/new')      → this
  *  @example el.attr('title', null)       → this  (removes)
  *  @example el.attr({ x: 10, y: 20 })   → this
  *  @example btn.attr('disabled', true)  → this  (true → present, false/null → removed)
  *  @example btn.attr('disabled', () => busy.value)   (live)
+ *  @example btn.attr('aria-pressed', on) → this  (on = $.signal(false): aria-pressed="false", then "true")
  */
 Element.prototype.attr = function (name, val) {
     if (name && typeof name === 'object') {
@@ -307,8 +320,10 @@ Element.prototype.attr = function (name, val) {
         return this;
     }
     if (arguments.length < 2) return this.getAttribute(name);
+    const aria = _ARIA_STATES.test(name);               // ARIA spells its states: aria-pressed="false" is a state, not an absence
     return _bind(this, 'attr:' + name, val, function (v) {
-        if (v == null || v === false) this.removeAttribute(name); else this.setAttribute(name, v === true ? '' : v);
+        if (v == null || (v === false && !aria)) this.removeAttribute(name);
+        else this.setAttribute(name, typeof v === 'boolean' ? (aria ? String(v) : '') : v);   // a plain boolean attribute: present
     });
 };
 
@@ -385,16 +400,28 @@ const _read = (el) => (el.type === 'checkbox' ? el.checked
  *  @example input.val('42')   → this
  *  @example input.val(name)   → this   (a SIGNAL: two-way — the field shows it, typing sets it;
  *                                         a later plain input.val('x') writes the signal, the binding stays)
+ *  @example input.val(() => doc.value.title)   (a FUNCTION or a computed: one way — while the person is
+ *                                         typing in the field, a new value waits for the blur, never under the caret)
  *  @example $.all('[name="size"]').forEach(r => r.val(size))   (radios: the checked one is the value)
  */
 const _twoWay = new WeakMap();                                  // field → the signal it is bound to, both ways
+const _held = new WeakMap();                                    // focused field → the one-way value waiting for its blur
+/** @private — a one-way binding never writes under the caret: a focused text field takes it on blur. */
+const _putLater = function (x) {
+    const typing = this === this.ownerDocument.activeElement && this.type !== 'checkbox' && this.type !== 'radio';
+    if (!typing) { _held.delete(this); _put(this, x); return; }
+    if (!_held.has(this)) this.addEventListener('blur', () => { if (_held.has(this)) { const v = _held.get(this); _held.delete(this); _put(this, v); } }, { once: true });
+    _held.set(this, x);
+};
 Element.prototype.val = function (v) {
     if (!arguments.length) return _read(this);
+    _held.delete(this);                                          // a new write: what waited for the blur is out of date
     const bound = _twoWay.get(this);
     if (bound && !_isLive(v)) { bound.value = v; return this; }  // a plain write to a bound field goes through its signal
     _twoWay.delete(this);
-    if (_isSignal(v)) _twoWay.set(this, v);
-    const wire = _isSignal(v) && ((el) => {                     // two-way: the field writes the signal back
+    const twoWay = _isSignal(v) && !!Object.getOwnPropertyDescriptor(v, 'value')?.set;   // a computed is read-only: one way
+    if (twoWay) _twoWay.set(this, v);
+    const wire = twoWay && ((el) => {                     // two-way: the field writes the signal back
         const evt = el.type === 'checkbox' || el.type === 'radio' || el.tagName === 'SELECT' ? 'change' : 'input';
         const back = () => {
             if (el.validity?.badInput) return;                   // '-' or '1e' on the way to a number
@@ -403,7 +430,7 @@ Element.prototype.val = function (v) {
         el.on(evt, back);
         return () => el.off(evt, back);
     });
-    return _bind(this, 'value', v, function (x) { _put(this, x); }, wire || undefined);
+    return _bind(this, 'value', v, twoWay || !_isLive(v) ? function (x) { _put(this, x); } : _putLater, wire || undefined);
 };
 
 /** Enable or disable a form control (a condition, a signal or a function too; an explicit
@@ -426,9 +453,9 @@ Element.prototype.disable = function () { return this.enable(false); };
  *  @example $.load.json('/join', { method: 'POST', body: form.serialize() })
  */
 Element.prototype.serialize = function () {
-    const out = {};
-    for (const [k, v] of new FormData(this)) out[k] = Object.hasOwn(out, k) ? [].concat(out[k], v) : v;
-    return out;
+    const m = new Map();                                          // a field named __proto__ is a key, never the prototype
+    for (const [k, v] of new FormData(this)) m.set(k, m.has(k) ? [].concat(m.get(k), v) : v);
+    return Object.fromEntries(m);
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -622,13 +649,14 @@ $.esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': 
  */
 let _paint = null;
 $.color = (c, el = document.body) => {
-    const host = el instanceof HTMLElement && !(el instanceof HTMLCanvasElement) ? el : el.parentElement ?? document.body;
+    let host = el instanceof HTMLElement && !(el instanceof HTMLCanvasElement) ? el : el.parentElement ?? document.body;
+    if (!host.isConnected) host = document.body;                  // detached: no computed style (it would return the last colour painted)
     const probe = $.create('i', { style: { color: c.startsWith('--') ? `var(${c})` : c, display: 'none' } });
     host.append(probe);
     const v = getComputedStyle(probe).color;
     probe.remove();
     _paint ??= document.createElement('canvas').getContext?.('2d', { willReadFrequently: true }) ?? null;
-    if (!_paint) return v;
+    if (!_paint || !v) return v;
     _paint.clearRect(0, 0, 1, 1);
     _paint.fillStyle = v;
     _paint.fillRect(0, 0, 1, 1);
@@ -636,51 +664,71 @@ $.color = (c, el = document.body) => {
     return a === 255 ? `rgb(${r} ${g} ${b})` : `rgb(${r} ${g} ${b} / ${(a / 255).toFixed(3)})`;
 };
 
+/** A keydown's key in its element's reading direction: in a right-to-left page ArrowLeft and ArrowRight
+ *  swap, so ArrowRight always means forward (the next tab, the next day, a drawer wider at its end).
+ *  @example const k = $.key(e); if (k === 'ArrowRight') next()  */
+$.key = (e) => (e.target instanceof Element && getComputedStyle(e.target).direction === 'rtl' && /^Arrow(Left|Right)$/.test(e.key)
+    ? (e.key === 'ArrowLeft' ? 'ArrowRight' : 'ArrowLeft') : e.key);
+
 /** Clamp a number into [lo, hi].  @example $.clamp(120, 0, 100) → 100 */
 $.clamp = (x, lo, hi) => (x < lo ? lo : x > hi ? hi : x);
+
+/** A fresh id for the page — `prefix-1`, `prefix-2`… — the one counter every helper takes its ids from
+ *  (aria-labelledby, aria-controls, a menu's target, an anchor's name).
+ *  @example const id = $.uid('note'); field.attr('aria-describedby', id); note.id = id */
+let _uid = 0;
+$.uid = (prefix = 'qry') => `${prefix}-${_uid += 1}`;
 
 /** Await a delay.  @example await $.sleep(300) */
 $.sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Call fn once things settle: after `ms` without a new call (typing, resizing).
- *  The returned function has `.cancel()` (drop a pending call — on teardown).
+ *  The returned function has `.cancel()` (drop a pending call — on teardown) and `.flush()`
+ *  (run a pending call NOW — before a save, on pagehide; nothing pending: nothing runs).
  *  @example input.on('input', $.debounce(search, 250))
  */
 $.debounce = (fn, ms = 200) => {
-    let t;
-    const d = function (...a) { clearTimeout(t); t = setTimeout(() => fn.apply(this, a), ms); };
-    d.cancel = () => clearTimeout(t);
+    let t, call = null;                                  // call: the pending one (its this and arguments)
+    const run = () => { clearTimeout(t); const c = call; call = null; if (c) fn.apply(c[0], c[1]); };
+    const d = function (...a) { clearTimeout(t); call = [this, a]; t = setTimeout(run, ms); };
+    d.cancel = () => { clearTimeout(t); call = null; };
+    d.flush = run;
     return d;
 };
 
 /** Call fn at most once every `ms` (scroll, pointer move); the last call is not lost.
- *  The returned function has `.cancel()` (drop a pending call — on teardown), as $.debounce.
+ *  The returned function has `.cancel()` and `.flush()`, as $.debounce.
  *  @example window.on('scroll', $.throttle(update, 100))
  */
 $.throttle = (fn, ms = 100) => {
-    let last = 0, t;
+    let last = 0, t, call = null;
+    const run = () => { clearTimeout(t); const c = call; call = null; if (c) { last = Date.now(); fn.apply(c[0], c[1]); } };
     const d = function (...a) {
         const wait = ms - (Date.now() - last);
         clearTimeout(t);
-        if (wait <= 0) { last = Date.now(); fn.apply(this, a); }
-        else t = setTimeout(() => { last = Date.now(); fn.apply(this, a); }, wait);
+        call = [this, a];
+        if (wait <= 0) run(); else t = setTimeout(run, wait);
     };
-    d.cancel = () => clearTimeout(t);
+    d.cancel = () => { clearTimeout(t); call = null; };
+    d.flush = run;
     return d;
 };
 
-/** A prefixed, JSON-safe localStorage that never throws.
+/** A prefixed, JSON-safe localStorage (or sessionStorage: `{ session: true }`, this tab only) that never throws.
  *  get(k, fallback) → the value, or `fallback` when absent, unreadable or unparsable;
  *  set(k, v) → true when written, false when the browser refused (quota full, private mode,
  *  storage blocked) — so an app can say « no room left » instead of losing data silently;
  *  remove(k) → nothing.
  *  @example const store = $.store('floop:'); if (!store.set('draft', text)) toast('No room left', { tone: 'danger' })
  */
-$.store = (prefix = '') => ({
-    get(k, fallback = null) { try { const v = localStorage.getItem(prefix + k); return v === null ? fallback : JSON.parse(v); } catch { return fallback; } },
-    set(k, v) { try { localStorage.setItem(prefix + k, JSON.stringify(v)); return true; } catch { return false; } },
-    remove(k) { try { localStorage.removeItem(prefix + k); } catch { /* storage blocked */ } },
-});
+$.store = (prefix = '', { session = false } = {}) => {
+    const area = () => (session ? sessionStorage : localStorage);    // read at each call: blocked storage throws there, caught
+    return {
+        get(k, fallback = null) { try { const v = area().getItem(prefix + k); return v === null ? fallback : JSON.parse(v); } catch { return fallback; } },
+        set(k, v) { try { area().setItem(prefix + k, JSON.stringify(v)); return true; } catch { return false; } },
+        remove(k) { try { area().removeItem(prefix + k); } catch { /* storage blocked */ } },
+    };
+};
 
 /** A string's FOLDED form, to compare what people type: lower case, accents and other marks
  *  dropped (é → e, ü → u, ç → c), compatibility forms unified (ﬁ → fi, ³ → 3), ß → ss, white
@@ -745,7 +793,21 @@ $.rng = (seed) => {
  *  null)), a plain object or array
  *  body sent as JSON (strings, FormData, Blobs, buffers, streams go as they are), an optional
  *  timeout that adds to the caller's own `signal`. Any other fetch option passes through. */
-const _fetch = async (url, { body, headers, timeout, signal, ...init } = {}) => {
+const _fetch = async (url, { retry, ...opts } = {}) => {          // retry: { times, delay } — again on a network failure only
+    for (let n = 0; ; n += 1) {
+        try { return await _fetchOnce(url, opts); } catch (e) {
+            if (e.code !== 'network' || n >= (retry?.times ?? 0)) throw e;
+            await $.sleep(retry.delay ?? 250);
+            opts.signal?.throwIfAborted();
+        }
+    }
+};
+const _fetchOnce = async (url, { body, headers, timeout, signal, query, ...init } = {}) => {
+    if (query) {                                              // a query string from an object; null / undefined left out
+        const u = new URL(url, location.href);
+        for (const [k, v] of Object.entries(query)) if (v != null) u.searchParams.set(k, v);
+        url = u.href;
+    }
     headers = new Headers(headers);
     if (Array.isArray(body) || body?.constructor === Object) {
         body = JSON.stringify(body);
@@ -753,14 +815,16 @@ const _fetch = async (url, { body, headers, timeout, signal, ...init } = {}) => 
     }
     if (timeout) signal = signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout);
     const r = await fetch(url, { ...init, body, headers, signal }).catch((e) => {
-        throw e.name === 'TimeoutError' ? Object.assign(new Error(`No answer after ${timeout} ms`), { status: 0, detail: '', code: 'timeout', url: String(url) }) : e;
+        if (signal?.aborted && e.name !== 'TimeoutError') throw e;   // aborted on purpose: not a failure to report
+        const timedOut = e.name === 'TimeoutError';               // else the network itself: offline, DNS, refused, CORS
+        throw Object.assign(new Error(timedOut ? `No answer after ${timeout} ms` : 'No connection'), { status: 0, detail: '', code: timedOut ? 'timeout' : 'network', url: String(url), cause: e });
     });
     if (!r.ok) {
         const text = (await r.text().catch(() => '')).trim();
         let detail = text, code = null;
         try {
             const j = JSON.parse(text), e = j?.error;
-            detail = typeof j === 'string' ? j : (typeof e === 'object' && e ? e.message : e) ?? j?.message ?? text;
+            detail = typeof j === 'string' ? j : (typeof e === 'object' && e ? e.message : e) ?? j?.message ?? (j && typeof j === 'object' ? '' : text);   // { error: { code } } alone: no words, the status
             code = (typeof e === 'object' && e ? e.code : j?.code) ?? null;
         } catch { /* not JSON: the text */ }
         // a page of markup (a proxy's 502, a container's 404) is no words to show: the status then
@@ -816,21 +880,56 @@ $.parseCSV = (text, { sep = ',', header = true, trim = true } = {}) => {
         Object.fromEntries(keys.map((k, i) => [k, vals[i] ?? ''])));
 };
 
+/** Rows → CSV text, the inverse of $.parseCSV: objects (the columns are their keys, in the order
+ *  first met; `header` writes them first) or arrays. A field holding the separator, a quote or a
+ *  line break is quoted (`""` inside); null / undefined are empty. Lines end with CRLF (RFC 4180).
+ *  `bom: true` starts with a BOM — what Excel needs to read UTF-8 (accents) from a `;` file.
+ *  @param {Object[]|Array[]} rows
+ *  @param {{sep?: string, header?: boolean, bom?: boolean}} [opts]
+ *  @returns {string}
+ *  @example download($.toCSV(trials, { sep: ';', bom: true }), 'trials.csv')
+ */
+$.toCSV = (rows, { sep = ',', header = true, bom = false } = {}) => {
+    const cell = (v) => { const t = v == null ? '' : String(v); return t.includes(sep) || /["\r\n]/.test(t) ? `"${t.replaceAll('"', '""')}"` : t; };
+    const line = (r) => r.map(cell).join(sep);
+    const objects = rows.length && !Array.isArray(rows[0]);
+    const keys = objects ? [...new Set(rows.flatMap((r) => Object.keys(r)))] : [];
+    const lines = objects ? rows.map((r) => line(keys.map((k) => r[k]))) : rows.map(line);
+    if (objects && header) lines.unshift(line(keys));
+    return (bom ? '\uFEFF' : '') + lines.join('\r\n');
+};
+
 /** Talk to a server or load a file — ONE helper for both. Every loader takes fetch options:
- *  `method`, `body` (a plain object / array is sent as JSON), `headers`, `signal`, `timeout`
- *  (ms), and the rest. A refused request throws an Error with `status` (404, 409…), `detail`
+ *  `method`, `body` (a plain object / array is sent as JSON), `query` (an object → the URL's query
+ *  string; null / undefined values left out), `headers`, `signal`, `timeout` (ms), `retry`
+ *  (`{ times, delay = 250 }`: tried again while the server cannot be reached — a local host
+ *  restarting), and the rest.
+ *  A refused request throws an Error with `status` (404, 409…), `detail`
  *  (what the server said: `{ "error": "…" }`, `{ "error": { "code", "message" } }`, `{ "message": "…" }`
  *  or its text) — show `e.detail` — and `code` (the server's own code, e.g. 'rate_limited', or null).
+ *  No answer at all throws the same shape with `status` 0 and `code` 'timeout' or 'network' (offline,
+ *  refused): `e.status === 0` is « the server could not be reached ». An abort stays an AbortError.
  *  @namespace $.load
  *  @example const data = await $.load.json('./data/countries.json')
  *  @example await $.load.json('/api/notes', { method: 'POST', body: { text: 'hi' }, timeout: 5000 })
  */
 $.load = {
-    /** Fetch and parse JSON (an empty answer gives null). */
+    /** Fetch and parse JSON (an empty answer gives null).
+     *  @example await $.load.json('/api/search', { query: { q, page } }) */
     json: (url, opts) => _fetch(url, opts).then((r) => r.text()).then((t) => (t ? JSON.parse(t) : null)),
 
     /** Fetch text (HTML fragments, Markdown, SVG…). */
     text: (url, opts) => _fetch(url, opts).then((r) => r.text()),
+
+    /** Fetch and parse XML, SVG or HTML into a Document (`type`, default 'application/xml'); a document
+     *  that does not parse throws (DOMParser itself only returns a <parsererror>).
+     *  @example const svg = (await $.load.xml('icon.svg', { type: 'image/svg+xml' })).documentElement */
+    xml: (url, { type = 'application/xml', ...opts } = {}) => _fetch(url, opts).then((r) => r.text()).then((t) => {
+        const doc = new DOMParser().parseFromString(t, type);
+        const bad = type !== 'text/html' && doc.querySelector('parsererror');
+        if (bad) throw Object.assign(new Error(`Not well-formed: ${bad.textContent.trim().split('\n')[0]}`), { status: 0, detail: '', code: 'parse', url: String(url) });
+        return doc;
+    }),
 
     /** Fetch a Blob (an image, a zip, a PDF…). */
     blob: (url, opts) => _fetch(url, opts).then((r) => r.blob()),
@@ -929,6 +1028,33 @@ $.tip = (el, title, content, { enter, leave, delay = 0, signal } = {}) => {
     $.tip.hide = () => { owner = null; if (box) box.style.opacity = '0'; };
 }
 
+/** Declarative tooltips: every `[data-tip]` under `root` — there now or added later (one delegated
+ *  set of listeners) — shows the tooltip as $.tip would, on the pointer and on keyboard focus: its
+ *  `data-tip` as the title (empty: its aria-label — an icon button names itself once) and its
+ *  `data-tip-content` under it. Plain text, escaped. `delay`: ms before it shows.
+ *  @param {Element|Document} [root=document]
+ *  @param {{delay?: number, signal?: AbortSignal}} [opts]
+ *  @example $.tip.watch(document, { delay: 300 })   // <button class="qry-btn icon" aria-label="Edit" data-tip>✎</button>
+ */
+$.tip.watch = (root = document, { delay = 0, signal } = {}) => {
+    let current = null, timer = 0;
+    const tipOf = (t) => { const el = t?.closest?.('[data-tip]'); return el && (root === document || root.contains(el)) ? el : null; };
+    const show = (el, where) => {
+        current = el;
+        clearTimeout(timer);
+        const go = () => { if (current === el && el.isConnected) $.tip.show(where, el.dataset.tip || el.getAttribute('aria-label') || '', el.dataset.tipContent ?? ''); };
+        if (delay) timer = setTimeout(go, delay); else go();
+    };
+    const hide = () => { clearTimeout(timer); if (current) { current = null; $.tip.hide(); } };
+    signal?.addEventListener('abort', hide, { once: true });
+    root.on('mouseover', (e) => { const el = tipOf(e.target); if (el && el !== current) show(el, { currentTarget: el, clientX: e.clientX, clientY: e.clientY }); }, { signal })
+        .on('mousemove', (e) => { if (current) $.tip.move(e); }, { signal })
+        .on('mouseout', (e) => { if (current && !current.contains(e.relatedTarget)) hide(); }, { signal })
+        .on('focusin', (e) => { const el = tipOf(e.target); if (el?.matches(':focus-visible')) show(el, el); }, { signal })
+        .on('focusout', (e) => { if (current?.contains(e.target)) hide(); }, { signal });
+    return root;
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 18. VIEWPORT & GESTURES — what pages re-wrote by hand, each a little differently
 // ═══════════════════════════════════════════════════════════════════════════
@@ -938,18 +1064,34 @@ $.tip = (el, title, content, { enter, leave, delay = 0, signal } = {}) => {
  */
 Object.defineProperty($, 'reduced', { get: () => matchMedia('(prefers-reduced-motion: reduce)').matches });
 
+/** A media query as a read-only signal: true while it matches, followed live — bind it, read it in an
+ *  effect. One signal per query, shared (one listener however many readers).
+ *  @example const phone = $.media('(max-width: 640px)'); nav.cls('compact', phone)
+ */
+const _medias = new Map();
+$.media = (query) => {
+    if (!_medias.has(query)) {
+        const mq = matchMedia(query), s = $.signal(mq.matches);
+        mq.addEventListener('change', () => { s.value = mq.matches; });
+        _medias.set(query, $.computed(() => s.value));
+    }
+    return _medias.get(query);
+};
+
 /** The stack's motion, ONE signature, read from the CSS tokens (qry-ui.css, or a site's :root) so
  *  a script animates at the pace the stylesheet does: `$.motion('fast' | '' | 'slow')` → ms of
  *  --qry-speed-fast, --qry-speed, --qry-speed-slow (else 120 / 200 / 500); `$.ease('' | 'move')` →
  *  --qry-ease (arriving: a soft deceleration) or --qry-ease-move (crossing: in AND out).
- *  @example el.animate(frames, { duration: $.motion('slow'), easing: $.ease() })
+ *  Both read <html>, or `el` — the element that animates, where a scope (a .qry-theme, a slide) sets its own pace.
+ *  @example el.animate(frames, { duration: $.motion('slow', el), easing: $.ease('', el) })
  */
 const _MOTION = { fast: 120, '': 200, slow: 500 }, _EASE = { '': 'cubic-bezier(.2, .7, .2, 1)', move: 'cubic-bezier(.4, 0, .2, 1)' };
-$.motion = (k = '') => {
-    const v = getComputedStyle(document.documentElement).getPropertyValue('--qry-speed' + (k && '-' + k)).trim(), n = parseFloat(v);
+const _token = (name, el) => getComputedStyle(el ?? document.documentElement).getPropertyValue(name).trim();
+$.motion = (k = '', el) => {
+    const v = _token('--qry-speed' + (k && '-' + k), el), n = parseFloat(v);
     return Number.isFinite(n) ? (v.endsWith('ms') ? n : n * 1000) : _MOTION[k];
 };
-$.ease = (k = '') => getComputedStyle(document.documentElement).getPropertyValue('--qry-ease' + (k && '-' + k)).trim() || _EASE[k];
+$.ease = (k = '', el) => _token('--qry-ease' + (k && '-' + k), el) || _EASE[k];
 
 /** @private — an observer that stops when `signal` aborts. */
 const _watch = (observer, el, signal) => {
@@ -997,7 +1139,7 @@ Element.prototype.onResize = function (fn, { signal } = {}) {
  */
 Element.prototype.onSwipe = function (fn, { min = 50, mouse = false, signal } = {}) {
     // a horizontal drag must reach us: let the browser keep vertical scrolling only
-    if (getComputedStyle(this).touchAction === 'auto') this.style.touchAction = 'pan-y pinch-zoom';
+    if (this.isConnected ? getComputedStyle(this).touchAction === 'auto' : !this.style.touchAction) this.style.touchAction = 'pan-y pinch-zoom';
     let x0 = null, y0 = 0;
     this.on('pointerdown', (e) => { if (mouse || e.pointerType !== 'mouse') { x0 = e.clientX; y0 = e.clientY; } }, { signal });
     this.on('pointercancel', () => { x0 = null; }, { signal });
@@ -1014,32 +1156,43 @@ Element.prototype.onSwipe = function (fn, { min = 50, mouse = false, signal } = 
     return this;
 };
 
-/** A drag by mouse, finger or pen: fn({ x, y, dx, dy, phase, event }) with phase 'start',
- *  'move', 'end' ('end' also on cancel). x / y are in the element's box (CSS px), dx / dy since
- *  the start. The pointer is captured, so the drag survives leaving the element. Returning
- *  false from 'start' declines that drag (a press on a child button…). Sets touch-action: none
- *  unless the element has its own. One pointer at a time. Chainable.
- *  @param {Function} fn  ({x, y, dx, dy, phase, event}) => void | false
- *  @param {{button?: number, signal?: AbortSignal}} [opts]  button: the mouse button (default 0, -1 = any)
- *  @example knob.onDrag(({ x, phase }) => { if (phase !== 'end') angle.value = x / knob.width() * 360; })
+/** A drag by mouse, finger or pen: fn({ x, y, u, v, dx, dy, phase, cancelled, event }) with phase 'start',
+ *  'move', then 'end' — every drag ends once; `cancelled` is true on an end the browser forced (a finger
+ *  that scrolled the page: undo what the drag drew). x / y are in the element's box (CSS px), u / v the same as fractions
+ *  of it (0–1), dx / dy since the press. The pointer is captured, so the drag survives leaving the
+ *  element. `min` (px): the drag starts only once the pointer has moved that far — a click stays a click.
+ *  Returning false from 'start' declines that drag (a press on a child button…). Sets
+ *  touch-action: none unless the element has its own (`touch-action: pan-y` keeps a page scrolling
+ *  under a finger). One pointer at a time. Chainable.
+ *  @param {Function} fn  ({x, y, u, v, dx, dy, phase, cancelled, event}) => void | false
+ *  @param {{button?: number, min?: number, signal?: AbortSignal}} [opts]  button: the mouse button (default 0, -1 = any)
+ *  @example knob.onDrag(({ u, phase }) => { if (phase === 'move') angle.value = u * 360; })
  */
-Element.prototype.onDrag = function (fn, { button = 0, signal } = {}) {
-    if (getComputedStyle(this).touchAction === 'auto') this.style.touchAction = 'none';
-    let id = null, x0 = 0, y0 = 0;
+Element.prototype.onDrag = function (fn, { button = 0, min = 0, signal } = {}) {
+    if (this.isConnected ? getComputedStyle(this).touchAction === 'auto' : !this.style.touchAction) this.style.touchAction = 'none';   // detached: no computed style yet
+    let id = null, pressed = null, x0 = 0, y0 = 0;       // pressed: a press not yet far enough to be a drag
     const at = (e, phase) => {
-        const r = this.getBoundingClientRect();
-        return { x: e.clientX - r.left, y: e.clientY - r.top, dx: e.clientX - x0, dy: e.clientY - y0, phase, event: e };
+        const r = this.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+        return { x, y, u: r.width ? x / r.width : 0, v: r.height ? y / r.height : 0, dx: e.clientX - x0, dy: e.clientY - y0, phase, cancelled: e.type === 'pointercancel', event: e };
     };
-    this.on('pointerdown', (e) => {
-        if (id !== null || (e.pointerType === 'mouse' && button >= 0 && e.button !== button)) return;
-        x0 = e.clientX; y0 = e.clientY;
+    const start = (e) => {
+        pressed = null;
         if (fn(at(e, 'start')) === false) return;
         id = e.pointerId;
         try { this.setPointerCapture(id); } catch { /* a synthetic event has no pointer to capture */ }
         e.preventDefault();                                      // no text selection, no native drag
+    };
+    this.on('pointerdown', (e) => {
+        if (id !== null || (e.pointerType === 'mouse' && button >= 0 && e.button !== button)) return;
+        x0 = e.clientX; y0 = e.clientY;
+        if (min > 0) pressed = e.pointerId; else start(e);
     }, { signal });
-    this.on('pointermove', (e) => { if (e.pointerId === id) fn(at(e, 'move')); }, { signal });
-    this.on('pointerup pointercancel', (e) => {
+    this.on('pointermove', (e) => {
+        if (e.pointerId === id) fn(at(e, 'move'));
+        else if (e.pointerId === pressed && Math.hypot(e.clientX - x0, e.clientY - y0) >= min) start(e);
+    }, { signal });
+    this.on('pointerup pointercancel lostpointercapture', (e) => {      // lost: the element left the page mid-drag
+        if (e.pointerId === pressed) pressed = null;
         if (e.pointerId !== id) return;
         id = null;
         fn(at(e, 'end'));
@@ -1162,25 +1315,39 @@ const _flush = () => {
 };
 
 /** A reactive value: read `.value` (inside an effect: subscribes), write `.value` (re-runs
- *  them). `persist: 'key'` keeps it in localStorage — restored now, saved on every change.
+ *  them). `persist: 'key'` keeps it in localStorage under that key, as given (name it for the app:
+ *  'floop:level') — restored now, saved on every change, and FOLLOWED across the app's open tabs (a
+ *  change in one is seen in the others: the storage event). A plain object is restored OVER its
+ *  defaults: a setting added to the app since the visitor's last save keeps its default.
  *  Replace arrays and objects rather than mutating them: `todos.value = [...todos.value, t]`.
  *  @example const count = $.signal(0); $('#out').text(count); count.value++
  *  @example const todos = $.signal([], { persist: 'todos' })
  */
 const _SIGNAL = Symbol('qry.signal');
 $.signal = (value, { persist } = {}) => {
-    const subs = new Set(), store = persist ? $.store('qry:signal:') : null;
-    if (store) value = store.get(persist, value);
+    const subs = new Set(), store = persist ? $.store() : null, initial = value;
+    const put = (v, save) => {
+        if (Object.is(v, value)) return;
+        value = v;
+        if (save) store?.set(persist, v);
+        for (const e of subs) if (!e.dead) _pending.add(e);
+        if (!_batching) _flush();
+    };
+    const plain = (o) => o?.constructor === Object;
+    const revive = (saved) => (plain(initial) && plain(saved) ? { ...initial, ...saved } : saved);
+    if (store) {
+        value = revive(store.get(persist, initial));
+        addEventListener('storage', (e) => {                    // another tab of the app changed it: this one follows
+            if (e.key !== persist || e.storageArea !== localStorage) return;
+            let v = initial;
+            try { if (e.newValue !== null) v = revive(JSON.parse(e.newValue)); } catch { return; }   // not ours to read
+            put(v, false);                                       // already stored: never written back
+        });
+    }
     return {
         [_SIGNAL]: true,
         get value() { if (_observer) { subs.add(_observer); _observer.deps.add(subs); } return value; },
-        set value(v) {
-            if (Object.is(v, value)) return;
-            value = v;
-            store?.set(persist, v);
-            for (const e of subs) if (!e.dead) _pending.add(e);
-            if (!_batching) _flush();
-        },
+        set value(v) { put(v, true); },
         peek: () => value,                                   // read without subscribing
     };
 };
@@ -1193,20 +1360,26 @@ const _effect = (fn, computed = false) => {
             if (this.dead) return;
             for (const d of this.deps) d.delete(this);
             this.deps.clear();
-            if (typeof this.cleanup === 'function') this.cleanup();
+            const c = this.cleanup; this.cleanup = null;          // a cleanup runs once, even if what follows throws
+            if (typeof c === 'function') try { c(); } catch (err) { reportError(err); }   // a failing cleanup never kills its effect
             const prev = _observer;
             _observer = this;
             try { this.cleanup = fn(); } finally { _observer = prev; }
+            if (this.dead) stop();                                // stopped during its own run: let go of what it just read
         },
     };
-    _batching += 1;                                           // its own writes wait until it has run
-    try { e.run(); } finally { if (--_batching === 0) _flush(); }
-    return () => {
+    const stop = () => {
         e.dead = true;
         _pending.delete(e);
         for (const d of e.deps) d.delete(e);
-        if (typeof e.cleanup === 'function') e.cleanup();
+        e.deps.clear();
+        const c = e.cleanup; e.cleanup = null;                    // twice stopped, cleaned once
+        if (typeof c === 'function') c();
     };
+    stop.effect = e;                                              // for $.computed: a read may run it first
+    _batching += 1;                                           // its own writes wait until it has run
+    try { e.run(); } catch (err) { stop(); throw err; } finally { if (--_batching === 0) _flush(); }   // a first run that throws leaves nothing subscribed
+    return stop;
 };
 
 /** Run fn now, and again whenever a signal it read changes. fn may return a cleanup.
@@ -1219,9 +1392,9 @@ $.effect = (fn) => _effect(fn);
  *  @example const left = $.computed(() => todos.value.filter(t => !t.done).length)
  */
 $.computed = (fn) => {
-    const s = $.signal(undefined);
-    _effect(() => { s.value = fn(); }, true);
-    return { [_SIGNAL]: true, get value() { return s.value; }, peek: s.peek };
+    const s = $.signal(undefined), e = _effect(() => { s.value = fn(); }, true).effect;
+    const fresh = () => { if (_pending.delete(e)) e.run(); };   // read in a batch, or by an effect before its turn: computed first
+    return { [_SIGNAL]: true, get value() { fresh(); return s.value; }, peek: () => { fresh(); return s.peek(); } };
 };
 
 /** Several writes, one update: the effects run once, after fn.
@@ -1232,6 +1405,25 @@ $.batch = (fn) => {
     try { return fn(); } finally { if (--_batching === 0) _flush(); }
 };
 
+/** Call fn(value, previous) when `source` changes — not now. `source` is a signal or a function
+ *  (whatever it reads is followed; fn runs only when its RESULT differs: `() => doc.value.id`); fn itself is NOT tracked: what it reads or writes never
+ *  re-runs it (a save, a fetch, a toast). Returns stop.
+ *  @example $.watch(level, (n) => saveLevel(n))
+ *  @example $.watch(() => route.value.id, (id, was) => load(id))
+ */
+$.watch = (source, fn) => {
+    const read = typeof source === 'function' ? source : () => source.value;
+    let first = true, previous;
+    return $.effect(() => {
+        const v = read();
+        if (first || Object.is(v, previous)) { first = false; previous = v; return; }   // the same answer: nothing changed
+        const was = previous, outer = _observer;
+        previous = v;
+        _observer = null;                                       // untracked: fn's reads are its own
+        try { fn(v, was); } finally { _observer = outer; }
+    });
+};
+
 /** True for what $.signal and $.computed return.  @example $.isSignal(count) → true */
 $.isSignal = (v) => v?.[_SIGNAL] === true;
 const _isSignal = $.isSignal;
@@ -1240,7 +1432,24 @@ const _isSignal = $.isSignal;
 const _isLive = (v) => typeof v === 'function' || _isSignal(v);
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 21. GLOBAL EXPORT
+// 21. THE SAVED THEME, AT LOAD — no flash of the wrong mode
+// ═══════════════════════════════════════════════════════════════════════════
+// The visitor's choice (qry-app's theme.mode) is put on <html> while the page loads: qry.js in
+// <head>, after the stylesheet, and the first frame is already in the chosen mode. Its key is
+// 'qry:theme', or the one this script tag names — `data-theme-persist` ("" turns this off) — and
+// before any choice the tag's `data-theme-initial` ('light' | 'dark'; else the OS decides). theme.init
+// reads both there too: they are written once. A page that sets its own <html data-theme> keeps it.
+// Never throws (storage blocked).
+{
+    const tag = document.currentScript?.dataset ?? {}, key = tag.themePersist ?? 'qry:theme';
+    try {
+        const t = key && (JSON.parse(localStorage.getItem(key)) ?? tag.themeInitial);
+        if ((t === 'light' || t === 'dark') && !document.documentElement.dataset.theme) document.documentElement.dataset.theme = t;   // a page's own data-theme wins (a player view, a deck)
+    } catch { /* no storage: the OS decides until theme.init runs */ }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 22. GLOBAL EXPORT
 // ═══════════════════════════════════════════════════════════════════════════
 
 window.$ = $;

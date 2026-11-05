@@ -35,7 +35,8 @@ export let engine = false;
    engine's own defaults remain the single source of truth. The AI switch is the
    same mechanism, gated by the bound model (none on the engine -> stays disabled). */
 
-const conv = { defs: {}, diffs: JSON.parse(localStorage.getItem('prism_conv') || '{}') };
+const kept = $.store('prism:');                               // never throws (a blocked storage keeps nothing)
+const conv = { defs: {}, diffs: kept.get('conv', {}) };
 const convOpts = () => Object.fromEntries(Object.entries(conv.diffs).map(([k, v]) => [k, String(v)]));
 
 async function loadOptions() {
@@ -46,13 +47,13 @@ async function loadOptions() {
     // from before the switch's value changed (zigzag-gray → zigzag-gray-despeckle) still means "on".
     $.all('.cv-opt').forEach(sw => {
         const k = sw.getAttribute('data-opt'), val = sw.getAttribute('data-value');
-        if (val && k in conv.diffs && conv.diffs[k] !== val) { conv.diffs[k] = val; localStorage.setItem('prism_conv', JSON.stringify(conv.diffs)); }
+        if (val && k in conv.diffs && conv.diffs[k] !== val) { conv.diffs[k] = val; kept.set('conv', conv.diffs); }
         const isOn = (v) => val ? v === val : !!v;
         sw.checked = isOn(k in conv.diffs ? conv.diffs[k] : conv.defs[k]);
         sw.addEventListener('change', e => {
             const v = val ? (e.target.checked ? val : conv.defs[k]) : !!e.target.checked;
             if (v === conv.defs[k] || (!val && v === !!conv.defs[k])) delete conv.diffs[k]; else conv.diffs[k] = v;
-            localStorage.setItem('prism_conv', JSON.stringify(conv.diffs));
+            kept.set('conv', conv.diffs);
         });
     });
     const st = $.opt('#ai-status'), sw = $.opt('#ai-refine');

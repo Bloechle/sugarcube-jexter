@@ -22,13 +22,15 @@
  *
  *   TEXT        labels (the default strings of the whole stack)
  *   PAGE        makeViewer · reveal · scrollSpy · toTop · films · embeds · expire · makeNav · makeSlideshow · urlParam · makeRouter
- *   FORMS       makeForm               (values: form.serialize() — core)
- *   EMBEDDING   loadScript · makeIframeAutoHeight · makeIframeEmbed
- *   FORMAT      format.* (dateTime · stamp · timecode · duration · bytes · number · truncate · day · daysBetween · plural)
+ *               makeFullscreen · makePoll
+ *   FORMS       makeForm · makeChoice · busy  (values: form.serialize() — core)
+ *   EMBEDDING   loadScript · makeIframeAutoHeight · makeIframeEmbed · relay (a same-origin frame's events, on its element)
+ *   MOTION      makeCanvas (sharp, themed, redrawn) · makeLoop (a frame loop that pauses) · makeIdle · makeWakeLock
+ *   FORMAT      format.* (date · dateTime · relativeDay · stamp · clock · timecode · duration · bytes · number · truncate · day · daysBetween · plural)
  *
  * Requires qry.js 3.x (global `$`).
  *
- * @version 3.0.0
+ * @version 3.6.0
  * @author  Jean-Luc Bloechle with Claude.ai
  * @license MIT
  */
@@ -76,19 +78,36 @@ export const labels = {
     missing: '–',                           // makeTable: a cell without a value
     position: '#',                          // makeTable: the header of the `numbered` column
     embed: 'Embedded content',              // embeds(): an iframe's title without data-title
+    viewer: 'Photo viewer',                 // makeViewer(): the dialog it builds (its accessible name)
+    previous: 'Previous',                   // makeViewer(): its ‹ button
+    next: 'Next',                           // makeViewer(): its › button
     play: 'Play',                           // films(): the play button (followed by the film's title)
     refused: 'This type of file is not accepted here',   // readFiles(): a file outside `accept`
     update: 'A new version is ready.',      // makePwa(): the update question
     reload: 'Reload',                       // makePwa(): its button
+    console: 'Console',                     // makeConsole(): its title (and its region's name)
+    level: 'Level',                         // makeConsole(): the name of its level filter
+    all: 'All',                             // makeConsole(): every line
+    warnings: 'Warnings',                   // makeConsole(): warnings and errors
+    errors: 'Errors',                       // makeConsole(): errors only
+    copy: 'Copy',                           // makeConsole(): copy the lines shown
+    clear: 'Clear',                         // makeConsole(): empty it
+    close: 'Close',                         // makeConsole(): its × button (its accessible name)
+    lines: ['line', 'lines'],               // makeConsole(): its count, through format.plural
+    previousMonth: 'Previous month',        // makeCalendar(): its ‹ button (its accessible name)
+    nextMonth: 'Next month',                // makeCalendar(): its › button
+    help: 'Help',                           // toggletips(): the (i) button (its accessible name)
 };
 
 // ════════════════════════════════════════════════════════════════════════════
 // PAGE — what websites kept re-writing by hand
 // ════════════════════════════════════════════════════════════════════════════
 
-/** Photo viewer on your own <dialog>. Links (<a href="big.webp"><img alt="…"></a>) are
- *  delegated: galleries built later by a script just work. A swipe never also closes it.
- *  @param {string|Element} dialog
+/** Photo viewer. Links (<a href="big.webp"><img alt="…"></a>) are delegated: galleries built later
+ *  by a script just work. A swipe never also closes it. `dialog`: your own <dialog> — or null, and it
+ *  builds the standard one (`<dialog class="qry-viewer">`: × , figure, ‹ ›, named by labels), added to
+ *  the body and removed by destroy().
+ *  @param {string|Element|null} dialog
  *  @param {Object} [o]
  *  @param {string} [o.links='a.zoom']   links that open it
  *  @param {string|((a:Element)=>Element[])} [o.group]   their container (a selector: one group each; default: the page) —
@@ -96,7 +115,10 @@ export const labels = {
  *  @param {string} [o.img='img']        in the dialog: where the large image goes
  *  @param {string} [o.caption='figcaption']   where caption + counter go (optional)
  *  @param {string} [o.previous='[data-go="-1"]'] @param {string} [o.next='[data-go="1"]'] @param {string} [o.close='[data-close]']
- *  @param {(a:Element, i:number, n:number) => string} [o.captionText]  caption HTML (default: data-caption · i / n)
+ *  @param {(a:Element, i:number, n:number) => string} [o.captionText]  caption HTML (default: data-caption — else the figcaption of the link's figure — · i / n)
+ *  A link may offer the large image in several sizes: `data-srcset` (+ `data-sizes`, default 100vw)
+ *  go to the large image, its preloaded neighbours and the sliding copies — a phone then loads the
+ *  size it needs, not the biggest file (`href` stays the image a link opens without script).
  *  @param {'slide'|'fade'|false} [o.transition='slide']  from one photo to the next: 'slide' = the
  *                                       photos slide by, the old one out and the next one in, side by
  *                                       side, in the direction of travel (a film strip: --qry-speed-slow,
@@ -110,15 +132,24 @@ export const labels = {
  *                                       the viewer also opens (fade, the photo from 97 %) and closes
  *                                       (a quicker fade) — durations from the --qry-speed tokens.
  *  @returns {{ open:(a:Element)=>void, show:(i:number)=>void, next:()=>void, previous:()=>void, close:()=>void, destroy:()=>void }}
+ *  @example makeViewer(null, { group: '.gallery' })   // the standard dialog, built
  *  @example makeViewer('#viewer', { group: '.gallery' })
  */
+/** @private — a link's caption: its data-caption, else the figcaption of the figure it is in. */
+const _captionOf = (a) => a.dataset.caption ?? a.closest('figure')?.querySelector('figcaption')?.textContent.trim() ?? '';
 export const makeViewer = (dialog, {
     links = 'a.zoom', group = null, img = 'img', caption = 'figcaption',
     previous = '[data-go="-1"]', next = '[data-go="1"]', close = '[data-close]',
-    captionText = (a, i, n) => $.html`${a.dataset.caption && $.html`<span class="qry-viewer-caption">${a.dataset.caption}</span> `}${n > 1 && $.html`<span class="qry-viewer-pos">${i + 1} / ${n}</span>`}`,
+    captionText = (a, i, n) => { const c = _captionOf(a); return $.html`${c && $.html`<span class="qry-viewer-caption">${c}</span> `}${n > 1 && $.html`<span class="qry-viewer-pos">${i + 1} / ${n}</span>`}`; },
     transition = 'slide',
 } = {}) => {
-    const dlg = $(dialog), big = dlg.querySelector(img), cap = dlg.querySelector(caption);
+    const built = dialog == null && $.create('dialog', { class: 'qry-viewer', 'aria-label': labels.viewer },
+        $.create('button', { type: 'button', class: 'close', 'data-close': '', 'aria-label': labels.close, text: '×' }),
+        $.create('figure', {}, $.create('img', { alt: '' }), $.create('figcaption')),
+        $.create('button', { type: 'button', 'data-go': '-1', 'aria-label': labels.previous, text: '‹' }),
+        $.create('button', { type: 'button', 'data-go': '1', 'aria-label': labels.next, text: '›' }));
+    if (built) document.body.append(built);
+    const dlg = built || $(dialog), big = dlg.querySelector(img), cap = dlg.querySelector(caption);
     const bPrev = dlg.querySelector(previous), bNext = dlg.querySelector(next);
     const { on, off, signal } = _scope();
     const DRAG = { start: 10, commit: 1 / 5, flick: .4 };   // px before a drag is ours · share of the width · px/ms
@@ -126,9 +157,16 @@ export const makeViewer = (dialog, {
     let ghost = null, peek = null, peekDir = 0, saved = null, drag = null, closing = null;
     big.draggable = false;                            // a mouse drag never lifts the photo out
     if (getComputedStyle(dlg).touchAction === 'auto') dlg.style.touchAction = 'pan-y pinch-zoom';   // horizontal drags are ours
-    const src = (k) => items[(k + items.length) % items.length].getAttribute('href');
+    const link = (k) => items[(k + items.length) % items.length];
+    /** img shows the k-th link's image: its href, and its data-srcset / data-sizes when it has them */
+    const load = (im, k) => {
+        const a = link(k), set = a.dataset.srcset;
+        if (set) { im.sizes = a.dataset.sizes || '100vw'; im.srcset = set; } else { im.removeAttribute('srcset'); im.removeAttribute('sizes'); }
+        im.src = a.getAttribute('href');
+        return im;
+    };
     const put = (a, i) => {
-        big.src = src(i);
+        load(big, i);
         big.alt = a.querySelector('img')?.alt ?? '';
         cap?.html(captionText(a, i, items.length));
     };
@@ -150,27 +188,27 @@ export const makeViewer = (dialog, {
         if (saved[1] === null) big.removeAttribute('style'); else big.setAttribute('style', saved[1]);
         saved = null;
     };
-    /** A still copy of the large photo, fixed at `r` (never in the page's overflow), `url` its image. */
-    const still = (r, url) => {
+    /** A still copy of the large photo, fixed at `r` (never in the page's overflow); `k`: show the k-th image instead. */
+    const still = (r, k) => {
         const c = big.cloneNode(false);
         c.removeAttribute('id'); c.alt = ''; c.setAttribute('aria-hidden', 'true');
-        if (url) c.src = url;
+        if (k !== undefined) load(c, k);
         Object.assign(c.style, { position: 'fixed', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', margin: '0',
             maxWidth: 'none', maxHeight: 'none', objectFit: 'contain', pointerEvents: 'none', zIndex: '-1', translate: 'none', opacity: '1', scale: 'none' });
         big.before(c);
         return c;
     };
     // dir: +1 next, -1 previous, 0 a jump (open, show(i)) — no animation then.
-    // from: where a finger left the old photo (px) — the slide goes on from there
+    // from: where a finger left the old photo (px) — the slide goes on from there. dir is ON SCREEN (1: the new photo
+    // comes from the right); in a right-to-left page the next photo comes from the left: step() turns one into the other
     const show = (k, dir = 0, from = 0) => {
         if (!items.length) return;                    // nothing opened yet
         index = (k + items.length) % items.length;
         const a = items[index], i = index;
-        if (items.length > 1) for (const d of [1, -1]) new Image().src = src(index + d);   // preload the neighbours
+        if (items.length > 1) for (const d of [1, -1]) load(new Image(), index + d);   // preload the neighbours
         if (!transition || !dir || !dlg.open) { drag = null; stop(); put(a, i); return; }
         if (from) turn++; else stop();                // a drag's photos stay where the finger left them
-        const t = turn, incoming = new Image();
-        incoming.src = src(i);
+        const t = turn, incoming = load(new Image(), i);
         incoming.decode().catch(() => {}).then(async () => {   // the old photo stays until the new one is ready
             if (t !== turn) return;
             const slide = transition === 'slide' && !$.reduced, W = dlg.clientWidth;
@@ -192,6 +230,9 @@ export const makeViewer = (dialog, {
         });
     };
 
+    const flow = () => (getComputedStyle(dlg).direction === 'rtl' ? -1 : 1);   // the reading direction on screen
+    const step = (n) => show(index + n, n * flow());                // the next (1) or the previous (-1) photo
+
     // ── a finger (or pen) drags the photo: it follows, the neighbour shows beside it; let go past
     //    a fifth of the width (or with a flick) and the slide goes on, else it settles back ──
     const release = (cancel) => {
@@ -200,8 +241,8 @@ export const makeViewer = (dialog, {
         _swallowClick(dlg, signal);                   // a drag never also "clicks" (closes)
         const W = dlg.clientWidth, dir = d.dx < 0 ? 1 : -1;
         const go = !cancel && (Math.abs(d.dx) > W * DRAG.commit || (Math.abs(d.v) > DRAG.flick && Math.sign(d.v) === Math.sign(d.dx)));
-        if (!transition) { if (go) show(index + dir, dir); return; }
-        if (go) return show(index + dir, dir, d.dx);
+        if (!transition) { if (go) show(index + dir * flow(), dir); return; }
+        if (go) return show(index + dir * flow(), dir, d.dx);
         const t = ++turn, o = { duration: $.motion(), easing: $.ease() };
         const back = [big.animate([{ translate: `${d.dx}px` }, { translate: '0px' }], o)];
         if (peek) back.push(peek.animate([{ translate: peek.style.translate }, { translate: `${dir * W}px` }], o));
@@ -224,7 +265,7 @@ export const makeViewer = (dialog, {
         drag.v = (e.clientX - drag.x) / Math.max(1, e.timeStamp - drag.t); drag.x = e.clientX; drag.t = e.timeStamp; drag.dx = dx;
         if (!transition) return;
         const dir = dx < 0 ? 1 : -1;
-        if (peekDir !== dir) { peek?.remove(); peek = still(drag.r, src(index + dir)); peekDir = dir; }
+        if (peekDir !== dir) { peek?.remove(); peek = still(drag.r, index + dir * flow()); peekDir = dir; }
         big.style.translate = `${dx}px`;
         peek.style.translate = `${dx + dir * dlg.clientWidth}px`;
     }, on);
@@ -273,20 +314,22 @@ export const makeViewer = (dialog, {
         e.preventDefault();
         open(a);
     }, on);
-    bPrev?.on('click', () => show(index - 1, -1), on);
-    bNext?.on('click', () => show(index + 1, 1), on);
+    bPrev?.on('click', () => step(-1), on);
+    bNext?.on('click', () => step(1), on);
     dlg.querySelector(close)?.on('click', fadeOut, on);
     // a click on the empty dark around the photo closes (the dialog fills the screen: its padding
     // and the figure ARE that dark area — on purpose, unlike a dialog box)
     dlg.on('click', (e) => { if (e.target === dlg || e.target.tagName === 'FIGURE') fadeOut(); }, on);
     dlg.on('cancel', (e) => { if (transition && !closing) { e.preventDefault(); fadeOut(); } }, on);
     dlg.on('keydown', (e) => {
-        if (e.key === 'ArrowRight') show(index + 1, 1);
-        else if (e.key === 'ArrowLeft') show(index - 1, -1);
+        if (items.length < 2) return;                                    // one photo: nothing to slide to
+        const k = $.key(e);
+        if (k === 'ArrowRight') step(1);
+        else if (k === 'ArrowLeft') step(-1);
     }, on);
-    dlg.on('close', () => { stop(); big.removeAttribute('src'); opener?.focus(); }, on);
-    return { open, show: (i) => show(i), next: () => show(index + 1, 1), previous: () => show(index - 1, -1),
-        close: fadeOut, destroy: () => { finishClose(); stop(); off(); } };
+    dlg.on('close', () => { stop(); for (const x of ['srcset', 'sizes', 'src']) big.removeAttribute(x); opener?.focus(); }, on);
+    return { open, show: (i) => show(i), next: () => step(1), previous: () => step(-1),
+        close: fadeOut, destroy: () => { finishClose(); stop(); off(); if (built) built.remove(); } };
 };
 
 /* The page helpers below are one-call actions; each takes `signal` (an AbortSignal) to undo
@@ -368,7 +411,8 @@ export const embeds = (sel = '[data-embed]', { allow = 'autoplay; fullscreen; pi
         if (!box || _modified(e)) return;
         let url = null;
         try { url = new URL(box.dataset.embed, location.href); } catch { /* not a URL: the link stays a link */ }
-        if (!url || (url.protocol !== 'https:' && url.origin !== location.origin)) return;   // the link stays a link
+        const ok = url && (url.protocol === 'https:' || (url.protocol === 'http:' && url.origin === location.origin));
+        if (!ok) return;   // the link stays a link — never javascript: / data: (their origin is "null", as a srcdoc page's)
         e.preventDefault();
         const f = $.create('iframe', { src: url.href, title: box.dataset.title || labels.embed, allow, loading: 'lazy', class: 'qry-embed-frame' });   // fullscreen comes with `allow`
         box.replaceWith(f);
@@ -417,24 +461,33 @@ export const expire = (sel = '[data-until]') => {
 };
 
 /** A site's menu on small screens: the button (`aria-controls` names the menu) opens and
- *  closes it — the state is the button's `aria-expanded`, your CSS shows the menu from it
- *  (`.top:has([aria-expanded="true"]) nav { display: block }`). Escape closes it and gives the
- *  focus back to the button; a click outside or on one of its links closes it too. Without
- *  JavaScript, write the menu visible (or as a plain list of links) — the button only adds.
- *  @returns {{ open: () => void, close: () => void, toggle: () => void, destroy: () => void }}
+ *  closes it — the state is the button's `aria-expanded`, your CSS shows the menu from it.
+ *  It marks <html class="qry-js">: fold the menu and show the button only inside `.qry-js`, so
+ *  without JavaScript the menu stays a plain list of links
+ *  (`.qry-js .top:not(:has([aria-expanded="true"])) nav { display: none }`).
+ *  Escape closes it and gives the focus back to the button; a click outside, on one of its
+ *  links, or the focus leaving the button and the menu (Tab past the last link) closes it too;
+ *  so does the button going (the window grew past your breakpoint): it is never left open
+ *  behind a menu the wide layout shows anyway.
+ *  @returns {{ open: () => void, close: () => void, toggle: () => void, isOpen: () => boolean, destroy: () => void }}
  *  @example makeNav('.nav-toggle')
  */
 export const makeNav = (button, { menu } = {}) => {
+    document.documentElement.cls('+qry-js');
     const btn = $(button), nav = $(menu ?? `#${btn.getAttribute('aria-controls')}`);
     const { on, off } = _scope();
     const isOpen = () => btn.getAttribute('aria-expanded') === 'true';
     const set = (v) => btn.attr('aria-expanded', v ? 'true' : 'false');
+    const inside = (el) => btn.contains(el) || nav.contains(el);
     set(false);
     btn.on('click', () => set(!isOpen()), on);
     document.on('keydown', (e) => { if (e.key === 'Escape' && isOpen()) { set(false); btn.focus(); } }, on);
     nav.onOutside((e) => { if (isOpen() && !e.composedPath().includes(btn)) set(false); }, { event: 'click', ...on });
     nav.on('click', (e) => { if (e.target.closest('a')) set(false); }, on);
-    return { open: () => set(true), close: () => set(false), toggle: () => set(!isOpen()), destroy: off };
+    // the focus went elsewhere in the page (no relatedTarget: a click — onOutside decides)
+    for (const el of [btn, nav]) el.on('focusout', (e) => { if (isOpen() && e.relatedTarget && !inside(e.relatedTarget)) set(false); }, on);
+    window.on('resize', () => { if (isOpen() && !btn.checkVisibility()) set(false); }, { passive: true, ...on });
+    return { open: () => set(true), close: () => set(false), toggle: () => set(!isOpen()), isOpen, destroy: off };
 };
 
 /** Photos (or any slides) that take turns: the children of `box` (or `slides` in it) get the
@@ -443,6 +496,7 @@ export const makeNav = (button, { menu } = {}) => {
  *  the slides stacked, the others at `opacity: 0` (no CSS transition then: it would fight the
  *  fade) — so the first one shows without JavaScript. It waits while the box is off screen or
  *  the tab is hidden; under reduced motion it never moves by itself (show/next/previous still fade).
+ *  The slide that comes next is `is-next`, its lazy images loaded now: it is ready before its turn.
  *  @returns {{ show: (i: number) => void, next: () => void, previous: () => void, destroy: () => void }}
  *  @example makeSlideshow('[data-slideshow]', { slides: 'img', interval: 6000 })
  */
@@ -453,7 +507,9 @@ export const makeSlideshow = (box, { slides = ':scope > *', interval = 6000, tra
         if (!items.length) return;
         const was = items[index];
         index = (k + items.length) % items.length;
-        items.forEach((x, i) => x.cls('is-current', i === index));
+        const next = items[(index + 1) % items.length];
+        items.forEach((x, i) => x.cls('is-current', i === index).cls('is-next', x === next && i !== index));
+        for (const im of [next, ...next.querySelectorAll('img')]) if (im.loading === 'lazy') im.loading = 'eager';
         if (first || !transition || was === items[index]) return;
         const o = { duration: 2 * $.motion('slow'), easing: $.ease('move') };
         for (const x of items) for (const a of x.getAnimations()) a.cancel();
@@ -484,12 +540,13 @@ export const urlParam = (name, ...value) => {
 
 /** A hash router from a table: `{ '#/': home, '#/c/:course': ({ course }) => …, '#/l/:c/:l': … }`.
  *  A pattern matches the whole hash, segment by segment; `:name` captures one segment (decoded).
- *  '' and '#' count as '#/'. A handler gets `(params, { signal, hash })`: `signal` aborts as soon
+ *  '' and '#' count as '#/'. A handler gets `(params, { signal, hash, go })`: `signal` aborts as soon
  *  as a NEWER navigation starts — an async screen checks it after each await and gives up, so a
  *  slow load never paints over the screen the user went to next. What a handler throws (or
  *  rejects) goes to `onError(error, hash)` (default: reportError) — unless it was overtaken.
- *  No match → `notFound(hash, { signal })` (default: go('#/')). Back / forward work (hashchange);
- *  the current route runs at once. Focus and scroll are the app's: after a screen is drawn, move
+ *  No match → `notFound(hash, { signal, go })` (default: go('#/')). Back / forward work (hashchange);
+ *  the current route runs at once — inside makeRouter, before it returns: a handler navigates with the
+ *  `go` it is given, never with the `router` variable (not assigned yet on the first run). Focus and scroll are the app's: after a screen is drawn, move
  *  the focus to its heading (tabindex="-1") and scroll to the top — a screen reader then reads the
  *  new screen, and Tab starts from it.
  *  @param {Object<string, Function>} routes
@@ -520,14 +577,14 @@ export const makeRouter = (routes, { notFound, onError, signal } = {}) => {
         const mine = nav = new AbortController(), hash = norm(location.hash), hit = match(hash);
         current = { hash, route: hit?.route ?? null, params: hit?.params ?? {} };
         try {
-            if (hit) await hit.fn(hit.params, { signal: mine.signal, hash });
-            else if (notFound) await notFound(hash, { signal: mine.signal });
+            if (hit) await hit.fn(hit.params, { signal: mine.signal, hash, go });
+            else if (notFound) await notFound(hash, { signal: mine.signal, go });
             else if (hash !== '#/') go('#/');
         } catch (err) {
             if (!mine.signal.aborted) (onError ?? reportError)(err, hash);
         }
     };
-    const go = (hash) => { if (norm(location.hash) === norm(hash)) run(); else location.hash = hash; };   // the same hash: run it again
+    const go = (hash) => { if (norm(location.hash) === norm(new URL(hash, location.href).hash)) run(); else location.hash = hash; };   // the same hash (as the URL encodes it): run it again
     const destroy = () => { off(); nav?.abort(); };
     if (signal?.aborted) return { go, get current() { return current; }, destroy };
     signal?.addEventListener('abort', destroy, { once: true });
@@ -536,11 +593,129 @@ export const makeRouter = (routes, { notFound, onError, signal } = {}) => {
     return { go, get current() { return current; }, destroy };
 };
 
+/** Full screen for one element (default the whole page), and the button that toggles it: the
+ *  button is aria-pressed while it is on, and HIDDEN where the browser cannot (an iPhone). `active`
+ *  is a signal — true while THIS element is full screen (Escape, F11 and the browser's own exit too).
+ *  @param {string|Element} [el=document.documentElement]
+ *  @param {{button?: string|Element}} [opts]
+ *  @returns {{ active: {value:boolean}, isOpen:()=>boolean, open:()=>Promise<void>, close:()=>Promise<void>, toggle:()=>Promise<void>, destroy:()=>void }}
+ *  @example const fs = makeFullscreen('#stage', { button: '#full' })
+ */
+export const makeFullscreen = (el = document.documentElement, { button } = {}) => {
+    const target = $(el), btn = button ? $(button) : null, { on, off } = _scope();
+    const active = $.signal(document.fullscreenElement === target);
+    document.on('fullscreenchange', () => { active.value = document.fullscreenElement === target; }, on);
+    const isOpen = () => active.peek();
+    const quiet = (p) => Promise.resolve(p).catch(() => {});      // refused (no gesture, an iframe without allow): nothing to say
+    const open = () => (document.fullscreenEnabled && !isOpen() ? quiet(target.requestFullscreen()) : Promise.resolve());
+    const close = () => (isOpen() ? quiet(document.exitFullscreen()) : Promise.resolve());
+    const toggle = () => (isOpen() ? close() : open());
+    if (btn) {
+        btn.hidden = !document.fullscreenEnabled;
+        btn.attr('aria-pressed', active).on('click', toggle, on);
+    }
+    return { active, isOpen, open, close, toggle, destroy() { off(); btn?.attr('aria-pressed', null); } };
+};
+
+/** Run `fn` every `every` ms — the one way to keep a page up to date from a server: never two at
+ *  once (an async fn is awaited before the next wait), paused while the page is hidden (and run at
+ *  once when it comes back, if a turn was missed), a failure reported (reportError) without stopping
+ *  the poll. `now()` runs it at once (a refresh button) and restarts the wait.
+ *  @param {(signal: AbortSignal) => any} fn   gets the poll's signal: aborted by destroy()
+ *  @param {{every?: number, immediate?: boolean}} [opts]  immediate (default true): a first run now
+ *  @returns {{ now:()=>Promise<void>, destroy:()=>void }}
+ *  @example const poll = makePoll(async () => { status.value = await $.load.json('/api/status'); }, { every: 5000 })
+ */
+export const makePoll = (fn, { every = 10000, immediate = true } = {}) => {
+    const { on, off, signal } = _scope();
+    let timer = 0, running = null, due = 0;
+    const wait = () => { clearTimeout(timer); due = Date.now() + every; if (!document.hidden) timer = setTimeout(now, every); };
+    async function now() {
+        clearTimeout(timer);
+        if (signal.aborted) return;
+        if (running) return running;                               // a turn under way: the same one
+        running = (async () => { try { await fn(signal); } catch (e) { if (!signal.aborted) reportError(e); } })();
+        await running;
+        running = null;
+        if (!signal.aborted) wait();
+    }
+    document.on('visibilitychange', () => {
+        if (document.hidden) clearTimeout(timer);
+        else if (!running) { if (Date.now() >= due) now(); else timer = setTimeout(now, due - Date.now()); }
+    }, on);
+    if (immediate) now(); else wait();
+    return { now, destroy() { clearTimeout(timer); off(); } };
+};
+
 // ════════════════════════════════════════════════════════════════════════════
 // FORMS
 // ════════════════════════════════════════════════════════════════════════════
 
-let _errors = 0;
+/** A group of buttons that sets a signal — the segmented choice every page wrote by hand: each
+ *  `[data-value]` button inside `box` (there now or added later) sets `value` on a click, and is
+ *  aria-pressed while it is the value. A signal holding an ARRAY makes it a multiple choice: a click
+ *  adds or removes its value. `data-value` is text; it is read as the signal's type — a number, a
+ *  boolean, or text. The box gets role="group" if it has no role (name it: aria-label).
+ *  @param {string|Element} box
+ *  @param {{value: *}} value   a signal (two-way: set it and the buttons follow)
+ *  @returns {{ element: Element, destroy: () => void }}
+ *  @example <div class="qry-btn-group" aria-label="Speed"><button class="qry-btn" data-value="1">1×</button>…</div>
+ *           makeChoice('.speed', speed)   // speed = $.signal(1)
+ */
+export const makeChoice = (box, value) => {
+    const element = $(box), { on, off } = _scope();
+    if (!element.hasAttribute('role')) element.attr('role', 'group');
+    const many = () => Array.isArray(value.peek());
+    const sample = () => (many() ? value.peek()[0] : value.peek());
+    const read = (b) => {
+        const t = b.dataset.value, kind = typeof sample();
+        return kind === 'number' ? Number(t) : kind === 'boolean' ? t === 'true' : t;
+    };
+    const added = $.signal(0);                                       // buttons added later are painted too
+    const paint = () => {
+        added.value;
+        const v = value.value;                                       // tracked: the buttons follow
+        for (const b of element.querySelectorAll('[data-value]')) {
+            const x = read(b);
+            b.attr('aria-pressed', Array.isArray(v) ? v.includes(x) : Object.is(v, x));
+        }
+    };
+    const stop = $.effect(paint);
+    element.delegate('[data-value]', 'click', function () {
+        const x = read(this), v = value.peek();
+        value.value = Array.isArray(v) ? (v.includes(x) ? v.filter((y) => y !== x) : [...v, x]) : x;
+    }, on);
+    const watch = new MutationObserver(() => { added.value += 1; });
+    watch.observe(element, { childList: true, subtree: true });
+    return { element, destroy() { stop(); watch.disconnect(); off(); } };
+};
+
+/** Run `task` with `el` (an element, or several) BUSY: aria-busy, and the controls among them that
+ *  were enabled disabled — the native property, so an app's own binding on them is kept — then put
+ *  back as they were, the focus too (a disabled button drops it). Called again while it runs, it
+ *  gives the same promise: a second click never starts a second task. → the task's result.
+ *  @param {Element|Element[]|string} el  @param {() => any} task
+ *  @example save.on('click', () => busy(save, () => $.load.json('/api/save', { method: 'POST', body: doc.value })))
+ */
+const _busy = new WeakMap();                                       // the first element → the task it runs
+export const busy = (el, task) => {
+    const els = [].concat(el).map((x) => $(x)), lead = els[0];
+    if (_busy.has(lead)) return _busy.get(lead);
+    const had = document.activeElement, controls = els.filter((x) => 'disabled' in x && !x.disabled);
+    for (const x of els) x.attr('aria-busy', true);
+    for (const x of controls) x.disabled = true;
+    const run = (async () => {
+        try { return await task(); } finally {
+            for (const x of els) x.attr('aria-busy', null);
+            for (const x of controls) x.disabled = false;
+            _busy.delete(lead);
+            if (controls.includes(had) && (!document.activeElement || document.activeElement === document.body)) had.focus();
+        }
+    })();
+    _busy.set(lead, run);
+    return run;
+};
+
 /** The browser's own validation (required, type, pattern, min/max…), shown properly:
  *  the message under the field (.qry-field-error, linked by aria-describedby — one per radio
  *  group, in its fieldset), the field marked aria-invalid, the first error focused, re-checked
@@ -562,7 +737,7 @@ export const makeForm = (form, { onSubmit } = {}) => {
         const lead = group(el)[0];
         const id = lead.getAttribute('aria-describedby')?.split(' ').find((x) => x.startsWith('qry-err-'));
         if (id) return document.getElementById(id);
-        const e = $.create('span', { class: 'qry-field-error', id: `qry-err-${_errors += 1}`, 'aria-live': 'polite' });
+        const e = $.create('span', { class: 'qry-field-error', id: $.uid('qry-err'), 'aria-live': 'polite' });
         const host = lead.type === 'radio' ? lead.closest('fieldset, [role="radiogroup"], .qry-field') ?? lead.parentElement : lead.closest('.qry-field') ?? lead.parentElement;
         made.push(e.mount(host));
         for (const x of group(el)) x.attr('aria-describedby', [x.getAttribute('aria-describedby'), e.id].filter(Boolean).join(' '));
@@ -590,17 +765,13 @@ export const makeForm = (form, { onSubmit } = {}) => {
     f.on('input change', onInput, on);
     f.on('submit', async (e) => {
         e.preventDefault();
+        if (f.getAttribute('aria-busy') === 'true') return;             // sending: Enter in a field (no submit button to disable) waits
         tried = true;
         formError.hidden = true;
         const bad = fields().filter((el) => !check(el));
         if (bad.length) { bad[0].focus(); return; }
-        const buttons = f.find('button:not([type="button"]), [type="submit"]').filter((b) => !b.disabled);   // the app's own disabled stay so
-        // the native property, not enable(): a setter would replace an app's own binding on the button for good
-        const busy = (b) => { f.attr('aria-busy', b && 'true'); for (const x of buttons) { x.disabled = b; x.attr('aria-busy', b && 'true'); } };
-        busy(true);
-        try { await onSubmit?.(f.serialize(), f); }
+        try { await busy([f, ...f.find('button:not([type="button"]), [type="submit"]')], () => onSubmit?.(f.serialize(), f)); }
         catch (err) { formError.text(err?.message || String(err)).hidden = false; }
-        finally { busy(false); }
     }, on);
     const clear = () => [...f.elements].forEach((el) => el.attr('aria-invalid', null));
     return {
@@ -654,8 +825,9 @@ const _IFRAME_HEIGHT = 'qry:iframe-height';
  */
 export const makeIframeAutoHeight = ({ origin, min = 20, debounce = 250 } = {}) => {
     if (!origin || origin === '*') throw new Error('makeIframeAutoHeight: `origin` (the parent page origin) is required');
+    origin = new URL(origin).origin;                                     // 'https://x.example/' or with a path: its origin
     const { on, off, signal } = _scope();
-    const mark = $.opt('#qry-iframe-sentinel') ?? $.create('div', { id: 'qry-iframe-sentinel', style: { width: 0, height: 0 } });
+    const found = $.opt('#qry-iframe-sentinel'), mark = found ?? $.create('div', { id: 'qry-iframe-sentinel', style: { width: 0, height: 0 } });
     let lastH = 0;
     const send = () => {
         if (signal.aborted) return;
@@ -675,7 +847,7 @@ export const makeIframeAutoHeight = ({ origin, min = 20, debounce = 250 } = {}) 
         /** Post an app message to the parent; the type is prefixed `qry:` so makeIframeEmbed's
          *  onMessage receives it. @example post('show-modal', { id: 42 }) */
         post: (type, data = {}) => parent.postMessage({ ...data, type: type.startsWith('qry:') ? type : 'qry:' + type }, origin),
-        destroy() { off(); later.cancel(); mo.disconnect(); },
+        destroy() { off(); later.cancel(); mo.disconnect(); if (!found) mark.remove(); },
     };
 };
 
@@ -695,6 +867,7 @@ export const makeIframeAutoHeight = ({ origin, min = 20, debounce = 250 } = {}) 
  */
 export const makeIframeEmbed = (target, { origin, min = 0, max = 20000, buffer = 0, fallbackHeight, fallbackDelay = 3000, onMessage } = {}) => {
     if (!origin || origin === '*') throw new Error('makeIframeEmbed: `origin` (the iframe origin to trust) is required');
+    origin = new URL(origin).origin;                                     // compared with e.origin: no slash, no path
     const frame = $(target);
     const { on, off } = _scope();
     const apply = (px) => frame.css('height', $.clamp(px + buffer, min, max) + 'px');
@@ -710,34 +883,238 @@ export const makeIframeEmbed = (target, { origin, min = 0, max = 20000, buffer =
     return { destroy() { off(); clearTimeout(timer); } };
 };
 
+/** The events of a SAME-ORIGIN iframe, raised again on the <iframe> element itself — so the page's
+ *  own helpers (a zoom on Ctrl + wheel, a drop zone, keyboard shortcuts, a pan by the middle button)
+ *  work over the frame as over any element. Each listed type is re-dispatched with its data (keys,
+ *  buttons, deltas, the DataTransfer of a drop) and its coordinates mapped to the page (through the
+ *  frame's box, its border and a CSS scale); a relayed event that is cancelled cancels the original.
+ *  It re-attaches when the frame loads another page; a cross-origin frame relays nothing.
+ *  @param {string|HTMLIFrameElement} frame
+ *  @param {string} types  space-separated: 'wheel keydown dragover drop pointerdown'…
+ *  @param {{signal?: AbortSignal}} [opts]
+ *  @returns {{ destroy: () => void }}
+ *  @example relay('#stage-frame', 'wheel dragenter dragover dragleave drop keydown')
+ */
+const _RELAYED = ['bubbles', 'cancelable', 'composed', 'detail', 'clientX', 'clientY', 'screenX', 'screenY', 'button', 'buttons',
+    'ctrlKey', 'shiftKey', 'altKey', 'metaKey', 'key', 'code', 'location', 'repeat', 'isComposing', 'deltaX', 'deltaY', 'deltaZ', 'deltaMode',
+    'pointerId', 'pointerType', 'isPrimary', 'pressure', 'width', 'height', 'dataTransfer', 'relatedTarget'];
+export const relay = (frame, types, { signal } = {}) => {
+    const f = $(frame), { on, off } = _scope();
+    let detach = null;
+    const attach = () => {
+        detach?.();
+        let doc = null;
+        try { doc = f.contentDocument; } catch { /* cross-origin */ }
+        if (!doc) return;
+        const ac = new AbortController();
+        for (const type of types.split(/\s+/).filter(Boolean)) doc.addEventListener(type, (e) => {
+            const t = e.target;
+            if (e.key !== undefined && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;   // a field in the frame keeps its keys
+            const init = {};
+            for (const k of _RELAYED) if (k in e) init[k] = e[k];
+            if ('clientX' in e) {                                    // the frame's viewport → the page's
+                const r = f.getBoundingClientRect(), k = f.offsetWidth ? r.width / f.offsetWidth : 1;
+                init.clientX = r.left + (f.clientLeft + e.clientX) * k;
+                init.clientY = r.top + (f.clientTop + e.clientY) * k;
+            }
+            const Type = globalThis[e.constructor.name] ?? Event;    // the page's own class, not the frame's
+            const again = new Type(type, { ...init, bubbles: true, cancelable: e.cancelable });
+            if (!f.dispatchEvent(again)) e.preventDefault();
+        }, { signal: ac.signal, passive: false });
+        detach = () => ac.abort();
+    };
+    f.on('load', attach, on);
+    attach();
+    const destroy = () => { off(); detach?.(); };
+    signal?.addEventListener('abort', destroy, { once: true });
+    return { destroy };
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// MOTION — a sharp canvas, a frame loop, chrome that steps aside, the screen awake
+// ════════════════════════════════════════════════════════════════════════════
+
+/** A canvas that stays sharp and in the theme: its bitmap follows its CSS box ×
+ *  devicePixelRatio, and `draw(ctx, { width, height, dpr, color })` runs again on resize, on a
+ *  theme change (qry:theme, the OS) and on redraw() — once per frame at most. The context is
+ *  scaled: draw in CSS px. `color(token)` resolves a --qry-* token where the canvas is (a canvas
+ *  cannot read CSS variables) — cached until the theme changes, so a 60 fps loop may call it freely. Size the canvas with CSS (e.g. width: 100%; height: 240px, or
+ *  width: 100% alone to keep its aspect).
+ *  @param {string|HTMLCanvasElement} canvas
+ *  @param {{draw?: Function}} [opts]
+ *  @returns {{ canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, redraw: () => void, destroy: () => void }}
+ *  @example makeCanvas('#chart', { draw(ctx, { width, height, color }) { ctx.fillStyle = color('--qry-accent'); ctx.fillRect(0, 0, width / 2, height); } })
+ */
+export const makeCanvas = (canvas, { draw } = {}) => {
+    const c = $(canvas), ctx = c.getContext('2d');
+    const { on, off } = _scope();
+    let size = { width: 0, height: 0 }, raf = 0;
+    const colors = new Map();
+    const color = (token) => colors.get(token) ?? colors.set(token, $.color(token, c)).get(token);
+    const paint = () => {
+        raf = 0;
+        if (!size.width || !size.height) return;
+        const dpr = devicePixelRatio || 1, w = Math.round(size.width * dpr), h = Math.round(size.height * dpr);
+        if (c.width !== w || c.height !== h) {
+            const box = c.getBoundingClientRect();
+            c.width = w; c.height = h;
+            const r = c.getBoundingClientRect();                       // its box moved: sized by its attributes, not by CSS — pin it
+            if (Math.abs(r.width - box.width) > 0.5 || Math.abs(r.height - box.height) > 0.5) c.css({ width: box.width + 'px', height: box.height + 'px' });
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, size.width, size.height);
+        draw?.(ctx, { ...size, dpr, color });
+    };
+    const redraw = () => { raf ||= requestAnimationFrame(paint); };
+    const retheme = () => { colors.clear(); redraw(); };
+    c.onResize((s) => { size = s; redraw(); }, on);
+    document.documentElement.on('qry:theme', retheme, on);
+    const stopOs = $.watch($.media('(prefers-color-scheme: dark)'), retheme);
+    return { canvas: c, ctx, redraw, destroy() { off(); stopOs(); cancelAnimationFrame(raf); } };
+};
+
+/** An animation loop — a figure that moves (a rotating cloud of dots, a ball in flight). `tick(dt, t)`
+ *  runs once per frame while `when` holds (a signal or a function, read in an effect; default
+ *  always): `dt` is the seconds since the previous frame (capped at 0.1 s), `t` the seconds the loop
+ *  has run. Stopped (`when` false, the tab hidden), it resumes where it was: a pause never counts in
+ *  `dt` or `t`. Reduced motion is the figure's call (`$.reduced`): it may draw one still frame.
+ *  @param {(dt: number, t: number) => void} tick
+ *  @param {{when?: boolean|{value: boolean}|(() => boolean)}} [opts]
+ *  @returns {{ isRunning: () => boolean, destroy: () => void }}
+ *  @example makeLoop((dt) => { angle += dt * 0.8; view.redraw(); }, { when: active })
+ */
+/** @private — a `when` option read in an effect: a boolean, a signal or a function (makeLoop, makeWakeLock). */
+const _when = (when) => !!(typeof when === 'function' ? when() : typeof when === 'boolean' ? when : when?.value);
+export const makeLoop = (tick, { when = () => true } = {}) => {
+    const { on, off } = _scope();
+    let raf = 0, last = 0, t = 0, want = false;
+    const frame = (now) => {
+        const dt = last ? Math.min((now - last) / 1000, 0.1) : 0;
+        last = now; t += dt;
+        raf = 0;
+        try { tick(dt, t); } catch (err) { want = false; console.error('makeLoop: the tick threw — the loop stops', err); return; }
+        if (want && !document.hidden && !raf) raf = requestAnimationFrame(frame);   // the tick's writes may have queued it already
+    };
+    const sync = () => {
+        const go = want && !document.hidden;
+        if (go && !raf) { last = 0; raf = requestAnimationFrame(frame); }
+        else if (!go && raf) { cancelAnimationFrame(raf); raf = 0; }
+    };
+    const stop = $.effect(() => { want = _when(when); sync(); });
+    document.on('visibilitychange', sync, on);
+    return { isRunning: () => !!raf, destroy() { off(); stop(); want = false; sync(); } };
+};
+
+/** Chrome that steps aside while nobody moves: after `after` ms without a pointer move, a key or a
+ *  touch, `el` gets the class `is-idle` (your CSS fades the bar, hides the cursor) and `onIdle`
+ *  runs; the next move takes it away (`onActive`). Never idle while `busy()` says so (a menu open, a
+ *  drag) or while the keyboard's focus is inside `el` (a button just clicked does not hold it).
+ *  `keys: false` follows the pointer alone: a key neither wakes it nor holds it (chrome over a
+ *  stimulus that the keyboard drives). `wake(ms)` shows the chrome now, for `ms` at least.
+ *  @param {string|Element} el  what goes idle (often the page, or a player)
+ *  @param {{after?: number, keys?: boolean, busy?: () => boolean, onIdle?: Function, onActive?: Function}} [opts]
+ *  @returns {{ wake: (ms?: number) => void, isIdle: () => boolean, destroy: () => void }}
+ *  @example makeIdle('#stage', { after: 2500, busy: () => menu.isOpen() })   // CSS: #stage.is-idle .bar { opacity: 0 }
+ */
+export const makeIdle = (el, { after = 2500, keys = true, busy, onIdle, onActive } = {}) => {
+    const box = $(el), { on, off } = _scope();
+    let timer = 0, until = 0;
+    const idle = () => {
+        if (busy?.() || (keys && box.querySelector(':focus-visible')) || Date.now() < until) return arm(Math.max(after / 4, until - Date.now()));   // the KEYBOARD's focus holds it (a clicked Play does not)
+        if (!box.cls('?is-idle')) { box.cls('+is-idle'); onIdle?.(); }
+    };
+    const arm = (ms) => { clearTimeout(timer); timer = setTimeout(idle, ms); };
+    const wake = (ms = after) => { if (ms > after) until = Date.now() + ms; if (box.cls('?is-idle')) { box.cls('-is-idle'); onActive?.(); } arm(Math.max(ms, after)); };
+    for (const type of ['pointermove', 'pointerdown', 'wheel', ...(keys ? ['keydown'] : [])]) document.on(type, () => wake(), { ...on, passive: true });
+    arm(after);
+    return { wake, isIdle: () => box.cls('?is-idle'), destroy() { off(); clearTimeout(timer); box.cls('-is-idle'); } };
+};
+
+/** Keep the screen awake while `when` holds — a signal or a function read in an effect (a
+ *  metronome playing, a score on the music stand). The lock is taken again when the page comes
+ *  back (the browser drops it when the tab is hidden); without the API it does nothing.
+ *  @param {{when?: boolean|{value: boolean}|(() => boolean)}} [opts]  default: always
+ *  @returns {{ isHeld: () => boolean, destroy: () => void }}
+ *  @example makeWakeLock({ when: () => playing.value })
+ */
+export const makeWakeLock = ({ when = () => true } = {}) => {
+    const { on, off } = _scope();
+    let lock = null, want = false, asking = false;
+    const release = () => { lock?.release().catch(() => {}); lock = null; };
+    const take = async () => {
+        if (!want || lock || asking || document.hidden || !navigator.wakeLock) return;
+        asking = true;                                                    // one request at a time: never two locks
+        try {
+            const l = await navigator.wakeLock.request('screen');
+            l.addEventListener('release', () => { if (lock === l) lock = null; });
+            lock = l;
+            if (!want) release();                                         // turned off while asking
+        } catch { /* refused (a battery saver, no user gesture yet): the screen may sleep */ }
+        finally { asking = false; }
+    };
+    const stop = $.effect(() => { want = _when(when); if (want) take(); else release(); });
+    document.on('visibilitychange', () => { if (!document.hidden) take(); }, on);
+    return { isHeld: () => !!lock, destroy() { off(); stop(); want = false; release(); } };
+};
+
 // ════════════════════════════════════════════════════════════════════════════
 // FORMAT — values to text, and local calendar days
 // ════════════════════════════════════════════════════════════════════════════
 
+/** @private — Intl.DateTimeFormat's options that choose what is shown (any one: no default style). */
+const _DATE_FIELDS = ['dateStyle', 'timeStyle', 'weekday', 'era', 'year', 'month', 'day', 'hour', 'minute', 'second'];
 /** @private — zero-pad a number to `w` digits. */
 const _pad = (n, w = 2) => String(n).padStart(w, '0');
+/** @private — the page's language for Intl, or undefined (a typo like `fr_CH` must not throw). */
+const _locale = () => { try { return Intl.getCanonicalLocales(document.documentElement.lang || [])[0]; } catch { return undefined; } };
+/** @private — a Date for a value; a `YYYY-MM-DD` is a LOCAL day (new Date('2026-10-25') is UTC midnight). */
+const _localDay = (v) => { if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) { const [y, m, d] = v.split('-').map(Number); return new Date(y, m - 1, d); } return new Date(v); };
 
-/** Display formatters: value → string, and local calendar days. Pure (bytes and plural read <html lang>).
+/** Display formatters: value → string, and local calendar days. Pure (bytes, plural, date and relativeDay read <html lang>).
  *  @example format.duration(90000) // → '1m 30s'
  *  @example format.bytes(1536)     // → '1.5 kB' ('1,5 ko' on a page in French)
  */
 export const format = {
-    /** ms → `1h 02m`, `5m 03s`, `820ms`. @param {number} ms */
+    /** ms → `2d 03h`, `1h 02m`, `5m 03s`, `820ms` (the two largest units). @param {number} ms */
     duration(ms) {
         ms = Math.round(ms);
         if (ms < 1000) return `${ms}ms`;
-        const s = Math.floor(ms / 1000) % 60, m = Math.floor(ms / 60000) % 60, h = Math.floor(ms / 3600000);
-        return h ? `${h}h ${_pad(m)}m` : m ? `${m}m ${_pad(s)}s` : `${s}s`;
+        const s = Math.floor(ms / 1000) % 60, m = Math.floor(ms / 60000) % 60, h = Math.floor(ms / 3600000) % 24, d = Math.floor(ms / 864e5);
+        return d ? `${d}d ${_pad(h)}h` : h ? `${h}h ${_pad(m)}m` : m ? `${m}m ${_pad(s)}s` : `${s}s`;
     },
     /** bytes → `1.5 kB`, `3.2 MB` — in the page's language (<html lang>): `1,5 ko` in French,
      *  `1,5 kB` in German (Intl units, binary steps of 1024). Below a kilobyte the unit is written in
      *  full — `60 bytes`, `60 octets` — since CLDR's short form is singular in English (`60 byte`).
      *  @param {number} n  @param {{locale?: string}} [opts] */
-    bytes(n, { locale = document.documentElement.lang || undefined } = {}) {
-        const units = ['byte', 'kilobyte', 'megabyte', 'gigabyte', 'terabyte'];
-        const i = n > 0 ? $.clamp(Math.floor(Math.log(n) / Math.log(1024)), 0, units.length - 1) : 0;
+    bytes(n, { locale = _locale() } = {}) {
+        const units = ['byte', 'kilobyte', 'megabyte', 'gigabyte', 'terabyte'], a = n > 0 ? n : 0;   // nothing below zero
+        let i = a > 0 ? $.clamp(Math.floor(Math.log(a) / Math.log(1024)), 0, units.length - 1) : 0;
+        if (i && i < units.length - 1 && Math.round(a / 1024 ** i * 10) / 10 >= 1024) i += 1;   // 1048575 is 1 MB, not « 1,024 kB »
         return new Intl.NumberFormat(locale, { style: 'unit', unit: units[i], unitDisplay: i ? 'short' : 'long', maximumFractionDigits: i ? 1 : 0 })
-            .format(n > 0 ? n / 1024 ** i : 0);
+            .format(a / 1024 ** i);
+    },
+    /** ms → a running clock, `m:ss` or `h:mm:ss` (an elapsed time, a countdown; `-0:05` below zero).
+     *  @example format.clock(65000) → '1:05'   format.clock(3723000) → '1:02:03' */
+    clock(ms) {
+        const sign = ms < 0 ? '-' : '', t = Math.floor(Math.abs(ms) / 1000);
+        const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, sec = _pad(t % 60);
+        return sign + (h ? `${h}:${_pad(m)}:${sec}` : `${m}:${sec}`);
+    },
+    /** A date for people, in the page's language (<html lang>): `opts` are Intl.DateTimeFormat's
+     *  (default `{ dateStyle: 'medium' }`; `timeStyle`, `weekday`, `timeZone`… as you need). A
+     *  `YYYY-MM-DD` is a LOCAL day.
+     *  @example format.date('2026-11-05') → 'Nov 5, 2026' ('5 nov. 2026' on a page in French)
+     *  @example format.date(t, { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Zurich' }) */
+    date(d, { locale = _locale(), ...opts } = {}) {
+        if (!_DATE_FIELDS.some((k) => k in opts)) opts.dateStyle = 'medium';   // a timeZone alone still says the date
+        return new Intl.DateTimeFormat(locale, opts).format(_localDay(d));
+    },
+    /** A calendar day said from today, in the page's language: 'today', 'yesterday', 'in 2 days',
+     *  '5 days ago' (Intl.RelativeTimeFormat) — a week away or more, the date itself (format.date).
+     *  @example format.relativeDay(format.day(-1)) → 'yesterday' ('hier' in French) */
+    relativeDay(d, { locale = _locale() } = {}) {
+        const n = format.daysBetween(new Date(), d);
+        return Math.abs(n) < 7 ? new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(n, 'day') : format.date(d, { locale });
     },
     /** Date|number|string → `YYYY-MM-DD HH:MM` (local time). */
     dateTime(d) {
@@ -761,20 +1138,17 @@ export const format = {
     truncate(s, max) { return !s || s.length <= max ? s : s.slice(0, Math.max(0, max - 1)) + '…'; },
     /** A LOCAL calendar day `YYYY-MM-DD`, `offset` days from `from` (default today). Calendar
      *  arithmetic, never ±24 h: around a change of clock (a 23 h or 25 h day) "yesterday" stays
-     *  yesterday. (toISOString() would give the UTC day.)
+     *  yesterday. (toISOString() would give the UTC day.) `from`: a Date, a time, or a `YYYY-MM-DD` read as a LOCAL day.
      *  @example format.day() → '2026-10-03'   format.day(-1) → '2026-10-02' */
     day(offset = 0, from = new Date()) {
-        const x = new Date(from);
+        const x = _localDay(from);
         const d = new Date(x.getFullYear(), x.getMonth(), x.getDate() + offset);
         return `${d.getFullYear()}-${_pad(d.getMonth() + 1)}-${_pad(d.getDate())}`;
     },
     /** Whole calendar days from `a` to `b` (default today): a `YYYY-MM-DD` (read as a LOCAL day) or
      *  a Date. Exact across clock changes.  @example format.daysBetween(lastSeen) → 3 */
     daysBetween(a, b = new Date()) {
-        const utc = (v) => {
-            if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) { const [y, m, d] = v.split('-').map(Number); return Date.UTC(y, m - 1, d); }
-            const x = new Date(v); return Date.UTC(x.getFullYear(), x.getMonth(), x.getDate());
-        };
+        const utc = (v) => { const x = _localDay(v); return Date.UTC(x.getFullYear(), x.getMonth(), x.getDate()); };
         return Math.round((utc(b) - utc(a)) / 864e5);
     },
     /** A count and its word, by the language's plural rules (Intl.PluralRules): `forms` is
@@ -782,7 +1156,7 @@ export const format = {
      *  page's <html lang>. French counts 0 and 1 as one: '0 jour', '1 jour', '2 jours'.
      *  @example format.plural(3, ['jour', 'jours']) → '3 jours'
      *  @example format.plural(2, { one: 'plik', few: 'pliki', many: 'plików', other: 'pliku' }, { locale: 'pl' }) → '2 pliki' */
-    plural(n, forms, { locale = document.documentElement.lang || undefined } = {}) {
+    plural(n, forms, { locale = _locale() } = {}) {
         const cat = new Intl.PluralRules(locale).select(n);
         const word = Array.isArray(forms) ? forms[cat === 'one' ? 0 : forms.length - 1] : forms[cat] ?? forms.other;
         return `${n} ${word}`;
