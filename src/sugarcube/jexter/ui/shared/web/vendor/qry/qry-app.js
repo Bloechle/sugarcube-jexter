@@ -26,7 +26,7 @@
  *
  * Requires qry.js 3.x (global `$`) and qry-web.js beside this file.
  *
- * @version 3.7.1
+ * @version 3.8.1
  * @author  Jean-Luc Bloechle with Claude.ai
  * @license MIT
  */
@@ -940,7 +940,8 @@ export const makeZoomPan = (stage, {
  *  The browser already opens, closes, light-dismisses and handles Escape; qry-ui.css places it
  *  under its button with CSS anchor positioning (flipping at the viewport edges). makeMenu adds
  *  what a menu needs on top: an explicit anchor, the ARIA menu pattern (roles, aria-haspopup,
- *  aria-expanded), focus on the first item, ↑/↓/Home/End between items, Tab closes, a click
+ *  aria-expanded), focus on the first item, ↑/↓/Home/End between items (and from the button while it is open — a
+ *  key pressed before the focus moved in never reaches the page's shortcuts), Tab closes, a click
  *  on an item calls onSelect and closes (an item marked `data-keep` keeps it open: a size − / +).
  *  Items can be added later: they are read on open. A menu built in a row not yet in the page finds
  *  its button in that row (its root node), and is given an id when it has none.
@@ -960,6 +961,13 @@ export const makeMenu = (menu, { button, onSelect } = {}) => {
     const items = () => m.find(':scope > :is(button, a, [role="menuitem"])').filter((i) => !i.disabled && !i.hidden);
     m.on('beforetoggle', (e) => { if (e.newState === 'open') items().forEach((i) => i.attr({ role: 'menuitem', tabindex: '-1' })); }, on);
     m.on('toggle', (e) => { if (e.newState === 'open') items()[0]?.focus(); }, on);   // focusable once shown
+    b?.on('keydown', (e) => {                           // ↓ ↑ Home End on the button of an OPEN menu go into it: the toggle's focus
+        if (!m.matches(':popover-open')) return;        // is async, and a key in that gap must not reach the page's shortcuts
+        const list = items(), j = { ArrowDown: 0, Home: 0, ArrowUp: list.length - 1, End: list.length - 1 }[e.key];
+        if (j === undefined || !list.length) return;
+        e.preventDefault();
+        list[j].focus();
+    }, on);
     m.on('keydown', (e) => {
         if (e.key === 'Tab') { m.hidePopover(); return; }
         const list = items(), i = list.indexOf(document.activeElement), n = list.length;

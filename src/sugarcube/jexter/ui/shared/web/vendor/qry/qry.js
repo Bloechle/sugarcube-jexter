@@ -12,7 +12,7 @@
  * `signal` option: abort its AbortController and everything it wired goes away — ONE teardown
  * model. Setters given a signal or a function follow it (see SETTERS).
  *
- * @version 3.7.1
+ * @version 3.8.1
  * @author Jean-Luc Bloechle with Claude.ai
  * @license MIT
  */
@@ -1388,14 +1388,23 @@ const _effect = (fn, computed = false) => {
  */
 $.effect = (fn) => _effect(fn);
 
-/** A read-only signal computed from others, kept up to date (before the effects that read it).
+/** A signal computed from others, kept up to date (before the effects that read it). Read-only — or,
+ *  given `write`, a value that lives elsewhere: reading is `fn()` (whoever reads it follows what fn reads),
+ *  writing calls `write(v)` (a server's setting: send it, the state that comes back is the new value). A
+ *  makeChoice or a checkbox's `val` then reads and writes it like any signal. The writable form keeps no
+ *  effect of its own: made for each field of a form rebuilt, it leaves nothing behind.
+ *  @param {() => *} fn  @param {(v: *) => void} [write]
  *  @example const left = $.computed(() => todos.value.filter(t => !t.done).length)
+ *  @example makeChoice('#views', $.computed(() => state.value.quad, (on) => api.setConfig({ quad: on })))
  */
-$.computed = (fn) => {
+$.computed = (fn, write) => {
+    if (write) return { [_SIGNAL]: true, get value() { return fn(); }, set value(v) { write(v); }, peek: () => _untracked(fn) };
     const s = $.signal(undefined), e = _effect(() => { s.value = fn(); }, true).effect;
     const fresh = () => { if (_pending.delete(e)) e.run(); };   // read in a batch, or by an effect before its turn: computed first
     return { [_SIGNAL]: true, get value() { fresh(); return s.value; }, peek: () => { fresh(); return s.peek(); } };
 };
+/** @private — fn() read by no one: what it reads subscribes nothing. */
+const _untracked = (fn) => { const outer = _observer; _observer = null; try { return fn(); } finally { _observer = outer; } };
 
 /** Several writes, one update: the effects run once, after fn.
  *  @example $.batch(() => { first.value = 'Ada'; last.value = 'Lovelace'; })
@@ -1417,10 +1426,9 @@ $.watch = (source, fn) => {
     return $.effect(() => {
         const v = read();
         if (first || Object.is(v, previous)) { first = false; previous = v; return; }   // the same answer: nothing changed
-        const was = previous, outer = _observer;
+        const was = previous;
         previous = v;
-        _observer = null;                                       // untracked: fn's reads are its own
-        try { fn(v, was); } finally { _observer = outer; }
+        _untracked(() => fn(v, was));                           // fn's reads are its own
     });
 };
 

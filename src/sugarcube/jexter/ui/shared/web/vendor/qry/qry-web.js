@@ -30,7 +30,7 @@
  *
  * Requires qry.js 3.x (global `$`).
  *
- * @version 3.7.1
+ * @version 3.8.1
  * @author  Jean-Luc Bloechle with Claude.ai
  * @license MIT
  */
