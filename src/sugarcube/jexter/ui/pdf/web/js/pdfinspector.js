@@ -13,7 +13,7 @@
  *   GET  /api/tree?root=doc → [node…]         GET /api/content?page · /api/stream?obj · /api/render?obj · /api/text?page
  */
 import '/shared/js/icons.js';                          // the apps' icon set (icons.add): registered before boot() draws
-import { boot, theme, toast, saveFile, makeTabs, makeSplitter, makeDropZone, makeMenu, makeDialog, infoRow as makeRow, makeTable, makeEvents } from '/shared/vendor/qry/qry-app.js';
+import { boot, theme, toast, saveFile, makeChoice, makeTabs, makeSplitter, makeDropZone, makeMenu, makeDialog, infoRow as makeRow, makeTable, makeEvents } from '/shared/vendor/qry/qry-app.js';
 import { loadOcd } from '/shared/js/ocd.js';   // the OCD-EPUB carries the fonts (pages/fonts.svg, the single representation)
 
 const R = Math.round;
@@ -172,7 +172,7 @@ function makeDetail(host) {
     host.empty();
     const head = $.create('div', { class: 'pi-detail-head' });
     const title = $.create('span', { class: 'pi-detail-title', text: '\u2014' });
-    const views = $.create('div', { class: 'render-src' });
+    const views = $.create('div', { class: 'render-src', 'aria-label': 'View' }), view = $.signal(null);
     head.add(title).add(views);
     const body = $.create('div', { class: 'pi-detail-body' });
     const pre = $.create('pre', { class: 'pi-pre' });
@@ -188,18 +188,18 @@ function makeDetail(host) {
     ];
     const btns = {};
     DEFS.forEach(d => {
-        const b = $.create('button', { class: 'srcbtn', 'data-view': d.id, type: 'button', title: d.label });
+        const b = $.create('button', { class: 'srcbtn', 'data-value': d.id, type: 'button', title: d.label });
         b.html(`<i data-icon="${d.icon}"></i><span>${d.label}</span>`);
-        b.on('click', () => { if (!b.hasAttribute('disabled')) setView(d.id); });
         views.add(b); btns[d.id] = b;
     });
+    makeChoice(views, view);
+    $.watch(view, show);                               // a click shows its view (a disabled one is never clicked)
+    const setView = (v) => (view.peek() === v ? show(v) : (view.value = v));   // the same view again: shown afresh (a new node)
     const showPre = () => { rend.remove(); if (!pre.parentNode) body.add(pre); };
     const showImg = () => { pre.remove(); if (!rend.parentNode) body.add(rend); };
     const enable = (id, on) => { const b = btns[id]; if (b) b.attr('disabled', on ? null : ''); };
-    const active = id => Object.keys(btns).forEach(k => btns[k].cls(k === id ? '+is-on' : '-is-on'));
 
-    async function setView(v) {
-        active(v);
+    async function show(v) {
         if (v === 'info') { showPre(); pre.text(node ? (node.detail || node.label || node.type || '') : '\u2014  select a node'); return; }
         if (v === 'decoded') {
             showPre(); pre.text('\u2026');
@@ -248,34 +248,26 @@ async function savePageImage() {
 }
 
 // ── render-source switch (footer) ─────────────────────────────────────────────
+const source = $.signal('pdfbox');
 function buildRenderSrc() {
     const host = $.opt('#render-src'); if (!host) return;
-    let activeId = 'pdfbox';
-    RENDER_SOURCES.forEach(s => { const b = $.create('button', { class: 'srcbtn' + (s.id === activeId ? ' is-on' : ''), 'data-src': s.id, title: s.tip, type: 'button' }); b.html(`<i data-icon="${s.icon}"></i><span>${s.label}</span>`); host.add(b); });
-    host.delegate('.srcbtn', 'click', function () {
-        const id = this.attr('data-src'); if (id === activeId) return; activeId = id;
-        $.all('#render-src .srcbtn').forEach(x => x.cls(x.attr('data-src') === id ? '+is-on' : '-is-on'));
-        renderSrc = id === 'pdfbox' ? null : id; stageApi()?.setSource(renderSrc, isVectorSrc(renderSrc));
-    });
+    host.html($.html`${RENDER_SOURCES.map(s => $.html`<button class="srcbtn" data-value="${s.id}" title="${s.tip}" type="button"><i data-icon="${s.icon}"></i><span>${s.label}</span></button>`)}`);
+    makeChoice(host, source);
+    $.watch(source, (id) => { renderSrc = id === 'pdfbox' ? null : id; stageApi()?.setSource(renderSrc, isVectorSrc(renderSrc)); });
 }
 
 // ── compare (footer): overlay PDFBox vs OCD rasters of the current page ─────────
-const cmp = { on: false, mode: 'diff', value: 0.5 };
-function setCompare(on) {
-    cmp.on = !!on;
-    $('#cmp-toggle').cls(on ? '+is-on' : '-is-on');
-    $('#cmp-ctl').cls(on ? '+open' : '-open');
-    $.opt('#render-src')?.cls(on ? '+locked' : '-locked');   // source is fixed while comparing (class toggle = reliable)
-    updateCmpSlider();
-    stageApi()?.setCompare(on);
+const comparing = $.signal(false), cmpMode = $.signal('diff');
+function wireCompare() {
+    $('#cmp-toggle').attr('aria-pressed', comparing).on('click', () => { comparing.value = !comparing.value; });
+    $('#cmp-ctl').cls('open', () => comparing.value);
+    $.opt('#render-src')?.cls('locked', () => comparing.value);   // the source is fixed while comparing
+    makeChoice('#cmp-ctl', cmpMode);
+    $('#cmp-slider').show(() => comparing.value && cmpMode.value !== 'diff')
+        .on('input', function () { stageApi()?.setCompareValue((+this.value || 0) / 100); });
+    $.watch(comparing, (on) => stageApi()?.setCompare(on));
+    $.watch(cmpMode, (mode) => stageApi()?.setCompareMode(mode));
 }
-function setCmpMode(mode) {
-    cmp.mode = mode;
-    $.all('#cmp-ctl .cmp-mode').forEach(x => x.cls(x.attr('data-mode') === mode ? '+is-on' : '-is-on'));
-    updateCmpSlider();
-    stageApi()?.setCompareMode(mode);
-}
-function updateCmpSlider() { const s = $.opt('#cmp-slider'); if (s) s.style.display = (cmp.on && cmp.mode !== 'diff') ? '' : 'none'; }
 
 // ── splitter (the pages column) and the whole-window drop: qry's ───────────────
 function wireSplitter() {
@@ -459,10 +451,7 @@ function init() {
     detail = makeDetail($('#detail'));
     buildRenderSrc(); wireSplitter();
 
-    $('#cmp-toggle').on('click', () => setCompare(!cmp.on));
-    $.all('#cmp-ctl .cmp-mode').forEach(b => b.on('click', () => setCmpMode(b.attr('data-mode'))));
-    $('#cmp-slider').on('input', function () { cmp.value = (+this.value || 0) / 100; stageApi()?.setCompareValue(cmp.value); });
-    updateCmpSlider();
+    wireCompare();
 
     $('#zoom-fit').on('click', () => stageApi()?.fit());
     $('#zoom-in').on('click', () => stageApi()?.zoomBy(1.25));
