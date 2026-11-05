@@ -30,7 +30,7 @@
  *
  * Requires qry.js 3.x (global `$`).
  *
- * @version 3.6.0
+ * @version 3.6.1
  * @author  Jean-Luc Bloechle with Claude.ai
  * @license MIT
  */
@@ -704,14 +704,12 @@ export const busy = (el, task) => {
     const had = document.activeElement, controls = els.filter((x) => 'disabled' in x && !x.disabled);
     for (const x of els) x.attr('aria-busy', true);
     for (const x of controls) x.disabled = true;
-    const run = (async () => {
-        try { return await task(); } finally {
-            for (const x of els) x.attr('aria-busy', null);
-            for (const x of controls) x.disabled = false;
-            _busy.delete(lead);
-            if (controls.includes(had) && (!document.activeElement || document.activeElement === document.body)) had.focus();
-        }
-    })();
+    const run = Promise.resolve().then(task).finally(() => {          // a task that throws at once frees the element too (an async IIFE would end before the set below)
+        for (const x of els) x.attr('aria-busy', null);
+        for (const x of controls) x.disabled = false;
+        _busy.delete(lead);
+        if (controls.includes(had) && (!document.activeElement || document.activeElement === document.body)) had.focus();
+    });
     _busy.set(lead, run);
     return run;
 };

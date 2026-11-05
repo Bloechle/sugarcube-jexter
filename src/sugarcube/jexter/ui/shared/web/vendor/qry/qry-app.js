@@ -26,7 +26,7 @@
  *
  * Requires qry.js 3.x (global `$`) and qry-web.js beside this file.
  *
- * @version 3.6.0
+ * @version 3.6.1
  * @author  Jean-Luc Bloechle with Claude.ai
  * @license MIT
  */
